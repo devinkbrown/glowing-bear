@@ -34,7 +34,9 @@
     settings.relay = { ...settings.relay, password: fullPassword };
     chat.connect();
     settings.relay = { ...settings.relay, password: orig };
-    close();
+    // Don't close here — let the connection state effect handle it.
+    // While connecting the modal stays visible with the "Connecting…" spinner.
+    // +page.svelte's $effect closes the modal on CONNECTED and re-opens on error.
   }
 
   function applyProfile(name: string) {
