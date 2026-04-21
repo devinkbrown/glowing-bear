@@ -67,16 +67,8 @@
     if (e.key === 'Escape') { e.preventDefault(); cancelTopicEdit(); }
   }
 
-  const showOper = $derived.by(() => {
-    if (!chat.isOper) return false;
-    const srv = buffers.buffers.get(buffers.active ?? '')?.buffer.localVars['server'] ?? '';
-    return srv ? chat.operServers.has(srv) : false;
-  });
-  const showAdmin = $derived.by(() => {
-    if (!showOper) return false;
-    const srv = buffers.buffers.get(buffers.active ?? '')?.buffer.localVars['server'] ?? '';
-    return srv ? chat.adminServers.has(srv) : false;
-  });
+  const showOper  = $derived(chat.isOperBuffer(buffers.active ?? ''));
+  const showAdmin = $derived(chat.isAdminBuffer(buffers.active ?? ''));
 
   // Badge on sidebar toggle — count highlights across all buffers
   const totalHighlights = $derived(
@@ -492,10 +484,10 @@
   <div class="flex flex-col flex-1 min-w-0 min-h-0" ontouchstart={onTouchStart} ontouchend={onTouchEnd}>
 
     <!-- Top bar -->
-    <header class="flex items-center gap-2 px-3 border-b border-gray-800/80 bg-gray-900 shrink-0"
+    <header class="flex items-center gap-1 lg:gap-2 px-2 lg:px-4 border-b border-gray-800/80 bg-gray-900/95 shrink-0"
       style="min-height: 48px; padding-top: env(safe-area-inset-top, 0);">
-      <!-- Hamburger / sidebar toggle — shows highlight badge when sidebar is closed -->
-      <div class="relative shrink-0">
+      <!-- Hamburger / sidebar toggle — hidden on desktop where sidebar is always pinned -->
+      <div class="relative shrink-0 lg:hidden">
         <button
           onclick={() => (sidebarOpen = !sidebarOpen)}
           class="flex items-center justify-center w-9 h-9 -ml-1 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-white/8 active:bg-white/12 transition-colors"
@@ -532,15 +524,15 @@
       <!-- Buffer title -->
       <div class="flex flex-col flex-1 min-w-0 overflow-hidden justify-center py-1">
         {#if activeEntry}
-          <div class="flex items-baseline gap-1.5 min-w-0 overflow-hidden">
-            <span class="font-semibold text-sm text-gray-100 truncate leading-snug min-w-0">
+          <div class="flex items-baseline gap-2 min-w-0 overflow-hidden">
+            <span class="font-semibold text-[13px] lg:text-sm text-gray-100 truncate leading-snug min-w-0">
               {bufferShortName}
             </span>
             {#if activeNickCount > 0}
-              <span class="text-[11px] text-gray-600 flex-shrink-0 tabular-nums hidden xs:inline">{activeNickCount}</span>
+              <span class="text-[11px] text-gray-500 flex-shrink-0 tabular-nums hidden xs:inline">{activeNickCount} users</span>
             {/if}
             {#if channelModes}
-              <span class="text-[11px] text-gray-700 flex-shrink-0 font-mono hidden sm:inline" title="Channel modes">{channelModes}</span>
+              <span class="text-[11px] text-gray-700 flex-shrink-0 font-mono hidden lg:inline" title="Channel modes">{channelModes}</span>
             {/if}
           </div>
           {#if activeEntry.buffer.title}
@@ -551,17 +543,17 @@
                 bind:value={topicDraft}
                 onkeydown={onTopicKeydown}
                 onblur={commitTopicEdit}
-                class="hidden sm:block w-full text-[11px] leading-snug mt-px bg-transparent border-b border-blue-500 text-gray-200 outline-none truncate"
+                class="w-full text-[11px] leading-snug mt-px bg-transparent border-b border-blue-500/70 text-gray-200 outline-none"
                 style="font-size: 11px; line-height: 1.3;"
               />
             {:else}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
-                class="text-[11px] text-gray-500 overflow-hidden text-ellipsis leading-snug mt-px msg-area hidden sm:block {isChannel ? 'cursor-text hover:text-gray-400' : ''}"
-                style="font-size: 11px; line-height: 1.3; white-space: pre; overflow: hidden; text-overflow: ellipsis;"
+                class="text-[11px] text-gray-500 leading-snug mt-px msg-area {isChannel ? 'cursor-text hover:text-gray-400' : ''}"
+                style="font-size: 11px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
                 onclick={isChannel ? startTopicEdit : undefined}
-                title={isChannel ? 'Click to edit topic' : undefined}
+                title={activeEntry.buffer.title}
               >
                 {@html formatText(activeEntry.buffer.title, false)}
               </div>
@@ -575,7 +567,7 @@
       <!-- Right controls -->
       <div class="flex items-center gap-0.5 shrink-0">
         {#if chat.lag > 0}
-          <span class="text-[11px] text-gray-600 tabular-nums px-1 hidden sm:inline">{chat.lag}ms</span>
+          <span class="text-[11px] text-gray-600 tabular-nums px-2 hidden lg:inline">{chat.lag}ms</span>
         {/if}
 
         <!-- Split pane button — opens picker when no splits, closes all splits when active -->
@@ -685,29 +677,21 @@
         <!-- Oper Console — crown icon, red when admin -->
         <button
           onclick={() => (showOperPanel = !showOperPanel)}
-          class="relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors
-            {showOperPanel
-              ? showAdmin ? 'text-red-400 bg-red-500/15' : showOper ? 'text-amber-400 bg-amber-500/10' : 'text-gray-400 bg-white/8'
-              : showAdmin
-                ? 'text-red-400 hover:bg-red-500/10'
-                : showOper
-                  ? 'text-amber-400 hover:bg-amber-500/10'
-                  : 'text-gray-600 hover:text-gray-400 hover:bg-white/8'}"
+          class="flex items-center justify-center w-9 h-9 rounded-lg transition-all
+            {showAdmin
+              ? showOperPanel ? 'text-red-400 bg-red-500/15 ring-1 ring-red-500/60 shadow-[0_0_10px_rgba(248,113,113,0.4)]' : 'text-red-400 ring-1 ring-red-500/50 shadow-[0_0_8px_rgba(248,113,113,0.35)] hover:bg-red-500/10'
+              : showOper
+                ? showOperPanel ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/50' : 'text-amber-400 ring-1 ring-amber-500/40 hover:bg-amber-500/10'
+                : showOperPanel ? 'text-gray-400 bg-white/8' : 'text-gray-600 hover:text-gray-400 hover:bg-white/8'}"
           title="{showAdmin ? 'Oper Console (Admin)' : showOper ? 'Oper Console' : 'Oper Console'}"
           aria-label="Oper Console"
         >
-          <!-- Crown icon -->
-          <svg class="w-4 h-4 {showAdmin ? 'drop-shadow-[0_0_5px_rgba(248,113,113,0.7)]' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <path d="M2 19h20M2 19l3-9 5 4 2-7 2 7 5-4 3 9"/>
             <circle cx="12" cy="6" r="1" fill="currentColor" stroke="none"/>
             <circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none"/>
             <circle cx="19.5" cy="12" r="1" fill="currentColor" stroke="none"/>
           </svg>
-          {#if showAdmin}
-            <span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400 animate-pulse shadow-[0_0_5px_rgba(248,113,113,0.9)]"></span>
-          {:else if showOper}
-            <span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500"></span>
-          {/if}
         </button>
 
         <!-- Quick invite — hidden on channel buffers -->
@@ -740,7 +724,7 @@
         <!-- Away toggle — hide on small screens -->
         <button
           onclick={toggleAway}
-          class="hidden sm:flex items-center justify-center w-9 h-9 rounded-lg transition-colors
+          class="flex items-center justify-center w-9 h-9 rounded-lg transition-colors
             {isAway
               ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20'
               : 'text-gray-500 hover:text-gray-300 hover:bg-white/8 active:bg-white/12'}"
@@ -763,7 +747,7 @@
         {#if totalHighlights > 0}
           <button
             onclick={markAllRead}
-            class="hidden sm:flex items-center justify-center w-9 h-9 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 active:bg-red-500/15 transition-colors"
+            class="flex items-center justify-center w-9 h-9 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 active:bg-red-500/15 transition-colors"
             title="Mark all as read"
             aria-label="Mark all as read"
           >

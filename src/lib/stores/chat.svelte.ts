@@ -15,6 +15,8 @@ import {
 	type RelayErrorEvent,
 	type StateChangedEvent
 } from '$lib/weechat/client.js';
+import { ZncAdapter } from '$lib/znc/adapter.js';
+import { IrssiAdapter } from '$lib/irssi/adapter.js';
 import { ConnectionState } from '$lib/weechat/types.js';
 import { buffers } from './buffers.svelte.js';
 import { settings } from './settings.svelte.js';
@@ -33,26 +35,29 @@ function on<T>(
 }
 
 class ChatStore {
-	client = $state<WeeRelayClient | null>(null);
+	client = $state<WeeRelayClient | ZncAdapter | IrssiAdapter | null>(null);
 	connectionState = $state<ConnectionState>(ConnectionState.DISCONNECTED);
 	error = $state<string | null>(null);
 	lag = $state(0);
 	isOper      = $state(false);
 	isAdmin     = $state(false);
-	operServers = $state(new Set<string>());  // servers where we are oper
-	adminServers = $state(new Set<string>()); // servers where we are admin
+	operServers  = $state(new Set<string>());  // server buffer pointers where we are oper
+	adminServers = $state(new Set<string>()); // server buffer pointers where we are admin
 
 	private pingInterval: ReturnType<typeof setInterval> | null = null;
 	private cleanups: Array<() => void> = [];
 	// Nick we're waiting to auto-switch to when its query buffer opens
 	private pendingQueryNick: string | null = null;
-	private modeQueriedServers = new Set<string>(); // servers where we've sent /mode nick this session
 
 	connect(): void {
 		// Tear down any existing client
 		this.disconnectClean(false);
 
-		const client = new WeeRelayClient({ ...settings.relay });
+		const isZnc = settings.backendType === 'znc' || settings.backendType === 'irssi';
+		const client: WeeRelayClient | ZncAdapter | IrssiAdapter =
+			settings.backendType === 'znc'   ? new ZncAdapter({ ...settings.znc }) :
+			settings.backendType === 'irssi' ? new IrssiAdapter({ ...settings.irssi }) :
+			new WeeRelayClient({ ...settings.relay });
 		this.client = client;
 		this.error = null;
 
@@ -62,7 +67,7 @@ class ChatStore {
 				this.connectionState = state;
 				if (state === ConnectionState.CONNECTED) {
 					this.error = null;
-					this.startPing();
+					if (!isZnc) this.startPing();
 				} else if (state === ConnectionState.RECONNECTING) {
 					// Clear stale error so the UI shows "Reconnecting…" not a previous
 					// failure message while the reconnect attempt is in flight.
@@ -74,7 +79,6 @@ class ChatStore {
 				this.isAdmin      = false;
 				this.operServers  = new Set();
 				this.adminServers = new Set();
-				this.modeQueriedServers = new Set();
 				}
 			}),
 
@@ -84,8 +88,8 @@ class ChatStore {
 
 			on<AuthenticatedEvent>(client, 'authenticated', () => {
 				this.error = null;
-				// Sync no-video PROP with server to reflect current setting
-				setTimeout(() => syncNoVideoProp(settings.enableVideoCalls), 1000);
+				// Sync no-video PROP with server to reflect current setting (WeeChat only)
+				if (!isZnc) setTimeout(() => syncNoVideoProp(settings.enableVideoCalls), 1000);
 			}),
 
 			on<BuffersLoadedEvent>(client, 'buffersLoaded', ({ buffers: bufs }) => {
@@ -94,16 +98,6 @@ class ChatStore {
 				}
 				// Restore the last active buffer from the previous session
 				buffers.restoreLastBuffer();
-				// Request deep history for server buffers so we catch the 381
-				// (SASL auto-oper fires at login — may be older than the 50-line default).
-				// Also actively query own mode on each server — the 221 RPL_UMODEIS
-				// response is handled by detectOperFromLine and works regardless of
-				// whether the 381 is in the buffer history.
-				for (const b of bufs) {
-					if (b.localVars['type'] === 'server') {
-						client.requestHistory(b.id, 500);
-					}
-				}
 			}),
 
 			on<BufferOpenedEvent>(client, 'bufferOpened', ({ buffer }) => {
@@ -157,10 +151,10 @@ class ChatStore {
 				const entry = buffers.buffers.get(line.buffer);
 				if (!entry) return;
 
-				// ── Oper / admin detection ────────────────────────────────────────
+				// ── Oper / admin detection (WeeChat only) ────────────────────────
 				// Must run before the displayed guard — WeeChat may hide 381/221 lines
 				// via its filter system, but we still need to detect oper status from them.
-				this.detectOperFromLine(line, entry);
+				if (!isZnc) this.detectOperFromLine(line, entry);
 
 				if (!line.displayed) return;
 
@@ -175,11 +169,11 @@ class ChatStore {
 					}
 				}
 
-				// ── WEBRTC signaling ───────────────────────────────────────────────
+				// ── WEBRTC signaling (WeeChat only) ───────────────────────────────
 				// WeeChat shows unknown IRC commands (like WEBRTC) as raw lines in the
 				// server buffer. We parse the message text to extract signaling.
 				// Format WeeChat shows: "WEBRTC target TYPE :payload" or similar.
-				if (!entry.buffer.localVars['type'] || entry.buffer.localVars['type'] === '') {
+				if (!isZnc && (!entry.buffer.localVars['type'] || entry.buffer.localVars['type'] === '')) {
 					// server buffer line — check for WEBRTC
 					const m = line.message.match(/^WEBRTC\s+(\S+)\s+(\S+)(?:\s+:(.*))?$/i)
 						?? line.message.match(/^WEBRTC\s+(\S+)\s+(\S+)(?:\s+(.*))?$/i);
@@ -225,9 +219,11 @@ class ChatStore {
 					return;
 				}
 				const bufPtr = lines[0].buffer;
+				// If the buffer already has lines this is a "load more" — prepend older lines.
+				const hasExisting = (buffers.buffers.get(bufPtr)?.lines.length ?? 0) > 0;
 				buffers.setLoading(bufPtr, false);
 				// last_line(-N) returns newest-first; reverse to get chronological order
-				buffers.addLines(bufPtr, [...lines].reverse(), false);
+				buffers.addLines(bufPtr, [...lines].reverse(), hasExisting);
 
 				// Scan history for oper status — SASL auto-oper fires at IRC registration
 				// (before relay sync is active) so the 381 lands in buffer history, not
@@ -235,17 +231,11 @@ class ChatStore {
 				const entry = buffers.buffers.get(bufPtr);
 				const btype = entry?.buffer.localVars['type'] ?? '';
 				if (entry && btype === 'server') {
-					const srv = entry.buffer.localVars['server'] ?? '';
-					if (srv && !this.operServers.has(srv) && !this.modeQueriedServers.has(srv)) {
+					const srvPtr = entry.buffer.id;
+					if (!this.operServers.has(srvPtr)) {
 						for (const line of lines) {
 							this.detectOperFromLine(line, entry);
-							if (this.operServers.has(srv)) break;
-						}
-						// History scan came up empty — query current mode as one-time fallback
-						// so we detect oper status even when the 381 is older than the history window
-						if (!this.operServers.has(srv)) {
-							const nick = entry.buffer.localVars['nick'];
-							if (nick) { this.modeQueriedServers.add(srv); client.sendInput(entry.buffer.id, `/mode ${nick}`); }
+							if (this.operServers.has(srvPtr)) break;
 						}
 					}
 				}
@@ -277,11 +267,13 @@ class ChatStore {
 			})
 		];
 
-		// Wire video engine send function to route through server buffer
-		setVideoSendFn((text: string) => {
-			const serverBuf = video.getServerBuffer();
-			if (serverBuf) this.sendTo(serverBuf, text);
-		});
+		// Wire video engine send function to route through server buffer (WeeChat only)
+		if (!isZnc) {
+			setVideoSendFn((text: string) => {
+				const serverBuf = video.getServerBuffer();
+				if (serverBuf) this.sendTo(serverBuf, text);
+			});
+		}
 
 		client.connect();
 	}
@@ -350,21 +342,63 @@ class ChatStore {
 	// (live) and historyLoaded (initial scan) so SASL auto-oper is caught even
 	// when the 381 arrives before the relay sync subscription is active.
 	private setOperForEntry(entry: import('./buffers.svelte.js').BufferEntry, oper: boolean, admin: boolean) {
-		const srv = entry.buffer.localVars['server'] ?? '';
-		if (!srv) return;
+		// Find the server buffer pointer for this entry. For server buffers, use the
+		// entry itself. For channel/query buffers, find the matching server buffer.
+		const srvPtr = this.serverPtrForEntry(entry);
+		if (!srvPtr) return;
 		if (oper) {
-			this.operServers  = new Set([...this.operServers,  srv]);
-			if (admin) this.adminServers = new Set([...this.adminServers, srv]);
+			this.operServers  = new Set([...this.operServers,  srvPtr]);
+			if (admin) this.adminServers = new Set([...this.adminServers, srvPtr]);
 			this.isOper  = true;
 			this.isAdmin = this.isAdmin || admin;
 		} else {
-			const ops  = new Set(this.operServers);  ops.delete(srv);
-			const adms = new Set(this.adminServers); adms.delete(srv);
+			const ops  = new Set(this.operServers);  ops.delete(srvPtr);
+			const adms = new Set(this.adminServers); adms.delete(srvPtr);
 			this.operServers  = ops;
 			this.adminServers = adms;
 			this.isOper  = ops.size  > 0;
 			this.isAdmin = adms.size > 0;
 		}
+	}
+
+	// Returns the server connection name for a buffer using every available signal.
+	private ircServerName(entry: import('./buffers.svelte.js').BufferEntry): string {
+		// Prefer buffer name parsing — format is always consistent within WeeChat
+		const n = entry.buffer.name ?? '';
+		const serverBuf = n.match(/^irc\.server\.(.+)$/);
+		if (serverBuf) return serverBuf[1];
+		const chanBuf = n.match(/^irc\.([^.]+)\./);
+		if (chanBuf) return chanBuf[1];
+		// Fall back to localVars
+		return entry.buffer.localVars?.['server'] ?? entry.buffer.localVars?.['network'] ?? '';
+	}
+
+	private serverPtrForEntry(entry: import('./buffers.svelte.js').BufferEntry): string | null {
+		if (entry.buffer.localVars['type'] === 'server') return entry.buffer.id;
+		const srvName = this.ircServerName(entry);
+		if (!srvName) return null;
+		for (const e of buffers.buffers.values()) {
+			if (e.buffer.localVars['type'] === 'server' && this.ircServerName(e) === srvName)
+				return e.buffer.id;
+		}
+		return null;
+	}
+
+	// Check if the given buffer is on a server where we are oper/admin.
+	// Centralises all server-matching logic so page.svelte doesn't duplicate it.
+	isOperBuffer(bufferId: string): boolean {
+		if (!this.isOper) return false;
+		const entry = buffers.buffers.get(bufferId);
+		if (!entry) return this.isOper;
+		const ptr = this.serverPtrForEntry(entry);
+		return ptr ? this.operServers.has(ptr) : this.isOper;
+	}
+	isAdminBuffer(bufferId: string): boolean {
+		if (!this.isAdmin) return false;
+		const entry = buffers.buffers.get(bufferId);
+		if (!entry) return this.isAdmin;
+		const ptr = this.serverPtrForEntry(entry);
+		return ptr ? this.adminServers.has(ptr) : this.isAdmin;
 	}
 
 	private detectOperFromLine(
@@ -420,12 +454,28 @@ class ChatStore {
 	// execute them in the right IRC server context.
 	// Open a PM/query window for nick, switching to it once it's ready
 	openQuery(nick: string): void {
-		this.pendingQueryNick = nick.toLowerCase();
-		// Route /query through sendInput so it goes to the correct server buffer
+		const lc = nick.toLowerCase();
+		// If the query buffer already exists locally, switch to it immediately.
+		// Don't rely on bufferSwitched/bufferOpened — WeeChat may not fire either
+		// when the buffer is already open in the relay session.
+		for (const entry of buffers.buffers.values()) {
+			const vars = entry.buffer.localVars ?? {};
+			if (vars['type'] === 'private') {
+				const ch    = (vars['channel'] ?? '').toLowerCase();
+				const short = (entry.buffer.shortName ?? '').toLowerCase();
+				const name  = (entry.buffer.name ?? '').toLowerCase();
+				if (ch === lc || short === lc || name.endsWith('.' + lc)) {
+					buffers.setActive(entry.buffer.id);
+					return;
+				}
+			}
+		}
+		// No existing buffer — send /query and wait for bufferOpened
+		this.pendingQueryNick = lc;
 		this.sendInput(`/query ${nick}`);
 		// Safety: clear pending flag after 10 s in case WeeChat doesn't open the buffer
 		setTimeout(() => {
-			if (this.pendingQueryNick === nick.toLowerCase()) this.pendingQueryNick = null;
+			if (this.pendingQueryNick === lc) this.pendingQueryNick = null;
 		}, 10000);
 	}
 
@@ -489,8 +539,8 @@ class ChatStore {
 	setActive(bufferPointer: string): void {
 		buffers.setActive(bufferPointer);
 		// Tell WeeChat to clear its hotlist for this buffer so it doesn't re-push
-		// the old unread count on the next hotlist update.
-		if (this.client) {
+		// the old unread count on the next hotlist update. (WeeChat only)
+		if (this.client && settings.backendType === 'weechat') {
 			this.client.sendInput(bufferPointer, '/buffer set hotlist -1');
 		}
 	}

@@ -43,15 +43,19 @@
 
   // Preset theme colors for "Load from preset" in Custom theme editor
   const PRESET_COLORS: Record<string, CustomThemeColors> = {
-    darkbear:  { gray950:'#0c0d12', gray900:'#111318', gray800:'#15171d', gray700:'#1c1e25', gray600:'#25272e', gray500:'#484b5c', gray400:'#686c7e', gray300:'#9298aa', gray200:'#c4c8d8', gray100:'#e8ebf5', gray50:'#f4f6ff', accent:'#3b82f6' },
-    obsidian:  { gray950:'#000000', gray900:'#0a0a0a', gray800:'#141414', gray700:'#1c1c1c', gray600:'#2a2a2a', gray500:'#404040', gray400:'#606060', gray300:'#888888', gray200:'#b0b0b0', gray100:'#d8d8d8', gray50:'#f0f0f0', accent:'#6366f1' },
-    nord:      { gray950:'#242933', gray900:'#2e3440', gray800:'#3b4252', gray700:'#434c5e', gray600:'#4c566a', gray500:'#6b7a90', gray400:'#8896aa', gray300:'#b0bcd0', gray200:'#d8dee9', gray100:'#e5e9f0', gray50:'#eceff4', accent:'#88c0d0' },
-    gruvbox:   { gray950:'#141617', gray900:'#1d2021', gray800:'#282828', gray700:'#3c3836', gray600:'#504945', gray500:'#7c6f64', gray400:'#a89984', gray300:'#bdae93', gray200:'#d5c4a1', gray100:'#ebdbb2', gray50:'#fbf1c7', accent:'#d79921' },
-    'rose-pine':{ gray950:'#191724', gray900:'#1f1d2e', gray800:'#26233a', gray700:'#312e44', gray600:'#403d52', gray500:'#55526a', gray400:'#6e6a86', gray300:'#787390', gray200:'#9893a5', gray100:'#c5c3d8', gray50:'#e0def4', accent:'#eb6f92' },
-    abyss:     { gray950:'#010606', gray900:'#020a0a', gray800:'#041414', gray700:'#082424', gray600:'#0d3838', gray500:'#165858', gray400:'#258080', gray300:'#42aaaa', gray200:'#70cccc', gray100:'#a8e8e8', gray50:'#d0f4f4', accent:'#2dd4bf' },
-    ember:     { gray950:'#080200', gray900:'#0e0502', gray800:'#180a04', gray700:'#261008', gray600:'#3a1a0e', gray500:'#5c2c18', gray400:'#884428', gray300:'#b06840', gray200:'#d8966a', gray100:'#f5c8a0', gray50:'#fde8d0', accent:'#f97316' },
-    aurora:    { gray950:'#040208', gray900:'#08050f', gray800:'#100a20', gray700:'#1a1032', gray600:'#261a48', gray500:'#382a64', gray400:'#524088', gray300:'#7460a8', gray200:'#9c88d0', gray100:'#c8b8f0', gray50:'#e4daf8', accent:'#a78bfa' },
-    light:     { gray950:'#ffffff', gray900:'#f9fafb', gray800:'#f3f4f6', gray700:'#e5e7eb', gray600:'#d1d5db', gray500:'#9ca3af', gray400:'#6b7280', gray300:'#4b5563', gray200:'#374151', gray100:'#1f2937', gray50:'#111827', accent:'#3b82f6' },
+    darkbear:     { gray950:'#0c0d12', gray900:'#111318', gray800:'#15171d', gray700:'#1c1e25', gray600:'#25272e', gray500:'#484b5c', gray400:'#686c7e', gray300:'#9298aa', gray200:'#c4c8d8', gray100:'#e8ebf5', gray50:'#f4f6ff', accent:'#3b82f6' },
+    obsidian:     { gray950:'#000000', gray900:'#0a0a0a', gray800:'#141414', gray700:'#1c1c1c', gray600:'#2a2a2a', gray500:'#404040', gray400:'#606060', gray300:'#888888', gray200:'#b0b0b0', gray100:'#d8d8d8', gray50:'#f0f0f0', accent:'#6366f1' },
+    nord:         { gray950:'#242933', gray900:'#2e3440', gray800:'#3b4252', gray700:'#434c5e', gray600:'#4c566a', gray500:'#6b7a90', gray400:'#8896aa', gray300:'#b0bcd0', gray200:'#d8dee9', gray100:'#e5e9f0', gray50:'#eceff4', accent:'#88c0d0' },
+    gruvbox:      { gray950:'#141617', gray900:'#1d2021', gray800:'#282828', gray700:'#3c3836', gray600:'#504945', gray500:'#7c6f64', gray400:'#a89984', gray300:'#bdae93', gray200:'#d5c4a1', gray100:'#ebdbb2', gray50:'#fbf1c7', accent:'#d79921' },
+    'rose-pine':  { gray950:'#191724', gray900:'#1f1d2e', gray800:'#26233a', gray700:'#312e44', gray600:'#403d52', gray500:'#55526a', gray400:'#6e6a86', gray300:'#787390', gray200:'#9893a5', gray100:'#c5c3d8', gray50:'#e0def4', accent:'#eb6f92' },
+    abyss:        { gray950:'#010606', gray900:'#020a0a', gray800:'#041414', gray700:'#082424', gray600:'#0d3838', gray500:'#165858', gray400:'#258080', gray300:'#42aaaa', gray200:'#70cccc', gray100:'#a8e8e8', gray50:'#d0f4f4', accent:'#2dd4bf' },
+    ember:        { gray950:'#080200', gray900:'#0e0502', gray800:'#180a04', gray700:'#261008', gray600:'#3a1a0e', gray500:'#5c2c18', gray400:'#884428', gray300:'#b06840', gray200:'#d8966a', gray100:'#f5c8a0', gray50:'#fde8d0', accent:'#f97316' },
+    aurora:       { gray950:'#040208', gray900:'#08050f', gray800:'#100a20', gray700:'#1a1032', gray600:'#261a48', gray500:'#382a64', gray400:'#524088', gray300:'#7460a8', gray200:'#9c88d0', gray100:'#c8b8f0', gray50:'#e4daf8', accent:'#a78bfa' },
+    catppuccin:   { gray950:'#1e1e2e', gray900:'#313244', gray800:'#45475a', gray700:'#585b70', gray600:'#6c7086', gray500:'#7f849c', gray400:'#9399b2', gray300:'#a6adc8', gray200:'#bac2de', gray100:'#cdd6f4', gray50:'#e4e8ff', accent:'#cba6f7' },
+    'tokyo-night':{ gray950:'#1a1b26', gray900:'#1f2335', gray800:'#292e42', gray700:'#414868', gray600:'#565f89', gray500:'#636d9c', gray400:'#787ca3', gray300:'#9aa5ce', gray200:'#a9b1d6', gray100:'#c0caf5', gray50:'#e8ecff', accent:'#7aa2f7' },
+    dracula:      { gray950:'#1e1f29', gray900:'#282a36', gray800:'#383a4a', gray700:'#44475a', gray600:'#565869', gray500:'#6272a4', gray400:'#9aa5d0', gray300:'#c5c6d8', gray200:'#e0e0d8', gray100:'#f8f8f2', gray50:'#f8f8ff', accent:'#bd93f9' },
+    solarized:    { gray950:'#002b36', gray900:'#073642', gray800:'#0d3640', gray700:'#224249', gray600:'#3d5a63', gray500:'#586e75', gray400:'#657b83', gray300:'#839496', gray200:'#93a1a1', gray100:'#eee8d5', gray50:'#fdf6e3', accent:'#268bd2' },
+    light:        { gray950:'#ffffff', gray900:'#f9fafb', gray800:'#f3f4f6', gray700:'#e5e7eb', gray600:'#d1d5db', gray500:'#9ca3af', gray400:'#6b7280', gray300:'#4b5563', gray200:'#374151', gray100:'#1f2937', gray50:'#111827', accent:'#3b82f6' },
   };
 
   function loadPresetIntoCustom(presetId: string) {
@@ -339,16 +343,20 @@
               <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Theme</span>
               <div class="grid grid-cols-5 gap-1.5">
                 {#each ([
-                  { id: 'darkbear',  label: 'DarkBear',  colors: ['#0c0d12','#15171d','#3b82f6'] },
-                  { id: 'obsidian',  label: 'Obsidian',  colors: ['#000000','#141414','#6366f1'] },
-                  { id: 'nord',      label: 'Nord',       colors: ['#242933','#3b4252','#88c0d0'] },
-                  { id: 'gruvbox',   label: 'Gruvbox',   colors: ['#141617','#282828','#d79921'] },
-                  { id: 'rose-pine', label: 'Rosé Pine', colors: ['#191724','#26233a','#eb6f92'] },
-                  { id: 'abyss',     label: 'Abyss',      colors: ['#010606','#041414','#2dd4bf'] },
-                  { id: 'ember',     label: 'Ember',      colors: ['#080200','#180a04','#f97316'] },
-                  { id: 'aurora',    label: 'Aurora',     colors: ['#040208','#100a20','#a78bfa'] },
-                  { id: 'light',     label: 'Light',      colors: ['#ffffff','#f3f4f6','#3b82f6'] },
-                  { id: 'custom',    label: 'Custom',     colors: [settings.customColors.gray950, settings.customColors.gray800, settings.customColors.accent] },
+                  { id: 'darkbear',    label: 'DarkBear',    colors: ['#0c0d12','#15171d','#3b82f6'] },
+                  { id: 'obsidian',    label: 'Obsidian',    colors: ['#000000','#141414','#6366f1'] },
+                  { id: 'nord',        label: 'Nord',         colors: ['#242933','#3b4252','#88c0d0'] },
+                  { id: 'gruvbox',     label: 'Gruvbox',     colors: ['#141617','#282828','#d79921'] },
+                  { id: 'rose-pine',   label: 'Rosé Pine',   colors: ['#191724','#26233a','#eb6f92'] },
+                  { id: 'abyss',       label: 'Abyss',        colors: ['#010606','#041414','#2dd4bf'] },
+                  { id: 'ember',       label: 'Ember',        colors: ['#080200','#180a04','#f97316'] },
+                  { id: 'aurora',      label: 'Aurora',       colors: ['#040208','#100a20','#a78bfa'] },
+                  { id: 'catppuccin',  label: 'Catppuccin',  colors: ['#1e1e2e','#45475a','#cba6f7'] },
+                  { id: 'tokyo-night', label: 'Tokyo Night', colors: ['#1a1b26','#292e42','#7aa2f7'] },
+                  { id: 'dracula',     label: 'Dracula',     colors: ['#1e1f29','#383a4a','#bd93f9'] },
+                  { id: 'solarized',   label: 'Solarized',   colors: ['#002b36','#0d3640','#268bd2'] },
+                  { id: 'light',       label: 'Light',        colors: ['#ffffff','#f3f4f6','#3b82f6'] },
+                  { id: 'custom',      label: 'Custom',       colors: [settings.customColors.gray950, settings.customColors.gray800, settings.customColors.accent] },
                 ] as const) as t (t.id)}
                   <button
                     onclick={() => { settings.theme = t.id as ThemeName; settings.scheduleSave(); }}

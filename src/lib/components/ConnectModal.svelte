@@ -10,6 +10,10 @@
 
   const { onclose }: Props = $props();
 
+  // ── Backend tab ──────────────────────────────────────────────────────────────
+  let backend = $state(settings.backendType);
+
+  // ── WeeChat fields ───────────────────────────────────────────────────────────
   let host     = $state(settings.relay.host);
   let port     = $state(settings.relay.port);
   let tls      = $state(settings.relay.tls);
@@ -20,20 +24,56 @@
   let profileName = $state('');
   let showSaveProfile = $state(false);
 
+  // ── ZNC fields ───────────────────────────────────────────────────────────────
+  let zncHost     = $state(settings.znc.host);
+  let zncPort     = $state(settings.znc.port);
+  let zncTls      = $state(settings.znc.tls);
+  let zncNick     = $state(settings.znc.nick);
+  let zncUser     = $state(settings.znc.user);
+  let zncPassword = $state(settings.znc.password);
+  let zncNetwork  = $state(settings.znc.network);
+
+  // ── irssi-proxy fields ───────────────────────────────────────────────────────
+  let irssiHost     = $state(settings.irssi.host);
+  let irssiPort     = $state(settings.irssi.port);
+  let irssiTls      = $state(settings.irssi.tls);
+  let irssiNick     = $state(settings.irssi.nick);
+  let irssiPassword = $state(settings.irssi.password);
+  let irssiNetwork  = $state(settings.irssi.network);
+
   const connecting = $derived(
     chat.connectionState === ConnectionState.CONNECTING ||
     chat.connectionState === ConnectionState.AUTHENTICATING
   );
 
+  const weeReady   = $derived(!connecting && !!host && !!password);
+  const zncReady   = $derived(!connecting && !!zncHost && !!zncNick && !!zncUser && !!zncPassword);
+  const irssiReady = $derived(!connecting && !!irssiHost && !!irssiNick && !!irssiPassword);
+
   function connect() {
-    const fullPassword = useTotp && totp.trim() ? `${password}${totp.trim()}` : password;
-    settings.relay = { host, port, tls, password, compression };
-    settings.save();
-    // Temporarily override password with TOTP appended without saving TOTP
-    const orig = settings.relay.password;
-    settings.relay = { ...settings.relay, password: fullPassword };
-    chat.connect();
-    settings.relay = { ...settings.relay, password: orig };
+    if (backend === 'znc') {
+      settings.backendType = 'znc';
+      settings.znc = { ...settings.znc, host: zncHost, port: zncPort, tls: zncTls,
+        nick: zncNick, user: zncUser, password: zncPassword, network: zncNetwork };
+      settings.save();
+      chat.connect();
+    } else if (backend === 'irssi') {
+      settings.backendType = 'irssi';
+      settings.irssi = { ...settings.irssi, host: irssiHost, port: irssiPort, tls: irssiTls,
+        nick: irssiNick, password: irssiPassword, network: irssiNetwork };
+      settings.save();
+      chat.connect();
+    } else {
+      settings.backendType = 'weechat';
+      const fullPassword = useTotp && totp.trim() ? `${password}${totp.trim()}` : password;
+      settings.relay = { host, port, tls, password, compression };
+      settings.save();
+      // Temporarily override password with TOTP appended without saving TOTP
+      const orig = settings.relay.password;
+      settings.relay = { ...settings.relay, password: fullPassword };
+      chat.connect();
+      settings.relay = { ...settings.relay, password: orig };
+    }
     // Don't close here — let the connection state effect handle it.
     // While connecting the modal stays visible with the "Connecting…" spinner.
     // +page.svelte's $effect closes the modal on CONNECTED and re-opens on error.
@@ -65,7 +105,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="root" onkeydown={onKeydown} role="dialog" aria-modal="true" aria-label="Connect to WeeChat relay" tabindex="-1">
+<div class="root" onkeydown={onKeydown} role="dialog" aria-modal="true" aria-label="Connect" tabindex="-1">
   <div class="page">
 
     <!-- Bear + wordmark -->
@@ -75,11 +115,24 @@
         <BearLogo size={96} variant="full" class="bear-svg" />
       </div>
       <h1 class="wordmark">DarkBear</h1>
-      <p class="tagline">WeeChat Relay Client</p>
+      <p class="tagline">IRC Client</p>
     </div>
 
     <!-- Form card -->
     <div class="card">
+
+      <!-- Backend toggle -->
+      <div class="backend-tabs">
+        <button class="tab" class:active={backend === 'weechat'} onclick={() => (backend = 'weechat')}>
+          WeeChat Relay
+        </button>
+        <button class="tab" class:active={backend === 'znc'} onclick={() => (backend = 'znc')}>
+          ZNC
+        </button>
+        <button class="tab" class:active={backend === 'irssi'} onclick={() => (backend = 'irssi')}>
+          irssi
+        </button>
+      </div>
 
       {#if chat.error}
         <div class="error-banner">
@@ -92,63 +145,161 @@
 
       <div class="fields">
 
-        <div class="field">
-          <label class="label" for="c-host">Host</label>
-          <input id="c-host" class="input" type="text"
-            bind:value={host} placeholder="relay.example.com"
-            autocomplete="off" spellcheck="false" autocapitalize="none"/>
-        </div>
+        {#if backend === 'weechat'}
 
-        <div class="field-row">
-          <div class="field" style="flex:1">
-            <label class="label" for="c-port">Port</label>
-            <input id="c-port" class="input" type="number"
-              bind:value={port} min="1" max="65535" placeholder="9001"/>
-          </div>
-          <button role="switch" aria-checked={tls} onclick={() => (tls = !tls)} class="toggle" title="TLS">
-            <span class="toggle-label" class:on={tls}>TLS</span>
-            <span class="toggle-track" class:on={tls}><span class="toggle-knob" class:on={tls}></span></span>
-          </button>
-          <button role="switch" aria-checked={compression} onclick={() => (compression = !compression)} class="toggle" title="Compression">
-            <span class="toggle-label" class:on={compression}>Zip</span>
-            <span class="toggle-track" class:on={compression}><span class="toggle-knob" class:on={compression}></span></span>
-          </button>
-        </div>
-
-        {#if settings.profiles.length > 0}
           <div class="field">
-            <label class="label" for="c-profile">Profile</label>
-            <select id="c-profile" class="input select"
-              onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; if (v) applyProfile(v); (e.currentTarget as HTMLSelectElement).value = ''; }}>
-              <option value="">— load profile —</option>
-              {#each settings.profiles as p}
-                <option value={p.name}>{p.name}</option>
-              {/each}
-            </select>
+            <label class="label" for="c-host">Host</label>
+            <input id="c-host" class="input" type="text"
+              bind:value={host} placeholder="relay.example.com"
+              autocomplete="off" spellcheck="false" autocapitalize="none"/>
           </div>
+
+          <div class="field-row">
+            <div class="field" style="flex:1">
+              <label class="label" for="c-port">Port</label>
+              <input id="c-port" class="input" type="number"
+                bind:value={port} min="1" max="65535" placeholder="9001"/>
+            </div>
+            <button role="switch" aria-checked={tls} onclick={() => (tls = !tls)} class="toggle" title="TLS">
+              <span class="toggle-label" class:on={tls}>TLS</span>
+              <span class="toggle-track" class:on={tls}><span class="toggle-knob" class:on={tls}></span></span>
+            </button>
+            <button role="switch" aria-checked={compression} onclick={() => (compression = !compression)} class="toggle" title="Compression">
+              <span class="toggle-label" class:on={compression}>Zip</span>
+              <span class="toggle-track" class:on={compression}><span class="toggle-knob" class:on={compression}></span></span>
+            </button>
+          </div>
+
+          {#if settings.profiles.length > 0}
+            <div class="field">
+              <label class="label" for="c-profile">Profile</label>
+              <select id="c-profile" class="input select"
+                onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; if (v) applyProfile(v); (e.currentTarget as HTMLSelectElement).value = ''; }}>
+                <option value="">— load profile —</option>
+                {#each settings.profiles as p}
+                  <option value={p.name}>{p.name}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
+
+          <div class="field">
+            <label class="label" for="c-pass">Password</label>
+            <input id="c-pass" class="input" type="password"
+              bind:value={password} placeholder="Relay password" autocomplete="new-password"/>
+          </div>
+
+          <div class="totp-row">
+            <label class="totp-check">
+              <input type="checkbox" bind:checked={useTotp}/>
+              <span>TOTP</span>
+            </label>
+            {#if useTotp}
+              <input class="input totp-input" type="text" inputmode="numeric" pattern="[0-9]*"
+                bind:value={totp}
+                oninput={() => { totp = totp.replace(/[^0-9]/g, '').slice(0, 6); }}
+                placeholder="6-digit code" maxlength="6" autocomplete="one-time-code"/>
+            {/if}
+          </div>
+
+        {:else if backend === 'irssi'}
+
+          <!-- irssi-proxy fields -->
+          <div class="field">
+            <label class="label" for="i-host">Host</label>
+            <input id="i-host" class="input" type="text"
+              bind:value={irssiHost} placeholder="irssi.example.com"
+              autocomplete="off" spellcheck="false" autocapitalize="none"/>
+          </div>
+
+          <div class="field-row">
+            <div class="field" style="flex:1">
+              <label class="label" for="i-port">Port</label>
+              <input id="i-port" class="input" type="number"
+                bind:value={irssiPort} min="1" max="65535" placeholder="2626"/>
+            </div>
+            <button role="switch" aria-checked={irssiTls} onclick={() => (irssiTls = !irssiTls)} class="toggle" title="TLS">
+              <span class="toggle-label" class:on={irssiTls}>TLS</span>
+              <span class="toggle-track" class:on={irssiTls}><span class="toggle-knob" class:on={irssiTls}></span></span>
+            </button>
+          </div>
+
+          <div class="field">
+            <label class="label" for="i-nick">Nick</label>
+            <input id="i-nick" class="input" type="text"
+              bind:value={irssiNick} placeholder="YourNick"
+              autocomplete="off" spellcheck="false" autocapitalize="none"/>
+          </div>
+
+          <div class="field">
+            <label class="label" for="i-pass">Proxy Password</label>
+            <input id="i-pass" class="input" type="password"
+              bind:value={irssiPassword} placeholder="Password" autocomplete="new-password"/>
+          </div>
+
+          <div class="field">
+            <label class="label" for="i-net">Network <span style="text-transform:none;font-weight:400;opacity:0.6">(optional — for multi-network)</span></label>
+            <input id="i-net" class="input" type="text"
+              bind:value={irssiNetwork} placeholder="Freenode"
+              autocomplete="off" spellcheck="false" autocapitalize="none"/>
+          </div>
+
+        {:else}
+
+          <!-- ZNC fields -->
+          <div class="field">
+            <label class="label" for="z-host">ZNC Host</label>
+            <input id="z-host" class="input" type="text"
+              bind:value={zncHost} placeholder="znc.example.com"
+              autocomplete="off" spellcheck="false" autocapitalize="none"/>
+          </div>
+
+          <div class="field-row">
+            <div class="field" style="flex:1">
+              <label class="label" for="z-port">Port</label>
+              <input id="z-port" class="input" type="number"
+                bind:value={zncPort} min="1" max="65535" placeholder="6697"/>
+            </div>
+            <button role="switch" aria-checked={zncTls} onclick={() => (zncTls = !zncTls)} class="toggle" title="TLS">
+              <span class="toggle-label" class:on={zncTls}>TLS</span>
+              <span class="toggle-track" class:on={zncTls}><span class="toggle-knob" class:on={zncTls}></span></span>
+            </button>
+          </div>
+
+          <div class="field">
+            <label class="label" for="z-nick">Nick</label>
+            <input id="z-nick" class="input" type="text"
+              bind:value={zncNick} placeholder="YourNick"
+              autocomplete="off" spellcheck="false" autocapitalize="none"/>
+          </div>
+
+          <div class="field-row">
+            <div class="field" style="flex:1">
+              <label class="label" for="z-user">ZNC Username</label>
+              <input id="z-user" class="input" type="text"
+                bind:value={zncUser} placeholder="username"
+                autocomplete="off" spellcheck="false" autocapitalize="none"/>
+            </div>
+            <div class="field" style="flex:1">
+              <label class="label" for="z-net">Network</label>
+              <input id="z-net" class="input" type="text"
+                bind:value={zncNetwork} placeholder="optional"
+                autocomplete="off" spellcheck="false" autocapitalize="none"/>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label" for="z-pass">ZNC Password</label>
+            <input id="z-pass" class="input" type="password"
+              bind:value={zncPassword} placeholder="Password" autocomplete="new-password"/>
+          </div>
+
         {/if}
 
-        <div class="field">
-          <label class="label" for="c-pass">Password</label>
-          <input id="c-pass" class="input" type="password"
-            bind:value={password} placeholder="Relay password" autocomplete="new-password"/>
-        </div>
-
-        <div class="totp-row">
-          <label class="totp-check">
-            <input type="checkbox" bind:checked={useTotp}/>
-            <span>TOTP</span>
-          </label>
-          {#if useTotp}
-            <input class="input totp-input" type="text" inputmode="numeric" pattern="[0-9]*"
-              bind:value={totp}
-              oninput={() => { totp = totp.replace(/[^0-9]/g, '').slice(0, 6); }}
-              placeholder="6-digit code" maxlength="6" autocomplete="one-time-code"/>
-          {/if}
-        </div>
-
-        <button onclick={connect} disabled={connecting || !host || !password}
-          class="connect-btn" class:ready={!connecting && !!host && !!password}>
+        <button onclick={connect}
+          disabled={backend === 'znc' ? !zncReady : backend === 'irssi' ? !irssiReady : !weeReady}
+          class="connect-btn"
+          class:ready={backend === 'znc' ? zncReady : backend === 'irssi' ? irssiReady : weeReady}>
           {#if connecting}
             <span class="spinner"></span>Connecting…
           {:else}
@@ -156,14 +307,16 @@
           {/if}
         </button>
 
-        {#if showSaveProfile}
-          <div class="save-profile-row">
-            <input class="input" type="text" bind:value={profileName} placeholder="Profile name" maxlength="32"/>
-            <button onclick={saveProfile} class="save-btn" disabled={!profileName.trim()}>Save</button>
-            <button onclick={() => { showSaveProfile = false; profileName = ''; }} class="discard-btn">✕</button>
-          </div>
-        {:else}
-          <button onclick={() => (showSaveProfile = true)} class="save-profile-btn">Save as profile…</button>
+        {#if backend === 'weechat' || backend === 'znc'}
+          {#if showSaveProfile}
+            <div class="save-profile-row">
+              <input class="input" type="text" bind:value={profileName} placeholder="Profile name" maxlength="32"/>
+              <button onclick={saveProfile} class="save-btn" disabled={!profileName.trim()}>Save</button>
+              <button onclick={() => { showSaveProfile = false; profileName = ''; }} class="discard-btn">✕</button>
+            </div>
+          {:else}
+            <button onclick={() => (showSaveProfile = true)} class="save-profile-btn">Save as profile…</button>
+          {/if}
         {/if}
 
         {#if onclose}
@@ -173,9 +326,19 @@
       </div>
 
       <p class="help">
-        <code>/relay add weechat 9001</code>
-        <span> · </span>
-        <code>/set relay.network.password …</code>
+        {#if backend === 'weechat'}
+          <code>/relay add weechat 9001</code>
+          <span> · </span>
+          <code>/set relay.network.password …</code>
+        {:else if backend === 'irssi'}
+          Enable irssi's proxy module: <code>/load proxy</code>
+          <span> · </span>
+          <code>/set proxyport 2626</code>
+          <span> · </span>
+          <code>/set proxypasswd …</code>
+        {:else}
+          Connect to a ZNC bouncer via WebSocket
+        {/if}
       </p>
     </div>
 
@@ -268,6 +431,33 @@
     padding: 24px 20px 18px;
     box-shadow: 0 24px 64px rgba(0,0,0,0.55), inset 0 0 0 0.5px rgba(255,255,255,0.04);
   }
+
+  /* Backend tabs */
+  .backend-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px;
+    margin-bottom: 18px;
+  }
+  .tab {
+    flex: 1;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+    border: none;
+    background: none;
+    color: var(--color-gray-500, #484b5c);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .tab.active {
+    background: rgba(255,255,255,0.07);
+    color: var(--color-gray-100, #e8ebf5);
+  }
+  .tab:not(.active):hover { color: var(--color-gray-300, #9298aa); }
 
   .error-banner {
     display: flex;

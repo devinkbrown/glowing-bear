@@ -107,7 +107,7 @@
 <aside
   aria-label="User list"
   class="flex flex-col h-full bg-gray-900 border-l border-gray-800"
-  style="width: 200px; flex-shrink: 0;"
+  style="width: 220px; flex-shrink: 0;"
   onclick={closePopover}
   onkeydown={(e) => e.key === 'Escape' && closePopover()}
 >
@@ -201,7 +201,7 @@
       >Mention</button>
       <button
         class="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
-        onclick={() => { chat.sendInput(`/query ${popover!.nick.name}`); closePopover(); }}
+        onclick={() => { chat.openQuery(popover!.nick.name); closePopover(); }}
       >Message</button>
       {#if settings.enableVideoCalls}
       <button

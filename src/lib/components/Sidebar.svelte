@@ -551,7 +551,7 @@
   <!-- Drag resize handle — desktop only -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="absolute top-0 right-0 w-1 h-full cursor-col-resize hidden lg:block z-10 group/resize"
+    class="absolute top-0 right-0 w-2 h-full cursor-col-resize hidden lg:block z-10 group/resize"
     onmousedown={onResizeStart}
     ontouchstart={onResizeStart}
   >

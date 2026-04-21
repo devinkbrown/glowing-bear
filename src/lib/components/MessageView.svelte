@@ -205,7 +205,7 @@
     if (atBottom) newCount = 0;
   }
   function jumpToBottom() { atBottom = true; newCount = 0; scrollToBottom(); }
-  function loadMore() { chat.requestHistory(150, activePtr ?? undefined); }
+  function loadMore() { chat.requestHistory(lines.length + 150, activePtr ?? undefined); }
 
   // ── Formatting helpers ──────────────────────────────────────────────────────
 
@@ -222,12 +222,15 @@
   }
 
   function isActionLine(line: WeeChatLine): boolean {
-    return line.message.startsWith('\x01ACTION ') && line.message.endsWith('\x01');
+    // ZNC/IRC backend strips CTCP and sets isAction; WeeChat relay keeps raw CTCP wrapper
+    return !!line.isAction || (line.message.startsWith('\x01ACTION ') && line.message.endsWith('\x01'));
   }
 
   function actionText(line: WeeChatLine): string {
     const m = line.message;
-    return m.startsWith('\x01ACTION ') && m.endsWith('\x01') ? m.slice(8, -1) : m;
+    if (m.startsWith('\x01ACTION ') && m.endsWith('\x01')) return m.slice(8, -1);
+    // ZNC/IRC backend: message is already the action text
+    return m;
   }
 
   function isJoinPartHidden(line: WeeChatLine): boolean {
@@ -530,7 +533,7 @@
   }}
 />
 
-<div class="flex flex-col h-full min-w-0 relative bg-gray-950">
+<div class="flex flex-col flex-1 min-h-0 min-w-0 relative bg-gray-950">
 
   <!-- Custom background image -->
   {#if settings.bgImage}
@@ -615,7 +618,7 @@
     bind:this={viewport}
     onscroll={onScroll}
     onclick={onMessageAreaClick}
-    class="flex-1 overflow-y-auto msg-area py-2 select-text relative z-10"
+    class="flex-1 overflow-y-auto msg-area py-2 lg:py-3 select-text relative z-10"
     style="font-size: {settings.fontSize}px; -webkit-user-select: text; user-select: text;"
   >
     {#if !buf}
@@ -670,38 +673,60 @@
 
         {#if grp.isSystem}
           <!-- ── System line ── timestamp + centered italic text -->
+          {@const sysMsg = (() => {
+            let m = grp.lines[0].message.replace(/^\S+\.\S+[ -]+/, '');
+            // "Mode #channel [+modes] by nick" → "+modes by nick" (strip "by server")
+            m = m.replace(/^Mode \S+ \[([^\]]+)\] by (\S+)$/, (_, modes, setter) =>
+              setter.includes('.') ? modes : `${modes} by ${setter}`);
+            return m.trim();
+          })()}
+          {#if sysMsg}
           <div data-grp-idx={gi} class="flex items-baseline gap-2 px-3 py-px {isSearchCurrent ? 'bg-yellow-400/10 outline outline-1 outline-yellow-400/20 rounded' : isSearchMatch ? 'bg-yellow-400/5' : ''}">
-            <span class="w-[44px] sm:w-[52px] flex-shrink-0 text-right text-[11px] text-gray-600 font-mono tabular-nums select-none">{ts(grp.lines[0])}</span>
-            <span class="irc-msg-text flex-1 min-w-0 text-gray-500 text-[12px] italic">
-              {@html fmtMsg(grp.lines[0].message)}
+            <span class="w-[44px] sm:w-[52px] flex-shrink-0 text-right text-[11px] text-gray-500 font-mono tabular-nums select-none">{ts(grp.lines[0])}</span>
+            <span class="irc-msg-text flex-1 min-w-0 text-gray-400 italic">
+              {@html fmtMsg(sysMsg)}
             </span>
           </div>
+          {/if}
 
         {:else if grp.isAction}
           <!-- ── /me action ── * nick action -->
           <div data-grp-idx={gi} class="flex items-baseline gap-2 px-3 py-px {grp.highlight ? 'bg-yellow-500/5 border-l-2 border-yellow-400/50' : ''} {isSearchCurrent ? 'bg-yellow-400/10 outline outline-1 outline-yellow-400/20 rounded' : isSearchMatch ? 'bg-yellow-400/5' : ''}">
             <span class="w-[44px] sm:w-[52px] flex-shrink-0 text-right text-[11px] text-gray-500 font-mono tabular-nums select-none">{ts(grp.lines[0])}</span>
             <span class="irc-msg-text flex-1 min-w-0 text-gray-300 italic">
-              <span class="not-italic text-gray-500 mr-1">*</span>
+              <span class="not-italic text-gray-400 mr-1">*</span>
               <span class="not-italic font-semibold" style={nickStyle(grp.nick)}>{grp.nick}</span>
               {' '}{@html fmtMsg(actionText(grp.lines[0]))}
             </span>
           </div>
 
         {:else if grp.isNotice}
-          <!-- ── Notice ── -nick- message -->
+          <!-- ── Notice ── -nick- message (server notices strip redundant prefix) -->
+          {@const isServerNotice = grp.nick.includes('.') || grp.nick.endsWith('-')}
+          {@const rawNoticeMsg = grp.lines[0].message.replace(/^Notice\([^)]*\)\s*->\s*\S+\s*:\s*/, '')}
           <div data-grp-idx={gi} class="flex items-baseline gap-2 px-3 py-px {isSearchCurrent ? 'bg-yellow-400/10 outline outline-1 outline-yellow-400/20 rounded' : isSearchMatch ? 'bg-yellow-400/5' : ''}">
             <span class="w-[44px] sm:w-[52px] flex-shrink-0 text-right text-[11px] text-gray-500 font-mono tabular-nums select-none">{ts(grp.lines[0])}</span>
-            <span class="text-[12px] text-gray-500 flex-shrink-0 select-none">-<span style={nickStyle(grp.nick)}>{grp.nick}</span>-</span>
-            <span class="irc-msg-text flex-1 min-w-0 text-gray-400 italic text-[12px]">{@html fmtMsg(grp.lines[0].message)}</span>
+            {#if isServerNotice}
+              <span class="text-[11px] text-gray-600 flex-shrink-0 select-none font-mono">notice</span>
+            {:else}
+              <span class="text-gray-400 flex-shrink-0 select-none" style="font-size: 0.857em">-<span style={nickStyle(grp.nick)}>{grp.nick}</span>-</span>
+            {/if}
+            <span class="irc-msg-text flex-1 min-w-0 text-gray-400 italic">{@html fmtMsg(isServerNotice ? rawNoticeMsg : grp.lines[0].message)}</span>
+          </div>
+
+        {:else if !grp.isAction && grp.nick.includes('.') && grp.nick.length > 1}
+          <!-- ── Server info line ── numeric replies with server name as nick -->
+          <div data-grp-idx={gi} class="flex items-baseline gap-2 px-3 py-px {isSearchCurrent ? 'bg-yellow-400/10 outline outline-1 outline-yellow-400/20 rounded' : isSearchMatch ? 'bg-yellow-400/5' : ''}">
+            <span class="w-[44px] sm:w-[52px] flex-shrink-0 text-right text-[11px] text-gray-500 font-mono tabular-nums select-none">{ts(grp.lines[0])}</span>
+            <span class="irc-msg-text flex-1 min-w-0 text-gray-400 italic">{@html fmtMsg(grp.lines[0].message)}</span>
           </div>
 
         {:else if grp.isWhisper}
           <!-- ── Whisper (IRCx) ── DM-style -->
           <div data-grp-idx={gi} class="flex items-baseline gap-2 px-3 py-px rounded-lg mx-2 my-0.5 {isSearchCurrent ? 'outline outline-1 outline-yellow-400/30' : ''}" style="background: rgba(139,92,246,0.07); border-left: 2px solid rgba(139,92,246,0.4);">
             <span class="w-[44px] sm:w-[52px] flex-shrink-0 text-right text-[11px] text-gray-500 font-mono tabular-nums select-none">{ts(grp.lines[0])}</span>
-            <span class="text-[12px] text-purple-400 flex-shrink-0 select-none font-medium">&gt;<span style={nickStyle(grp.nick)}>{grp.nick}</span>&lt;</span>
-            <span class="irc-msg-text flex-1 min-w-0 text-purple-200 text-[13px]">{@html fmtMsg(grp.lines[0].message)}</span>
+            <span class="text-purple-400 flex-shrink-0 select-none font-medium" style="font-size: 0.857em">&gt;<span style={nickStyle(grp.nick)}>{grp.nick}</span>&lt;</span>
+            <span class="irc-msg-text flex-1 min-w-0 text-purple-200">{@html fmtMsg(grp.lines[0].message)}</span>
           </div>
 
         {:else}

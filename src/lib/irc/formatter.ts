@@ -206,7 +206,10 @@ function applyIrcFormatting(text: string): string {
 		const ch = text[i];
 		const code = text.charCodeAt(i);
 
-		if (code === 0x02) {
+		if (code === 0x01 || code === 0x07) {
+			// \x01 = CTCP delimiter, \x07 = BEL — strip silently
+			i++;
+		} else if (code === 0x02) {
 			// Bold
 			flushClose();
 			state.bold = !state.bold;

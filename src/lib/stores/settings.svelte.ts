@@ -1,6 +1,11 @@
 import type { RelaySettings } from '$lib/weechat/types.js';
+import type { ZncSettings } from '$lib/znc/adapter.js';
+import type { IrssiSettings } from '$lib/irssi/adapter.js';
+export type { ZncSettings, IrssiSettings };
 
-export type ThemeName = 'darkbear' | 'obsidian' | 'nord' | 'gruvbox' | 'rose-pine' | 'abyss' | 'ember' | 'aurora' | 'light' | 'custom';
+export type BackendType = 'weechat' | 'znc' | 'irssi';
+
+export type ThemeName = 'darkbear' | 'obsidian' | 'nord' | 'gruvbox' | 'rose-pine' | 'abyss' | 'ember' | 'aurora' | 'catppuccin' | 'tokyo-night' | 'dracula' | 'solarized' | 'light' | 'custom';
 
 export interface CustomThemeColors {
 	gray950: string;  // deep bg / canvas
@@ -41,6 +46,9 @@ export interface AppSettings {
 	relay: RelaySettings;
 	profiles: RelayProfile[];
 	nick: string;
+	backendType: BackendType;
+	znc: ZncSettings;
+	irssi: IrssiSettings;
 	theme: ThemeName;
 	customColors: CustomThemeColors;
 	fontFamily: string;  // 'system' | 'mono' | 'serif' or any installed font name
@@ -80,10 +88,34 @@ const DEFAULT_RELAY: RelaySettings = {
 	compression: true
 };
 
+const DEFAULT_ZNC: ZncSettings = {
+	host:     '',
+	port:     6697,
+	tls:      true,
+	nick:     '',
+	user:     '',
+	password: '',
+	network:  '',
+	realname: 'DarkBear',
+};
+
+const DEFAULT_IRSSI: IrssiSettings = {
+	host:     '',
+	port:     2626,
+	tls:      false,
+	nick:     '',
+	password: '',
+	network:  '',
+	realname: 'DarkBear',
+};
+
 const DEFAULTS: AppSettings = {
 	relay: { ...DEFAULT_RELAY },
 	profiles: [],
 	nick: '',
+	backendType: 'weechat',
+	znc: { ...DEFAULT_ZNC },
+	irssi: { ...DEFAULT_IRSSI },
 	theme: 'darkbear',
 	customColors: { ...DEFAULT_CUSTOM_COLORS },
 	fontFamily: 'system',
@@ -94,7 +126,7 @@ const DEFAULTS: AppSettings = {
 	bgTint: '',
 	bgTintOpacity: 30,
 	enableVideoCalls: true,
-	sidebarWidth: 220,
+	sidebarWidth: 240,
 	fontSize: 14,
 	timestampFormat: '24h',
 	compactMode: false,
@@ -117,6 +149,9 @@ class SettingsStore {
 	relay = $state<RelaySettings>({ ...DEFAULT_RELAY });
 	profiles = $state<RelayProfile[]>([]);
 	nick = $state(DEFAULTS.nick);
+	backendType = $state<BackendType>(DEFAULTS.backendType);
+	znc   = $state<ZncSettings>({ ...DEFAULT_ZNC });
+	irssi = $state<IrssiSettings>({ ...DEFAULT_IRSSI });
 	theme = $state<ThemeName>(DEFAULTS.theme);
 	customColors = $state<CustomThemeColors>({ ...DEFAULT_CUSTOM_COLORS });
 	fontFamily = $state<string>(DEFAULTS.fontFamily);
@@ -169,6 +204,9 @@ class SettingsStore {
 			}
 			if (data.profiles !== undefined) this.profiles = data.profiles;
 			if (data.nick !== undefined) this.nick = data.nick;
+			if (data.backendType !== undefined) this.backendType = data.backendType;
+			if (data.znc   !== undefined) this.znc   = { ...DEFAULT_ZNC,   ...data.znc   };
+			if (data.irssi !== undefined) this.irssi = { ...DEFAULT_IRSSI, ...data.irssi };
 			if (data.theme !== undefined) {
 				// Migrate old theme name
 				this.theme = (data.theme as string) === 'midnight' ? 'darkbear' : data.theme;
@@ -230,6 +268,9 @@ class SettingsStore {
 			relay: { ...this.relay },
 			profiles: this.profiles,
 			nick: this.nick,
+			backendType: this.backendType,
+			znc:   { ...this.znc   },
+			irssi: { ...this.irssi },
 			theme: this.theme,
 			customColors: { ...this.customColors },
 			fontFamily: this.fontFamily,
