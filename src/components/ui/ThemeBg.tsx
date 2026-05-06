@@ -2064,267 +2064,236 @@ function SolarizedBg() {
   );
 }
 
-/* -- Lightning: Thunderstorm with bolt strikes, rain, rolling clouds, wind -- */
+/* -- Lightning: Thunderstorm with realistic bolt strikes, driving rain, storm clouds -- */
 function LightningBg() {
   const rain = useMemo(() => {
     const rand = seededRand(900);
-    return Array.from({ length: 80 }, () => ({
-      x: rand() * 100,
-      len: 14 + rand() * 22,
-      dur: 0.4 + rand() * 0.5,
-      delay: rand() * 3,
-      opacity: 0.15 + rand() * 0.25,
-      wind: 8 + rand() * 6,
-    }));
-  }, []);
-
-  const rainHeavy = useMemo(() => {
-    const rand = seededRand(901);
-    return Array.from({ length: 50 }, () => ({
-      x: rand() * 100,
-      len: 20 + rand() * 30,
-      dur: 0.3 + rand() * 0.35,
+    return Array.from({ length: 120 }, () => ({
+      x: rand() * 120 - 10,
+      len: 18 + rand() * 28,
+      dur: 0.35 + rand() * 0.4,
       delay: rand() * 2,
-      opacity: 0.08 + rand() * 0.12,
-      wind: 10 + rand() * 8,
+      opacity: 0.2 + rand() * 0.35,
     }));
   }, []);
 
   const clouds = useMemo(() => {
     const rand = seededRand(902);
-    return Array.from({ length: 7 }, (_, i) => ({
-      x: -15 + rand() * 110,
-      y: -5 + rand() * 25,
-      w: 200 + rand() * 300,
-      h: 60 + rand() * 80,
-      opacity: 0.35 + rand() * 0.35,
-      dur: 30 + rand() * 40,
-      delay: rand() * 20,
-      dark: i < 3,
+    return Array.from({ length: 10 }, (_, i) => ({
+      x: -20 + rand() * 120,
+      y: -10 + rand() * 30,
+      w: 250 + rand() * 400,
+      h: 80 + rand() * 120,
+      opacity: 0.4 + rand() * 0.4,
+      dur: 25 + rand() * 35,
+      delay: rand() * 15,
+      layer: i < 4 ? 0 : i < 7 ? 1 : 2,
     }));
   }, []);
 
   const bolts = useMemo(() => {
     const rand = seededRand(903);
-    return Array.from({ length: 5 }, () => {
-      const startX = 10 + rand() * 80;
-      const segments: { x: number; y: number }[] = [{ x: startX, y: 0 }];
+    return Array.from({ length: 6 }, () => {
+      const startX = 8 + rand() * 84;
+      const segs: { x: number; y: number }[] = [{ x: startX, y: 5 + rand() * 10 }];
       let cx = startX;
-      let cy = 0;
-      const numSeg = 4 + Math.floor(rand() * 4);
-      for (let j = 0; j < numSeg; j++) {
-        cx += (rand() - 0.5) * 18;
-        cy += 8 + rand() * 14;
-        segments.push({ x: Math.max(2, Math.min(98, cx)), y: Math.min(90, cy) });
+      let cy = segs[0].y;
+      const n = 5 + Math.floor(rand() * 5);
+      for (let j = 0; j < n; j++) {
+        cx += (rand() - 0.5) * 16;
+        cy += 6 + rand() * 10;
+        segs.push({ x: Math.max(3, Math.min(97, cx)), y: Math.min(92, cy) });
       }
-      const branchAt = 1 + Math.floor(rand() * (segments.length - 2));
-      const branchSeg: { x: number; y: number }[] = [];
-      const bx = segments[branchAt].x;
-      const by = segments[branchAt].y;
-      let bbx = bx;
-      let bby = by;
-      for (let k = 0; k < 2 + Math.floor(rand() * 2); k++) {
-        bbx += (rand() - 0.3) * 12;
-        bby += 5 + rand() * 10;
-        branchSeg.push({ x: Math.max(2, Math.min(98, bbx)), y: Math.min(90, bby) });
+      const branches: { x: number; y: number }[][] = [];
+      for (let b = 0; b < 2 + Math.floor(rand() * 2); b++) {
+        const bi = 1 + Math.floor(rand() * Math.max(1, segs.length - 2));
+        const bsegs: { x: number; y: number }[] = [{ x: segs[bi].x, y: segs[bi].y }];
+        let bx = segs[bi].x;
+        let by = segs[bi].y;
+        const bn = 2 + Math.floor(rand() * 3);
+        for (let k = 0; k < bn; k++) {
+          bx += (rand() - 0.4) * 14;
+          by += 4 + rand() * 8;
+          bsegs.push({ x: Math.max(2, Math.min(98, bx)), y: Math.min(95, by) });
+        }
+        branches.push(bsegs);
       }
       return {
-        segments,
-        branch: [{ x: bx, y: by }, ...branchSeg],
-        dur: 6 + rand() * 12,
-        delay: rand() * 18,
-        flashDur: 0.15 + rand() * 0.15,
-        intensity: 0.5 + rand() * 0.4,
+        segs,
+        branches,
+        cycle: 4 + rand() * 8,
+        delay: rand() * 12,
       };
     });
   }, []);
 
-  const windStreaks = useMemo(() => {
-    const rand = seededRand(904);
-    return Array.from({ length: 12 }, () => ({
-      y: rand() * 80,
-      len: 60 + rand() * 120,
-      dur: 1.5 + rand() * 2,
-      delay: rand() * 8,
-      opacity: 0.04 + rand() * 0.06,
-    }));
-  }, []);
-
-  const rumbleParticles = useMemo(() => {
-    const rand = seededRand(905);
-    return Array.from({ length: 20 }, () => ({
-      x: rand() * 100,
-      y: 60 + rand() * 35,
-      size: 1 + rand() * 2,
-      dur: 2 + rand() * 4,
-      delay: rand() * 10,
-    }));
-  }, []);
-
   return (
     <Shell>
-      {/* Dark storm sky gradient */}
-      <div className="absolute inset-0"
-        style={{ background: 'linear-gradient(to bottom, rgba(8,12,24,0.3) 0%, rgba(14,20,38,0.15) 30%, rgba(20,28,50,0.1) 60%, rgba(10,14,28,0.2) 100%)' }} />
-
-      {/* Rolling storm clouds */}
+      {/* Storm clouds — three depth layers */}
       {clouds.map((c, i) => (
         <div key={`cl${i}`} className="absolute rounded-full"
           style={{
             left: `${c.x}%`, top: `${c.y}%`,
             width: `${c.w}px`, height: `${c.h}px`,
-            background: c.dark
-              ? 'radial-gradient(ellipse, rgba(20,30,55,0.7) 0%, rgba(15,22,42,0.4) 40%, transparent 70%)'
-              : 'radial-gradient(ellipse, rgba(30,42,70,0.5) 0%, rgba(20,30,55,0.25) 45%, transparent 70%)',
-            filter: 'blur(20px)',
+            background: c.layer === 0
+              ? 'radial-gradient(ellipse, rgba(15,20,40,0.85) 0%, rgba(10,14,30,0.5) 40%, transparent 68%)'
+              : c.layer === 1
+              ? 'radial-gradient(ellipse, rgba(20,28,50,0.7) 0%, rgba(15,20,40,0.35) 45%, transparent 70%)'
+              : 'radial-gradient(ellipse, rgba(25,35,60,0.5) 0%, rgba(18,24,44,0.2) 50%, transparent 72%)',
+            filter: `blur(${14 + c.layer * 6}px)`,
             animation: `ln-cloud ${c.dur}s ease-in-out ${c.delay}s infinite`,
             opacity: c.opacity,
           }} />
       ))}
 
-      {/* Cloud base glow — illuminated from below by lightning */}
-      <div className="absolute left-0 right-0 top-[5%] h-[25%]"
+      {/* Cloud underside glow — lit by internal lightning */}
+      <div className="absolute left-0 right-0 top-[8%] h-[20%]"
         style={{
-          background: 'linear-gradient(to bottom, rgba(96,165,250,0.06), transparent)',
-          filter: 'blur(30px)',
-          animation: 'ln-cloudglow 8s ease-in-out infinite',
+          background: 'linear-gradient(to bottom, rgba(96,165,250,0.12), rgba(80,140,220,0.04), transparent)',
+          filter: 'blur(24px)',
+          animation: 'ln-underglow 6s ease-in-out infinite',
         }} />
 
-      {/* Lightning bolt SVGs */}
-      <svg className="absolute inset-0 w-full h-full">
+      {/* Lightning bolts via SVG with viewBox so coordinates map to full viewport */}
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <defs>
+          <filter id="ln-glow">
+            <feGaussianBlur stdDeviation="0.8" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="ln-glow-wide">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
         {bolts.map((bolt, bi) => {
-          const mainPath = bolt.segments.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x} ${s.y}`).join(' ');
-          const branchPath = bolt.branch.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x} ${s.y}`).join(' ');
-          const totalDur = bolt.dur;
-          const flashStart = 0.98;
-          const flashEnd = flashStart + (bolt.flashDur / totalDur);
-          const vals = `0;0;0;0;0;0;0;0;0;${bolt.intensity};0;${bolt.intensity * 0.5};0;0;0;0;0;0;0;0`;
+          const mainD = bolt.segs.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x},${s.y}`).join(' ');
+          const c = bolt.cycle;
+          const strikeAt = Math.round(c * 0.7 * 100) / 100;
+          const flashOn = `${((strikeAt / c) * 100).toFixed(1)}%`;
+          const flashOff = `${(((strikeAt + 0.12) / c) * 100).toFixed(1)}%`;
+          const flash2On = `${(((strikeAt + 0.18) / c) * 100).toFixed(1)}%`;
+          const flash2Off = `${(((strikeAt + 0.25) / c) * 100).toFixed(1)}%`;
+          const opVals = `0;0;0;0;0;0;0;1;0;0.7;0;0`;
+          const opTimes = '0;0.64;0.66;0.68;0.69;0.72;0.74;0.75;0.76;0.78;0.80;1';
           return (
             <g key={`b${bi}`}>
+              {/* Wide outer glow */}
+              <path d={mainD} fill="none" stroke="rgba(96,165,250,0.5)" strokeWidth="3"
+                strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow-wide)"
+                opacity="0" vectorEffect="non-scaling-stroke">
+                <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
+              </path>
               {/* Main bolt */}
-              <path d={mainPath} fill="none" stroke="rgba(147,197,253,0.9)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                style={{ filter: 'drop-shadow(0 0 8px rgba(96,165,250,0.8)) drop-shadow(0 0 20px rgba(96,165,250,0.4))' }}
-                opacity="0">
-                <animate attributeName="opacity" values={vals} dur={`${totalDur}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
+              <path d={mainD} fill="none" stroke="rgba(180,210,255,0.95)" strokeWidth="1.8"
+                strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow)"
+                opacity="0" vectorEffect="non-scaling-stroke">
+                <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
-              {/* Core bright center */}
-              <path d={mainPath} fill="none" stroke="rgba(219,234,254,0.95)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"
-                opacity="0">
-                <animate attributeName="opacity" values={vals} dur={`${totalDur}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
+              {/* Hot white core */}
+              <path d={mainD} fill="none" stroke="rgba(240,245,255,0.98)" strokeWidth="0.8"
+                strokeLinecap="round" strokeLinejoin="round"
+                opacity="0" vectorEffect="non-scaling-stroke">
+                <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
-              {/* Branch */}
-              <path d={branchPath} fill="none" stroke="rgba(147,197,253,0.6)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                style={{ filter: 'drop-shadow(0 0 6px rgba(96,165,250,0.5))' }}
-                opacity="0">
-                <animate attributeName="opacity" values={vals} dur={`${totalDur}s`} begin={`${bolt.delay + 0.05}s`} repeatCount="indefinite" />
-              </path>
-              {/* Ground illumination on strike */}
-              <ellipse cx={`${bolt.segments[bolt.segments.length - 1].x}`} cy="95"
-                rx="20" ry="6" fill="rgba(96,165,250,0.3)" opacity="0">
-                <animate attributeName="opacity" values={vals} dur={`${totalDur}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
+              {/* Branches */}
+              {bolt.branches.map((br, bri) => {
+                const brD = br.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x},${s.y}`).join(' ');
+                return (
+                  <g key={`br${bri}`}>
+                    <path d={brD} fill="none" stroke="rgba(140,185,250,0.7)" strokeWidth="1.2"
+                      strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow)"
+                      opacity="0" vectorEffect="non-scaling-stroke">
+                      <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+                        dur={`${c}s`} begin={`${bolt.delay + 0.02}s`} repeatCount="indefinite" />
+                    </path>
+                    <path d={brD} fill="none" stroke="rgba(220,235,255,0.85)" strokeWidth="0.5"
+                      strokeLinecap="round" strokeLinejoin="round"
+                      opacity="0" vectorEffect="non-scaling-stroke">
+                      <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+                        dur={`${c}s`} begin={`${bolt.delay + 0.02}s`} repeatCount="indefinite" />
+                    </path>
+                  </g>
+                );
+              })}
+              {/* Ground strike glow */}
+              <ellipse cx={bolt.segs[bolt.segs.length - 1].x} cy={bolt.segs[bolt.segs.length - 1].y + 2}
+                rx="8" ry="3" fill="rgba(96,165,250,0.6)" opacity="0">
+                <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </ellipse>
             </g>
           );
         })}
       </svg>
 
-      {/* Full-screen flash on lightning strike */}
+      {/* Full-screen flash per bolt — sky lights up */}
       {bolts.map((bolt, bi) => (
-        <div key={`flash${bi}`} className="absolute inset-0" style={{
-          opacity: 0,
-          animation: `ln-flash${bi} ${bolt.dur}s ease-out ${bolt.delay}s infinite`,
-        }} />
+        <div key={`fl${bi}`} className="absolute inset-0"
+          style={{ animation: `ln-skyflash ${bolt.cycle}s ease-out ${bolt.delay}s infinite` }} />
       ))}
 
-      {/* Rain — angled by wind */}
+      {/* Cloud illumination flashes — brighter than ambient */}
+      {bolts.slice(0, 3).map((bolt, bi) => (
+        <div key={`cfl${bi}`} className="absolute rounded-full"
+          style={{
+            left: `${bolt.segs[0].x - 15}%`, top: `${bolt.segs[0].y - 5}%`,
+            width: '30%', height: '20%',
+            background: 'radial-gradient(ellipse, rgba(140,185,250,0.4), transparent 60%)',
+            filter: 'blur(20px)',
+            animation: `ln-skyflash ${bolt.cycle}s ease-out ${bolt.delay}s infinite`,
+          }} />
+      ))}
+
+      {/* Driving rain — angled 12deg by wind */}
       {rain.map((r, i) => (
         <div key={`r${i}`} className="absolute"
           style={{
-            left: `${r.x}%`, top: '-5%',
+            left: `${r.x}%`, top: '-10%',
             width: '1px', height: `${r.len}px`,
-            background: `linear-gradient(to bottom, transparent, rgba(147,197,253,${r.opacity}))`,
-            transform: `rotate(${r.wind}deg)`,
+            background: `linear-gradient(to bottom, transparent, rgba(160,200,255,${r.opacity}))`,
+            transform: 'rotate(12deg)',
+            transformOrigin: 'top left',
             animation: `ln-rain ${r.dur}s linear ${r.delay}s infinite`,
           }} />
       ))}
-      {rain.map((r, i) => (
+
+      {/* Second rain layer offset */}
+      {rain.slice(0, 60).map((r, i) => (
         <div key={`r2${i}`} className="absolute"
           style={{
-            left: `${(r.x + 50) % 100}%`, top: '-5%',
-            width: '1px', height: `${r.len * 0.8}px`,
-            background: `linear-gradient(to bottom, transparent, rgba(147,197,253,${r.opacity * 0.7}))`,
-            transform: `rotate(${r.wind + 2}deg)`,
-            animation: `ln-rain ${r.dur * 1.1}s linear ${r.delay + 0.2}s infinite`,
+            left: `${(r.x + 45) % 110 - 5}%`, top: '-10%',
+            width: '1px', height: `${r.len * 0.7}px`,
+            background: `linear-gradient(to bottom, transparent, rgba(140,180,240,${r.opacity * 0.6}))`,
+            transform: 'rotate(12deg)',
+            transformOrigin: 'top left',
+            animation: `ln-rain ${r.dur * 1.15}s linear ${r.delay + 0.15}s infinite`,
           }} />
       ))}
 
-      {/* Heavy rain layer — larger drops */}
-      {rainHeavy.map((r, i) => (
-        <div key={`rh${i}`} className="absolute"
-          style={{
-            left: `${r.x}%`, top: '-8%',
-            width: '1.5px', height: `${r.len}px`,
-            background: `linear-gradient(to bottom, transparent, rgba(148,200,255,${r.opacity}))`,
-            transform: `rotate(${r.wind}deg)`,
-            animation: `ln-rain ${r.dur}s linear ${r.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Horizontal wind streaks */}
-      {windStreaks.map((w, i) => (
-        <div key={`ws${i}`} className="absolute"
-          style={{
-            left: '-10%', top: `${w.y}%`,
-            width: `${w.len}px`, height: '1px',
-            background: `linear-gradient(to right, transparent, rgba(147,197,253,${w.opacity}), transparent)`,
-            animation: `ln-wind ${w.dur}s linear ${w.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Mist/fog rolling at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 h-[30%]"
+      {/* Low fog / mist */}
+      <div className="absolute bottom-0 left-0 right-0 h-[25%]"
         style={{
-          background: 'linear-gradient(to top, rgba(14,20,38,0.4) 0%, rgba(20,28,50,0.15) 50%, transparent 100%)',
-          filter: 'blur(8px)',
-          animation: 'ln-fog 12s ease-in-out infinite',
+          background: 'linear-gradient(to top, rgba(10,14,28,0.5), rgba(15,20,38,0.2) 50%, transparent)',
+          filter: 'blur(10px)',
+          animation: 'ln-fog 14s ease-in-out infinite',
         }} />
-      <div className="absolute bottom-0 left-[-10%] right-[-10%] h-[20%]"
+      <div className="absolute bottom-0 left-[-5%] right-[-5%] h-[18%]"
         style={{
-          background: 'radial-gradient(ellipse at 30% 100%, rgba(30,42,68,0.35), transparent 60%)',
-          filter: 'blur(16px)',
-          animation: 'ln-fog 16s ease-in-out 4s infinite',
-        }} />
-
-      {/* Mist particles / spray */}
-      {rumbleParticles.map((p, i) => (
-        <div key={`mp${i}`} className="absolute rounded-full"
-          style={{
-            left: `${p.x}%`, top: `${p.y}%`,
-            width: `${p.size}px`, height: `${p.size}px`,
-            background: 'rgba(147,197,253,0.25)',
-            animation: `ln-mist ${p.dur}s ease-in-out ${p.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Distant horizon glow */}
-      <div className="absolute bottom-[15%] left-0 right-0 h-[2px]"
-        style={{
-          background: 'linear-gradient(to right, transparent 10%, rgba(96,165,250,0.08) 30%, rgba(96,165,250,0.12) 50%, rgba(96,165,250,0.08) 70%, transparent 90%)',
-          animation: 'ln-horizon 6s ease-in-out infinite',
+          background: 'radial-gradient(ellipse at 60% 100%, rgba(20,28,50,0.4), transparent 55%)',
+          filter: 'blur(18px)',
+          animation: 'ln-fog 18s ease-in-out 5s infinite',
         }} />
 
       <style>{`
-        @keyframes ln-rain { 0%{transform:rotate(var(--wind,10deg)) translateY(-5vh);opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{transform:rotate(var(--wind,10deg)) translateY(115vh);opacity:0} }
-        @keyframes ln-cloud { 0%,100%{transform:translateX(0) scale(1)} 50%{transform:translateX(30px) scale(1.05)} }
-        @keyframes ln-cloudglow { 0%,100%{opacity:0.4} 50%{opacity:0.8} }
-        @keyframes ln-wind { 0%{left:-10%;opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{left:110%;opacity:0} }
-        @keyframes ln-fog { 0%,100%{transform:translateX(0);opacity:1} 50%{transform:translateX(20px);opacity:0.6} }
-        @keyframes ln-mist { 0%,100%{opacity:0;transform:translateY(0)} 50%{opacity:0.4;transform:translateY(-6px)} }
-        @keyframes ln-horizon { 0%,100%{opacity:0.5} 50%{opacity:1} }
-        ${bolts.map((bolt, bi) => {
-          const t = bolt.dur;
-          return `@keyframes ln-flash${bi} { 0%,44%{background:transparent} 45%{background:rgba(96,165,250,0.08)} 45.5%{background:transparent} 46%{background:rgba(147,197,253,0.12)} 46.5%{background:transparent} 100%{background:transparent} }`;
-        }).join(String.fromCharCode(10))}
+        @keyframes ln-rain { 0%{top:-10%;opacity:0} 5%{opacity:1} 95%{opacity:0.8} 100%{top:110%;opacity:0} }
+        @keyframes ln-cloud { 0%,100%{transform:translateX(0) scale(1)} 50%{transform:translateX(25px) scale(1.03)} }
+        @keyframes ln-underglow { 0%,100%{opacity:0.5} 50%{opacity:1} }
+        @keyframes ln-fog { 0%,100%{transform:translateX(0);opacity:1} 50%{transform:translateX(15px);opacity:0.65} }
+        @keyframes ln-skyflash { 0%,73%{background:transparent} 75%{background:rgba(140,185,250,0.15)} 76%{background:transparent} 78%{background:rgba(96,165,250,0.2)} 79%{background:transparent} 100%{background:transparent} }
       `}</style>
     </Shell>
   );
