@@ -161,15 +161,12 @@ export default function InputBar() {
     }
   }, [text, submit, complete, cycleCompletion, resetCompletion, completionActive, activeBuffer, history, historyIdx]);
 
-  // Auto-resize textarea height.
-  // iOS Safari: setting height='auto' first causes a visible flicker where
-  // the textarea collapses then re-expands. Use scrollHeight from a
-  // zero-height measurement instead.
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
-    el.style.height = '0';
-    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+    el.style.height = '44px';
+    const next = Math.min(Math.max(el.scrollHeight, 44), 140);
+    el.style.height = `${next}px`;
   }, [text]);
 
   return (

@@ -87,6 +87,19 @@ export default function MessageView() {
     setSearchQuery('');
   }, [activeBuffer]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Re-anchor to bottom when virtual keyboard opens/closes
+  useEffect(() => {
+    const vp = window.visualViewport;
+    if (!vp) return;
+    const onResize = () => {
+      if (isAtBottom.current) {
+        requestAnimationFrame(() => scrollToEnd());
+      }
+    };
+    vp.addEventListener('resize', onResize);
+    return () => vp.removeEventListener('resize', onResize);
+  }, [scrollToEnd]);
+
   const onScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
