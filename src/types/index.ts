@@ -3,7 +3,7 @@
 export type ThemeName =
   | 'darkbear' | 'midnight' | 'obsidian' | 'nord' | 'gruvbox' | 'rose-pine'
   | 'abyss' | 'ember' | 'aurora' | 'catppuccin' | 'tokyo-night'
-  | 'dracula' | 'solarized' | 'starfield' | 'light' | 'custom';
+  | 'dracula' | 'solarized' | 'starfield' | 'lightning' | 'light' | 'custom';
 
 export interface CustomThemeColors {
   gray950: string;

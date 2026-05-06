@@ -609,6 +609,21 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --custom-accent:  #268bd2;
 }
 
+[data-theme="lightning"] {
+  --color-gray-50:  #e8ecf8;
+  --color-gray-100: #d0d8e8;
+  --color-gray-200: #b8c4dc;
+  --color-gray-300: #90a0c0;
+  --color-gray-400: #6880a8;
+  --color-gray-500: #4c6088;
+  --color-gray-600: #344468;
+  --color-gray-700: #1e2a44;
+  --color-gray-800: rgb(14 20 38 / 0.88);
+  --color-gray-900: rgb(8 10 18 / 0.9);
+  --color-gray-950: rgb(4 5 10 / 0.85);
+  --custom-accent:  #60a5fa;
+}
+
 /* Deep space starfield — cosmic void with nebula accent */
 [data-theme="starfield"] {
   --color-gray-50:  #eef0ff;

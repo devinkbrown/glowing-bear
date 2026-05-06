@@ -22,6 +22,7 @@ const THEMES: { id: ThemeName; name: string; accent: string; bg: string; text: s
   { id: 'dracula', name: 'Dracula', accent: '#bd93f9', bg: '#1e1f29', text: '#f0f0ec' },
   { id: 'solarized', name: 'Solarized', accent: '#268bd2', bg: '#002b36', text: '#c8d4d0' },
   { id: 'starfield', name: 'Starfield', accent: '#818cf8', bg: '#04050a', text: '#c8cce8' },
+  { id: 'lightning', name: 'Lightning', accent: '#60a5fa', bg: '#080a12', text: '#d0d8e8' },
   { id: 'light', name: 'Light', accent: '#4f46e5', bg: '#ffffff', text: '#1f2937' },
   { id: 'custom', name: 'Custom', accent: '#888', bg: '#0c0d12', text: '#d0d4e0' },
 ];
@@ -635,6 +636,31 @@ function ThemeAnimation({ id, accent, text }: { id: string; accent: string; text
             </linearGradient>
           </defs>
           <rect x="0" y={h*0.5} width={w} height={h*0.5} fill="url(#tm-sl-wm)" />
+        </svg>
+      );
+
+    case 'lightning':
+      return (
+        <svg style={common} viewBox={`0 0 ${w} ${h}`}>
+          <rect x="0" y="0" width={w} height={h} fill="#60a5fa" opacity="0">
+            <animate attributeName="opacity" values="0;0;0;0.2;0;0.1;0;0" dur="4s" repeatCount="indefinite" />
+          </rect>
+          <path d="M48,2 L44,22 L50,22 L42,40" fill="none" stroke="#93c5fd" strokeWidth="1.2" strokeLinecap="round" opacity="0">
+            <animate attributeName="opacity" values="0;0;0;0.8;0;0.5;0;0" dur="4s" repeatCount="indefinite" />
+          </path>
+          <path d="M25,5 L22,18 L27,18 L20,32" fill="none" stroke="#bfdbfe" strokeWidth="0.8" strokeLinecap="round" opacity="0">
+            <animate attributeName="opacity" values="0;0;0.6;0;0;0;0;0" dur="5s" repeatCount="indefinite" begin="1.5s" />
+          </path>
+          {[[15,10],[35,6],[55,12],[75,8],[25,18],[60,16],[85,14]].map(([x,y],i) => (
+            <circle key={i} cx={x} cy={y} r="0.5" fill="#93c5fd" opacity="0.15">
+              <animate attributeName="opacity" values="0.08;0.3;0.08" dur={`${2+i*0.3}s`} repeatCount="indefinite" />
+            </circle>
+          ))}
+          {[0,1,2].map(i => (
+            <ellipse key={`c${i}`} cx={10+i*30} cy={h*0.25} rx="16" ry="6" fill="#1e3a5f" opacity="0.25">
+              <animateTransform attributeName="transform" type="translate" values={`0,0;${6+i*2},0;0,0`} dur={`${5+i}s`} repeatCount="indefinite" />
+            </ellipse>
+          ))}
         </svg>
       );
 
