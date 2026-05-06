@@ -87,17 +87,33 @@ export default function MessageView() {
     setSearchQuery('');
   }, [activeBuffer]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-anchor to bottom when virtual keyboard opens/closes
+  // Re-anchor to bottom when virtual keyboard opens/closes.
+  // The keyboard resize shrinks the container, which fires onScroll and
+  // falsely clears isAtBottom before we can read it. Track it separately.
   useEffect(() => {
     const vp = window.visualViewport;
     if (!vp) return;
-    const onResize = () => {
-      if (isAtBottom.current) {
-        requestAnimationFrame(() => scrollToEnd());
-      }
+    let wasAtBottom = true;
+    const snapshot = () => {
+      const el = containerRef.current;
+      if (el) wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
     };
+    const onResize = () => {
+      if (wasAtBottom) {
+        requestAnimationFrame(() => {
+          scrollToEnd();
+          isAtBottom.current = true;
+          setShowScrollBtn(false);
+        });
+      }
+      setTimeout(snapshot, 400);
+    };
+    document.addEventListener('focusin', snapshot);
     vp.addEventListener('resize', onResize);
-    return () => vp.removeEventListener('resize', onResize);
+    return () => {
+      document.removeEventListener('focusin', snapshot);
+      vp.removeEventListener('resize', onResize);
+    };
   }, [scrollToEnd]);
 
   const onScroll = useCallback(() => {
