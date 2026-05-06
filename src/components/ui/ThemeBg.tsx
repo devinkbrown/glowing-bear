@@ -37,113 +37,174 @@ const Shell = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-/* ── DarkBear: Cosmic indigo particles, nebula clouds, glowing orbs ── */
+/* ── DarkBear: Living digital mesh — network nodes, data streams, pulse rings ── */
 function DarkBearBg() {
-  const particles = useMemo(() => {
+  const nodes = useMemo(() => {
     const rand = seededRand(42);
-    return Array.from({ length: 100 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 0.8 + rand() * 3,
-      opacity: 0.12 + rand() * 0.35,
-      dur: 3 + rand() * 6,
-      delay: rand() * 10,
-      glow: rand() > 0.7,
+    return Array.from({ length: 45 }, (_, i) => ({
+      x: rand() * 90 + 5, y: rand() * 90 + 5,
+      size: rand() < 0.15 ? (4 + rand() * 4) : (1.5 + rand() * 2.5),
+      opacity: 0.15 + rand() * 0.45,
+      dur: 4 + rand() * 8,
+      delay: rand() * 12,
+      hub: i < 6,
     }));
   }, []);
+
+  const edges = useMemo(() => {
+    const rand = seededRand(77);
+    const out: { x1: number; y1: number; x2: number; y2: number; dur: number; delay: number }[] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[i].x - nodes[j].x;
+        const dy = nodes[i].y - nodes[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 22 && rand() > 0.35) {
+          out.push({ x1: nodes[i].x, y1: nodes[i].y, x2: nodes[j].x, y2: nodes[j].y, dur: 6 + rand() * 10, delay: rand() * 8 });
+        }
+      }
+    }
+    return out;
+  }, [nodes]);
+
+  const streams = useMemo(() => {
+    const rand = seededRand(200);
+    return Array.from({ length: 10 }, () => {
+      const vertical = rand() > 0.5;
+      return {
+        x: rand() * 100, y: rand() * 100,
+        vertical, len: 40 + rand() * 80,
+        dur: 3 + rand() * 5, delay: rand() * 15,
+        opacity: 0.06 + rand() * 0.12,
+      };
+    });
+  }, []);
+
+  const hexes = useMemo(() => {
+    const rand = seededRand(150);
+    return Array.from({ length: 8 }, () => ({
+      x: rand() * 90 + 5, y: rand() * 90 + 5,
+      size: 12 + rand() * 24,
+      opacity: 0.04 + rand() * 0.06,
+      dur: 15 + rand() * 20,
+      delay: rand() * 10,
+      rot: rand() * 360,
+    }));
+  }, []);
+
   return (
     <Shell>
-      {particles.map((p, i) => (
-        <div key={i} className="absolute rounded-full"
-          style={{ left: `${p.x}%`, top: `${p.y}%`, width: `${p.size}px`, height: `${p.size}px`,
-            background: i % 4 === 0 ? '#a78bfa' : i % 4 === 1 ? '#818cf8' : i % 4 === 2 ? '#6366f1' : '#c4b5fd',
-            opacity: p.opacity,
-            boxShadow: p.glow ? `0 0 ${p.size * 4}px rgba(129,140,248,0.4)` : undefined,
-            animation: `db-pulse ${p.dur}s ease-in-out ${p.delay}s infinite` }} />
+      {/* Perspective grid floor */}
+      <div className="absolute inset-0" style={{
+        background: `
+          linear-gradient(rgba(129,140,248,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(129,140,248,0.03) 1px, transparent 1px)`,
+        backgroundSize: '60px 60px',
+        maskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.6) 70%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.6) 70%, transparent 100%)',
+      }} />
+
+      {/* Morphing gradient blobs */}
+      <div className="absolute w-[500px] h-[500px] top-[5%] left-[15%] rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.12), transparent 55%)', animation: 'db-morph-a 25s ease-in-out infinite', filter: 'blur(40px)' }} />
+      <div className="absolute w-[400px] h-[400px] bottom-[10%] right-[5%] rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.1), transparent 55%)', animation: 'db-morph-b 30s ease-in-out infinite', filter: 'blur(35px)' }} />
+      <div className="absolute w-[300px] h-[300px] top-[50%] left-[60%] rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.08), transparent 55%)', animation: 'db-morph-c 22s ease-in-out infinite', filter: 'blur(30px)' }} />
+
+      {/* SVG layer: edges, nodes, data streams */}
+      <svg className="absolute inset-0 w-full h-full">
+        {/* Network edges */}
+        {edges.map((e, i) => (
+          <line key={`e${i}`} x1={`${e.x1}%`} y1={`${e.y1}%`} x2={`${e.x2}%`} y2={`${e.y2}%`}
+            stroke="rgba(129,140,248,0.08)" strokeWidth="0.5"
+            style={{ animation: `db-edge-breathe ${e.dur}s ease-in-out ${e.delay}s infinite` }} />
+        ))}
+
+        {/* Data streams traveling along edges */}
+        {edges.slice(0, 8).map((e, i) => {
+          const id = `stream-path-${i}`;
+          return (
+            <g key={`ds${i}`}>
+              <path id={id} d={`M${e.x1 * 10} ${e.y1 * 10} L${e.x2 * 10} ${e.y2 * 10}`}
+                fill="none" stroke="none" />
+              <circle r="1.5" fill="rgba(129,140,248,0.6)" style={{ filter: 'drop-shadow(0 0 3px rgba(129,140,248,0.4))' }}>
+                <animateMotion dur={`${3 + i * 0.7}s`} repeatCount="indefinite" begin={`${i * 1.2}s`}>
+                  <mpath href={`#${id}`} />
+                </animateMotion>
+              </circle>
+            </g>
+          );
+        })}
+
+        {/* Pulse rings from hub nodes */}
+        {nodes.filter(n => n.hub).map((n, i) => (
+          <circle key={`pulse${i}`} cx={`${n.x}%`} cy={`${n.y}%`} r="0"
+            fill="none" stroke="rgba(129,140,248,0.15)" strokeWidth="0.5">
+            <animate attributeName="r" from="0" to="60" dur={`${6 + i * 2}s`} begin={`${i * 3}s`} repeatCount="indefinite" />
+            <animate attributeName="opacity" from="0.2" to="0" dur={`${6 + i * 2}s`} begin={`${i * 3}s`} repeatCount="indefinite" />
+          </circle>
+        ))}
+      </svg>
+
+      {/* Floating hexagons */}
+      {hexes.map((h, i) => (
+        <div key={`hex${i}`} className="absolute" style={{
+          left: `${h.x}%`, top: `${h.y}%`, width: `${h.size}px`, height: `${h.size}px`,
+          opacity: h.opacity, transform: `rotate(${h.rot}deg)`,
+          animation: `db-hex-drift ${h.dur}s ease-in-out ${h.delay}s infinite`,
+        }}>
+          <svg viewBox="0 0 100 100" className="w-full h-full">
+            <polygon points="50,2 93,25 93,75 50,98 7,75 7,25"
+              fill="none" stroke="rgba(129,140,248,0.3)" strokeWidth="1" />
+          </svg>
+        </div>
       ))}
-      <div className="absolute w-[700px] h-[700px] top-[10%] left-[20%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.15), transparent 50%)', animation: 'db-drift 28s ease-in-out infinite', filter: 'blur(20px)' }} />
-      <div className="absolute w-[600px] h-[600px] bottom-[0%] right-[0%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.12), transparent 50%)', animation: 'db-drift 38s ease-in-out infinite reverse', filter: 'blur(20px)' }} />
-      <div className="absolute w-[400px] h-[400px] top-[55%] left-[5%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(167,139,250,0.1), transparent 50%)', animation: 'db-drift 32s ease-in-out 5s infinite', filter: 'blur(15px)' }} />
-      <div className="absolute w-[350px] h-[350px] top-[5%] right-[10%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(196,181,253,0.08), transparent 50%)', animation: 'db-drift 45s ease-in-out 10s infinite', filter: 'blur(15px)' }} />
-      {/* Pulsing orbs */}
-      {[{ x: 75, y: 20, s: 8 }, { x: 25, y: 70, s: 6 }, { x: 60, y: 85, s: 5 }].map((o, i) => (
-        <div key={`orb${i}`} className="absolute rounded-full"
-          style={{ left: `${o.x}%`, top: `${o.y}%`, width: `${o.s}px`, height: `${o.s}px`,
-            background: 'rgba(129,140,248,0.6)',
-            boxShadow: `0 0 ${o.s * 5}px rgba(129,140,248,0.3), 0 0 ${o.s * 10}px rgba(129,140,248,0.1)`,
-            animation: `db-orb ${4 + i * 2}s ease-in-out ${i * 1.5}s infinite` }} />
+
+      {/* Data stream lines */}
+      {streams.map((s, i) => (
+        <div key={`st${i}`} className="absolute" style={{
+          left: `${s.x}%`, top: `${s.y}%`,
+          width: s.vertical ? '1px' : `${s.len}px`,
+          height: s.vertical ? `${s.len}px` : '1px',
+          background: s.vertical
+            ? `linear-gradient(to bottom, transparent, rgba(129,140,248,${s.opacity}), transparent)`
+            : `linear-gradient(to right, transparent, rgba(129,140,248,${s.opacity}), transparent)`,
+          animation: `db-stream ${s.dur}s ease-in-out ${s.delay}s infinite`,
+        }} />
       ))}
 
-      {/* Galaxy 1 — indigo spiral */}
-      <div className="absolute" style={{ top: '12%', right: '8%', width: '110px', height: '110px', animation: 'db-spin 90s linear infinite' }}>
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.22) 0%, rgba(129,140,248,0.06) 30%, transparent 55%)' }} />
-        <svg className="absolute inset-0" viewBox="0 0 110 110" style={{ opacity: 0.14 }}>
-          <path d="M55 55 Q70 40 75 26 Q79 14 71 11 Q63 10 58 24 Q53 38 55 55" fill="rgba(196,181,253,0.6)" />
-          <path d="M55 55 Q40 70 35 84 Q31 96 39 99 Q47 100 52 86 Q57 72 55 55" fill="rgba(196,181,253,0.6)" />
-          <path d="M55 55 Q70 65 82 70 Q94 73 96 64 Q96 55 82 53 Q68 51 55 55" fill="rgba(129,140,248,0.5)" />
-          <path d="M55 55 Q40 45 28 40 Q16 37 14 46 Q14 55 28 57 Q42 59 55 55" fill="rgba(129,140,248,0.5)" />
-        </svg>
-        <div className="absolute rounded-full" style={{ top: '38%', left: '38%', width: '24%', height: '24%', background: 'radial-gradient(circle, rgba(255,255,255,0.3), rgba(129,140,248,0.08) 60%, transparent)', boxShadow: '0 0 12px rgba(129,140,248,0.15)' }} />
-      </div>
+      {/* Network nodes */}
+      {nodes.map((n, i) => (
+        <div key={`n${i}`} className="absolute rounded-full" style={{
+          left: `${n.x}%`, top: `${n.y}%`,
+          width: `${n.size}px`, height: `${n.size}px`,
+          transform: 'translate(-50%, -50%)',
+          background: n.hub ? 'rgba(167,139,250,0.7)' : 'rgba(129,140,248,0.5)',
+          boxShadow: n.hub
+            ? `0 0 ${n.size * 3}px rgba(129,140,248,0.3), 0 0 ${n.size * 6}px rgba(129,140,248,0.1)`
+            : `0 0 ${n.size * 2}px rgba(129,140,248,0.15)`,
+          opacity: n.opacity,
+          animation: `db-node ${n.dur}s ease-in-out ${n.delay}s infinite`,
+        }} />
+      ))}
 
-      {/* Galaxy 2 — smaller purple */}
-      <div className="absolute" style={{ bottom: '18%', left: '5%', width: '70px', height: '70px', animation: 'db-spin 70s linear infinite reverse' }}>
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(167,139,250,0.18) 0%, rgba(167,139,250,0.05) 30%, transparent 55%)' }} />
-        <svg className="absolute inset-0" viewBox="0 0 70 70" style={{ opacity: 0.1 }}>
-          <path d="M35 35 Q46 26 48 16 Q50 8 44 7 Q38 7 37 16 Q35 26 35 35" fill="rgba(196,181,253,0.5)" />
-          <path d="M35 35 Q24 44 22 54 Q20 62 26 63 Q32 63 33 54 Q35 44 35 35" fill="rgba(196,181,253,0.5)" />
-        </svg>
-        <div className="absolute rounded-full" style={{ top: '40%', left: '40%', width: '20%', height: '20%', background: 'radial-gradient(circle, rgba(255,255,255,0.2), transparent 70%)' }} />
-      </div>
-
-      {/* Galaxy 3 — tiny deep field */}
-      <div className="absolute" style={{ top: '65%', right: '28%', width: '30px', height: '30px', animation: 'db-spin 120s linear infinite', opacity: 0.45 }}>
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.25) 0%, transparent 55%)' }} />
-        <div className="absolute rounded-full" style={{ top: '40%', left: '40%', width: '20%', height: '20%', background: 'rgba(255,255,255,0.12)' }} />
-      </div>
-
-      {/* Shooting stars */}
-      <div className="db-shooter" style={{ top: '8%', left: '15%', animationDelay: '1s' }} />
-      <div className="db-shooter db-shooter-long" style={{ top: '30%', left: '55%', animationDelay: '4.5s' }} />
-      <div className="db-shooter" style={{ top: '50%', left: '80%', animationDelay: '8s' }} />
-      <div className="db-shooter db-shooter-long" style={{ top: '72%', left: '20%', animationDelay: '12s' }} />
-      <div className="db-shooter" style={{ top: '20%', left: '70%', animationDelay: '16s' }} />
-      <div className="db-shooter" style={{ top: '85%', left: '40%', animationDelay: '20s' }} />
-      <div className="db-shooter db-shooter-long" style={{ top: '42%', left: '10%', animationDelay: '24s' }} />
-      <div className="db-shooter" style={{ top: '60%', left: '65%', animationDelay: '28s' }} />
+      {/* Scan line */}
+      <div className="absolute left-0 right-0 h-[1px]"
+        style={{
+          background: 'linear-gradient(90deg, transparent 10%, rgba(129,140,248,0.06) 30%, rgba(129,140,248,0.1) 50%, rgba(129,140,248,0.06) 70%, transparent 90%)',
+          animation: 'db-scan 12s ease-in-out infinite',
+        }} />
 
       <style>{`
-        @keyframes db-pulse { 0%,100%{opacity:inherit;transform:scale(1)} 50%{opacity:0.03;transform:scale(0.4)} }
-        @keyframes db-drift { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-35px,25px) scale(1.1)} 66%{transform:translate(20px,-15px) scale(0.95)} }
-        @keyframes db-orb { 0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:0.15;transform:scale(2)} }
-        @keyframes db-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        .db-shooter {
-          position: absolute;
-          width: 80px;
-          height: 2px;
-          background: linear-gradient(90deg, rgba(196,181,253,0.8), rgba(129,140,248,0.3), transparent);
-          transform: rotate(-35deg);
-          animation: db-shoot 9s ease-in infinite;
-          opacity: 0;
-          border-radius: 1px;
-        }
-        .db-shooter-long {
-          width: 140px;
-          height: 2.5px;
-          background: linear-gradient(90deg, rgba(255,255,255,0.85), rgba(129,140,248,0.4), transparent);
-        }
-        @keyframes db-shoot {
-          0% { opacity: 0; transform: rotate(-35deg) translateX(0); }
-          1.5% { opacity: 0.9; }
-          6% { opacity: 0; transform: rotate(-35deg) translateX(380px); }
-          100% { opacity: 0; }
-        }
+        @keyframes db-morph-a { 0%,100%{transform:translate(0,0) scale(1) rotate(0deg)} 33%{transform:translate(-30px,20px) scale(1.15) rotate(3deg)} 66%{transform:translate(25px,-15px) scale(0.9) rotate(-2deg)} }
+        @keyframes db-morph-b { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(20px,-25px) scale(1.1)} 66%{transform:translate(-15px,20px) scale(0.92)} }
+        @keyframes db-morph-c { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,10px) scale(1.2)} }
+        @keyframes db-node { 0%,100%{opacity:inherit;transform:translate(-50%,-50%) scale(1)} 50%{opacity:0.08;transform:translate(-50%,-50%) scale(0.5)} }
+        @keyframes db-edge-breathe { 0%,100%{opacity:1} 50%{opacity:0.2} }
+        @keyframes db-hex-drift { 0%,100%{transform:rotate(var(--r,0deg)) translateY(0)} 50%{transform:rotate(var(--r,0deg)) translateY(-8px) scale(1.05)} }
+        @keyframes db-stream { 0%,100%{opacity:0.5} 50%{opacity:0} }
+        @keyframes db-scan { 0%{top:0%} 50%{top:100%} 100%{top:0%} }
       `}</style>
     </Shell>
   );

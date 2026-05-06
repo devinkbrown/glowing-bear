@@ -189,7 +189,7 @@ export const DEFAULT_RELAY: RelaySettings = {
 export const DEFAULT_SETTINGS: AppSettings = {
   relay: { ...DEFAULT_RELAY },
   profiles: [],
-  theme: 'darkbear',
+  theme: 'starfield',
   customColors: { ...DEFAULT_CUSTOM_COLORS },
   fontFamily: 'system',
   watermarkOpacity: 15,
