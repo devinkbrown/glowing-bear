@@ -1,12 +1,9 @@
 node_modules
 
-# Output
-.output
-.vercel
-.netlify
-.wrangler
-/.svelte-kit
-/build
+# Build output
+.next
+out
+tsconfig.tsbuildinfo
 
 # OS
 .DS_Store
@@ -18,6 +15,9 @@ Thumbs.db
 !.env.example
 !.env.test
 
-# Vite
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
+# IRC server sources (not part of this project)
+/bahamut
+/hybrid
+/inspircd
+/ratbox
+/unrealircd

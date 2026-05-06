@@ -1,0 +1,741 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DarkBear v2 — Complete Design System
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Viewport */
+html {
+  background: #000;
+}
+
+html, body {
+  height: 100dvh;
+  height: -webkit-fill-available;
+  height: var(--vh, 100dvh);
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
+  /* iOS: prevent rubber-band bounce on the document itself */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* iOS standalone PWA: prevent text size adjustment on orientation change */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ── Base vars ─────────────────────────────────────────────────────────── */
+:root {
+  --app-font: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono-font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  --sidebar-w: 260px;
+  --app-radius: 12px;
+  --irc-white:   #ffffff;
+  --irc-black:   #000000;
+  --irc-navy:    #00007f;
+  --irc-green:   #009300;
+  --irc-red:     #ff0000;
+  --irc-maroon:  #7f0000;
+  --irc-purple:  #9c009c;
+  --irc-orange:  #fc7f00;
+  --irc-yellow:  #ffff00;
+  --irc-lime:    #00fc00;
+  --irc-teal:    #009393;
+  --irc-cyan:    #00ffff;
+  --irc-blue:    #0000fc;
+  --irc-magenta: #ff00ff;
+  --irc-gray:    #7f7f7f;
+  --irc-silver:  #d2d2d2;
+}
+
+body { font-family: var(--app-font); }
+
+/* ── IRC colors (0-98) ────────────────────────────────────────────────── */
+.irc-fg-0  { color: #ffffff; }
+.irc-fg-1  { color: #000000; }
+.irc-fg-2  { color: #00007f; }
+.irc-fg-3  { color: #009300; }
+.irc-fg-4  { color: #ff4444; }
+.irc-fg-5  { color: #7f0000; }
+.irc-fg-6  { color: #9c009c; }
+.irc-fg-7  { color: #fc7f00; }
+.irc-fg-8  { color: #ffff00; }
+.irc-fg-9  { color: #00fc00; }
+.irc-fg-10 { color: #009393; }
+.irc-fg-11 { color: #00ffff; }
+.irc-fg-12 { color: #4444ff; }
+.irc-fg-13 { color: #ff00ff; }
+.irc-fg-14 { color: #7f7f7f; }
+.irc-fg-15 { color: #d2d2d2; }
+
+.irc-bg-0  { background-color: #ffffff; color: #000; }
+.irc-bg-1  { background-color: #1a1a1a; }
+.irc-bg-2  { background-color: #00007f; }
+.irc-bg-3  { background-color: #009300; }
+.irc-bg-4  { background-color: #ff4444; }
+.irc-bg-5  { background-color: #7f0000; }
+.irc-bg-6  { background-color: #9c009c; }
+.irc-bg-7  { background-color: #fc7f00; }
+.irc-bg-8  { background-color: #ffff00; color: #000; }
+.irc-bg-9  { background-color: #00fc00; color: #000; }
+.irc-bg-10 { background-color: #009393; }
+.irc-bg-11 { background-color: #00ffff; color: #000; }
+.irc-bg-12 { background-color: #4444ff; }
+.irc-bg-13 { background-color: #ff00ff; }
+.irc-bg-14 { background-color: #7f7f7f; }
+.irc-bg-15 { background-color: #d2d2d2; color: #000; }
+
+/* Formatting */
+.irc-bold      { font-weight: 700; }
+.irc-italic    { font-style: italic; }
+.irc-underline { text-decoration: underline; }
+.irc-strike, .irc-strikethrough { text-decoration: line-through; }
+.irc-monospace, .irc-mono { font-family: var(--mono-font); font-size: 0.9em; }
+
+/* Dark-adjusted nick colors */
+.fg-irc-white   { color: #e8e8e8; }
+.fg-irc-black   { color: #666; }
+.fg-irc-navy    { color: #5b8dd9; }
+.fg-irc-green   { color: #4ade80; }
+.fg-irc-red     { color: #f87171; }
+.fg-irc-maroon  { color: #c084fc; }
+.fg-irc-purple  { color: #a78bfa; }
+.fg-irc-orange  { color: #fb923c; }
+.fg-irc-yellow  { color: #fbbf24; }
+.fg-irc-lime    { color: #86efac; }
+.fg-irc-teal    { color: #2dd4bf; }
+.fg-irc-cyan    { color: #67e8f9; }
+.fg-irc-blue    { color: #60a5fa; }
+.fg-irc-magenta { color: #f472b6; }
+.fg-irc-gray    { color: #94a3b8; }
+.fg-irc-silver  { color: #cbd5e1; }
+
+/* Extended palette (16-98) */
+.irc-fg-16 { color: #470000; } .irc-fg-17 { color: #472100; } .irc-fg-18 { color: #474700; } .irc-fg-19 { color: #324700; }
+.irc-fg-20 { color: #004700; } .irc-fg-21 { color: #00472c; } .irc-fg-22 { color: #004747; } .irc-fg-23 { color: #002747; }
+.irc-fg-24 { color: #000047; } .irc-fg-25 { color: #2e0047; } .irc-fg-26 { color: #470047; } .irc-fg-27 { color: #47002a; }
+.irc-fg-28 { color: #740000; } .irc-fg-29 { color: #743a00; } .irc-fg-30 { color: #747400; } .irc-fg-31 { color: #517400; }
+.irc-fg-32 { color: #007400; } .irc-fg-33 { color: #007449; } .irc-fg-34 { color: #007474; } .irc-fg-35 { color: #004074; }
+.irc-fg-36 { color: #000074; } .irc-fg-37 { color: #4b0074; } .irc-fg-38 { color: #740074; } .irc-fg-39 { color: #740045; }
+.irc-fg-40 { color: #b50000; } .irc-fg-41 { color: #b56300; } .irc-fg-42 { color: #b5b500; } .irc-fg-43 { color: #7db500; }
+.irc-fg-44 { color: #00b500; } .irc-fg-45 { color: #00b571; } .irc-fg-46 { color: #00b5b5; } .irc-fg-47 { color: #0063b5; }
+.irc-fg-48 { color: #0000b5; } .irc-fg-49 { color: #7500b5; } .irc-fg-50 { color: #b500b5; } .irc-fg-51 { color: #b5006b; }
+.irc-fg-52 { color: #ff0000; } .irc-fg-53 { color: #ff8c00; } .irc-fg-54 { color: #ffff00; } .irc-fg-55 { color: #b2ff00; }
+.irc-fg-56 { color: #00ff00; } .irc-fg-57 { color: #00ffa0; } .irc-fg-58 { color: #00ffff; } .irc-fg-59 { color: #008cff; }
+.irc-fg-60 { color: #0000ff; } .irc-fg-61 { color: #a500ff; } .irc-fg-62 { color: #ff00ff; } .irc-fg-63 { color: #ff0098; }
+.irc-fg-64 { color: #ff5959; } .irc-fg-65 { color: #ffb459; } .irc-fg-66 { color: #ffff71; } .irc-fg-67 { color: #cfff60; }
+.irc-fg-68 { color: #6fff6f; } .irc-fg-69 { color: #65ffc9; } .irc-fg-70 { color: #6dffff; } .irc-fg-71 { color: #59b4ff; }
+.irc-fg-72 { color: #5959ff; } .irc-fg-73 { color: #c459ff; } .irc-fg-74 { color: #ff66ff; } .irc-fg-75 { color: #ff59bc; }
+.irc-fg-76 { color: #ff9c9c; } .irc-fg-77 { color: #ffd39c; } .irc-fg-78 { color: #ffff9c; } .irc-fg-79 { color: #e2ff9c; }
+.irc-fg-80 { color: #9cff9c; } .irc-fg-81 { color: #9cffdb; } .irc-fg-82 { color: #9cffff; } .irc-fg-83 { color: #9cd3ff; }
+.irc-fg-84 { color: #9c9cff; } .irc-fg-85 { color: #dc9cff; } .irc-fg-86 { color: #ff9cff; } .irc-fg-87 { color: #ff94d3; }
+.irc-fg-88 { color: #000000; } .irc-fg-89 { color: #131313; } .irc-fg-90 { color: #282828; } .irc-fg-91 { color: #363636; }
+.irc-fg-92 { color: #4d4d4d; } .irc-fg-93 { color: #656565; } .irc-fg-94 { color: #818181; } .irc-fg-95 { color: #9f9f9f; }
+.irc-fg-96 { color: #bcbcbc; } .irc-fg-97 { color: #e2e2e2; } .irc-fg-98 { color: #ffffff; }
+
+.irc-bg-16 { background-color: #470000; } .irc-bg-17 { background-color: #472100; } .irc-bg-18 { background-color: #474700; }
+.irc-bg-19 { background-color: #324700; } .irc-bg-20 { background-color: #004700; } .irc-bg-21 { background-color: #00472c; }
+.irc-bg-22 { background-color: #004747; } .irc-bg-23 { background-color: #002747; } .irc-bg-24 { background-color: #000047; }
+.irc-bg-25 { background-color: #2e0047; } .irc-bg-26 { background-color: #470047; } .irc-bg-27 { background-color: #47002a; }
+.irc-bg-28 { background-color: #740000; } .irc-bg-29 { background-color: #743a00; } .irc-bg-30 { background-color: #747400; }
+.irc-bg-31 { background-color: #517400; } .irc-bg-32 { background-color: #007400; } .irc-bg-33 { background-color: #007449; }
+.irc-bg-34 { background-color: #007474; } .irc-bg-35 { background-color: #004074; } .irc-bg-36 { background-color: #000074; }
+.irc-bg-37 { background-color: #4b0074; } .irc-bg-38 { background-color: #740074; } .irc-bg-39 { background-color: #740045; }
+.irc-bg-40 { background-color: #b50000; } .irc-bg-41 { background-color: #b56300; } .irc-bg-42 { background-color: #b5b500; }
+.irc-bg-43 { background-color: #7db500; } .irc-bg-44 { background-color: #00b500; } .irc-bg-45 { background-color: #00b571; }
+.irc-bg-46 { background-color: #00b5b5; } .irc-bg-47 { background-color: #0063b5; } .irc-bg-48 { background-color: #0000b5; }
+.irc-bg-49 { background-color: #7500b5; } .irc-bg-50 { background-color: #b500b5; } .irc-bg-51 { background-color: #b5006b; }
+.irc-bg-52 { background-color: #ff0000; } .irc-bg-53 { background-color: #ff8c00; } .irc-bg-54 { background-color: #ffff00; color:#000; }
+.irc-bg-55 { background-color: #b2ff00; color:#000; } .irc-bg-56 { background-color: #00ff00; color:#000; }
+.irc-bg-57 { background-color: #00ffa0; color:#000; } .irc-bg-58 { background-color: #00ffff; color:#000; }
+.irc-bg-59 { background-color: #008cff; } .irc-bg-60 { background-color: #0000ff; } .irc-bg-61 { background-color: #a500ff; }
+.irc-bg-62 { background-color: #ff00ff; } .irc-bg-63 { background-color: #ff0098; }
+.irc-bg-64 { background-color: #ff5959; } .irc-bg-65 { background-color: #ffb459; } .irc-bg-66 { background-color: #ffff71; color:#000; }
+.irc-bg-67 { background-color: #cfff60; color:#000; } .irc-bg-68 { background-color: #6fff6f; color:#000; }
+.irc-bg-69 { background-color: #65ffc9; color:#000; } .irc-bg-70 { background-color: #6dffff; color:#000; }
+.irc-bg-71 { background-color: #59b4ff; } .irc-bg-72 { background-color: #5959ff; } .irc-bg-73 { background-color: #c459ff; }
+.irc-bg-74 { background-color: #ff66ff; } .irc-bg-75 { background-color: #ff59bc; }
+.irc-bg-76 { background-color: #ff9c9c; color:#000; } .irc-bg-77 { background-color: #ffd39c; color:#000; }
+.irc-bg-78 { background-color: #ffff9c; color:#000; } .irc-bg-79 { background-color: #e2ff9c; color:#000; }
+.irc-bg-80 { background-color: #9cff9c; color:#000; } .irc-bg-81 { background-color: #9cffdb; color:#000; }
+.irc-bg-82 { background-color: #9cffff; color:#000; } .irc-bg-83 { background-color: #9cd3ff; }
+.irc-bg-84 { background-color: #9c9cff; } .irc-bg-85 { background-color: #dc9cff; } .irc-bg-86 { background-color: #ff9cff; }
+.irc-bg-87 { background-color: #ff94d3; }
+.irc-bg-88 { background-color: #000000; } .irc-bg-89 { background-color: #131313; } .irc-bg-90 { background-color: #282828; }
+.irc-bg-91 { background-color: #363636; } .irc-bg-92 { background-color: #4d4d4d; } .irc-bg-93 { background-color: #656565; }
+.irc-bg-94 { background-color: #818181; } .irc-bg-95 { background-color: #9f9f9f; } .irc-bg-96 { background-color: #bcbcbc; color:#000; }
+.irc-bg-97 { background-color: #e2e2e2; color:#000; } .irc-bg-98 { background-color: #ffffff; color:#000; }
+
+/* ── Message area ──────────────────────────────────────────────────────── */
+.msg-area {
+  font-family: var(--app-font);
+  font-size: var(--app-font-size, 14px);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* ── Message row layout ──────────────────────────────────────────────── */
+.msg-row {
+  display: flex;
+  align-items: baseline;
+  padding: 1px 12px;
+}
+.msg-row.msg-gap {
+  margin-top: 4px;
+}
+.msg-row.msg-system {
+  min-height: auto;
+}
+
+/* Highlight bar */
+.msg-highlight {
+  background: rgba(245, 158, 11, 0.04);
+  border-left: 2px solid rgba(245, 158, 11, 0.4);
+  padding-left: 10px;
+}
+
+/* Timestamp — hidden on mobile */
+.msg-ts {
+  display: none;
+}
+
+/* Nick column — hidden on mobile */
+.msg-nick {
+  display: none;
+}
+
+/* Nick spacer — hidden on mobile */
+.msg-nick-spacer {
+  display: none;
+}
+
+/* Message body */
+.msg-body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Desktop: show columns */
+@media (min-width: 640px) {
+  .msg-row {
+    padding: 1px 8px 1px 4px;
+  }
+  .msg-ts {
+    display: block;
+    font-size: 10px;
+    font-family: var(--mono-font);
+    font-feature-settings: "tnum";
+    color: var(--color-gray-600, #52556e);
+    width: 46px;
+    text-align: right;
+    flex-shrink: 0;
+    user-select: none;
+    margin-right: 6px;
+  }
+  .msg-nick {
+    display: block;
+    width: 100px;
+    flex-shrink: 0;
+    text-align: right;
+    font-weight: 600;
+    font-size: 13px;
+    padding-right: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .msg-nick-spacer {
+    display: block;
+    width: 100px;
+    flex-shrink: 0;
+  }
+}
+
+.irc-msg-text {
+  white-space: pre-wrap !important;
+}
+
+/* ── Links ─────────────────────────────────────────────────────────────── */
+.irc-link {
+  color: var(--custom-accent, #818cf8);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--custom-accent, #818cf8) 30%, transparent);
+  transition: border-color 0.15s;
+}
+.irc-link:hover {
+  border-color: var(--custom-accent, #818cf8);
+}
+
+/* ── Inline images ─────────────────────────────────────────────────────── */
+.irc-inline-image {
+  max-height: 220px;
+  max-width: min(100%, 420px);
+  border-radius: 8px;
+  display: block;
+  margin-top: 6px;
+  border: 1px solid rgba(255,255,255,0.04);
+  transition: transform 0.15s ease;
+}
+.irc-inline-image:hover {
+  transform: scale(1.02);
+}
+@media (max-width: 639px) {
+  .irc-inline-image { max-height: 160px; max-width: 100%; }
+}
+
+/* ── Code spans ────────────────────────────────────────────────────────── */
+.irc-code {
+  font-family: var(--mono-font);
+  font-size: 0.85em;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: #c4b5fd;
+}
+
+/* ── Channel references ────────────────────────────────────────────────── */
+.irc-chan-ref {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--custom-accent, #818cf8);
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.irc-chan-ref:hover { text-decoration-style: solid; }
+
+/* ── Color swatches ────────────────────────────────────────────────────── */
+.irc-color-swatch {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 3px;
+  margin-left: 3px;
+  vertical-align: middle;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.14);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+
+/* ── Selection ─────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: inherit;
+}
+
+/* ── Color picker ──────────────────────────────────────────────────────── */
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 6px;
+  overflow: hidden;
+}
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 5px; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 5px; }
+input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
+
+/* ── Animations ────────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-up { animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in { animation: fadeIn 0.25s ease-out both; }
+.animate-slide-down { animation: slideDown 0.2s ease-out both; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THEMES — Override Tailwind v4 gray palette per theme
+
+   Contrast hierarchy (text on gray-950 bg):
+     gray-200: primary text   — bright, clearly readable
+     gray-300: secondary text — easily visible
+     gray-400: tertiary text  — visible, slightly muted
+     gray-500: muted text     — subdued but legible
+     gray-600: borders/faint  — subtle UI elements
+     gray-700: dividers       — barely visible separators
+     gray-800: card surfaces  — slightly lighter than bg
+     gray-900: panels         — near-bg shade
+     gray-950: deepest bg     — main background
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root, [data-theme="darkbear"] {
+  --color-gray-50:  #f0f2ff;
+  --color-gray-100: #e0e4f5;
+  --color-gray-200: #d0d5e8;
+  --color-gray-300: #b0b8d0;
+  --color-gray-400: #8a92b0;
+  --color-gray-500: #6a7298;
+  --color-gray-600: #484e6e;
+  --color-gray-700: #2e3248;
+  --color-gray-800: rgb(26 29 42 / 0.88);
+  --color-gray-900: rgb(17 18 26 / 0.9);
+  --color-gray-950: rgb(10 11 16 / 0.85);
+  --custom-accent:  #818cf8;
+}
+
+/* True AMOLED dark — pure black bg, max contrast */
+[data-theme="midnight"] {
+  --color-gray-50:  #f5f5f5;
+  --color-gray-100: #e8e8e8;
+  --color-gray-200: #e0e0e0;
+  --color-gray-300: #c0c0c0;
+  --color-gray-400: #a0a0a0;
+  --color-gray-500: #787878;
+  --color-gray-600: #505050;
+  --color-gray-700: #303030;
+  --color-gray-800: rgb(24 24 24 / 0.88);
+  --color-gray-900: rgb(10 10 10 / 0.9);
+  --color-gray-950: rgb(0 0 0 / 0.85);
+  --custom-accent:  #8b9cf8;
+}
+
+[data-theme="obsidian"] {
+  --color-gray-50:  #f0f0f0;
+  --color-gray-100: #e2e2e2;
+  --color-gray-200: #d4d4d4;
+  --color-gray-300: #b4b4b4;
+  --color-gray-400: #909090;
+  --color-gray-500: #686868;
+  --color-gray-600: #444444;
+  --color-gray-700: #2c2c2c;
+  --color-gray-800: rgb(26 26 26 / 0.88);
+  --color-gray-900: rgb(17 17 17 / 0.9);
+  --color-gray-950: rgb(8 8 8 / 0.85);
+  --custom-accent:  #a78bfa;
+}
+
+[data-theme="nord"] {
+  --color-gray-50:  #eceff4;
+  --color-gray-100: #e5e9f0;
+  --color-gray-200: #d8dee9;
+  --color-gray-300: #bcc4d4;
+  --color-gray-400: #8c96ae;
+  --color-gray-500: #6e7c94;
+  --color-gray-600: #545e72;
+  --color-gray-700: #434c5e;
+  --color-gray-800: rgb(59 66 82 / 0.88);
+  --color-gray-900: rgb(46 52 64 / 0.9);
+  --color-gray-950: rgb(36 41 51 / 0.85);
+  --custom-accent:  #88c0d0;
+}
+
+[data-theme="gruvbox"] {
+  --color-gray-50:  #fbf1c7;
+  --color-gray-100: #ebdbb2;
+  --color-gray-200: #d5c4a1;
+  --color-gray-300: #bdae93;
+  --color-gray-400: #a89984;
+  --color-gray-500: #8a7e72;
+  --color-gray-600: #605550;
+  --color-gray-700: #44403c;
+  --color-gray-800: rgb(50 48 47 / 0.88);
+  --color-gray-900: rgb(29 32 33 / 0.9);
+  --color-gray-950: rgb(20 22 23 / 0.85);
+  --custom-accent:  #d79921;
+}
+
+[data-theme="rose-pine"] {
+  --color-gray-50:  #f4f2ff;
+  --color-gray-100: #e0def4;
+  --color-gray-200: #d2d0ea;
+  --color-gray-300: #b8b5d0;
+  --color-gray-400: #908caa;
+  --color-gray-500: #736f8d;
+  --color-gray-600: #524e6a;
+  --color-gray-700: #3a3650;
+  --color-gray-800: rgb(38 35 58 / 0.88);
+  --color-gray-900: rgb(31 29 46 / 0.9);
+  --color-gray-950: rgb(25 23 36 / 0.85);
+  --custom-accent:  #eb6f92;
+}
+
+[data-theme="abyss"] {
+  --color-gray-50:  #e8fafa;
+  --color-gray-100: #c8eded;
+  --color-gray-200: #b0e0e0;
+  --color-gray-300: #88c8c8;
+  --color-gray-400: #60a8a8;
+  --color-gray-500: #408080;
+  --color-gray-600: #285858;
+  --color-gray-700: #1a3a3a;
+  --color-gray-800: rgb(16 36 36 / 0.88);
+  --color-gray-900: rgb(8 20 20 / 0.9);
+  --color-gray-950: rgb(4 10 12 / 0.85);
+  --custom-accent:  #2dd4bf;
+}
+
+[data-theme="ember"] {
+  --color-gray-50:  #fcecd8;
+  --color-gray-100: #f0d4b4;
+  --color-gray-200: #e0c0a0;
+  --color-gray-300: #c8a080;
+  --color-gray-400: #a88060;
+  --color-gray-500: #806040;
+  --color-gray-600: #584030;
+  --color-gray-700: #382418;
+  --color-gray-800: rgb(32 20 16 / 0.88);
+  --color-gray-900: rgb(18 12 8 / 0.9);
+  --color-gray-950: rgb(10 6 4 / 0.85);
+  --custom-accent:  #f97316;
+}
+
+[data-theme="aurora"] {
+  --color-gray-50:  #f0e8fc;
+  --color-gray-100: #e0d4f4;
+  --color-gray-200: #d0c0ee;
+  --color-gray-300: #b4a0d4;
+  --color-gray-400: #9480b8;
+  --color-gray-500: #6e5894;
+  --color-gray-600: #4c3870;
+  --color-gray-700: #342450;
+  --color-gray-800: rgb(32 20 52 / 0.88);
+  --color-gray-900: rgb(16 8 28 / 0.9);
+  --color-gray-950: rgb(8 4 14 / 0.85);
+  --custom-accent:  #a78bfa;
+}
+
+[data-theme="catppuccin"] {
+  --color-gray-50:  #eaecf8;
+  --color-gray-100: #dce0f4;
+  --color-gray-200: #cdd6f4;
+  --color-gray-300: #bac2de;
+  --color-gray-400: #a6adc8;
+  --color-gray-500: #8890a8;
+  --color-gray-600: #6c7086;
+  --color-gray-700: #50546a;
+  --color-gray-800: rgb(49 50 68 / 0.88);
+  --color-gray-900: rgb(30 30 46 / 0.9);
+  --color-gray-950: rgb(17 17 27 / 0.85);
+  --custom-accent:  #cba6f7;
+}
+
+[data-theme="tokyo-night"] {
+  --color-gray-50:  #eaedff;
+  --color-gray-100: #d5daf8;
+  --color-gray-200: #c0caf5;
+  --color-gray-300: #a9b1d6;
+  --color-gray-400: #8890b4;
+  --color-gray-500: #6a7498;
+  --color-gray-600: #4c5476;
+  --color-gray-700: #383f5c;
+  --color-gray-800: rgb(36 40 60 / 0.88);
+  --color-gray-900: rgb(26 27 38 / 0.9);
+  --color-gray-950: rgb(19 20 30 / 0.85);
+  --custom-accent:  #7aa2f7;
+}
+
+[data-theme="dracula"] {
+  --color-gray-50:  #f8f8ff;
+  --color-gray-100: #f0f0ec;
+  --color-gray-200: #e4e4e0;
+  --color-gray-300: #ccccd4;
+  --color-gray-400: #a8acc4;
+  --color-gray-500: #7680a4;
+  --color-gray-600: #585c78;
+  --color-gray-700: #44475a;
+  --color-gray-800: rgb(54 56 72 / 0.88);
+  --color-gray-900: rgb(40 42 54 / 0.9);
+  --color-gray-950: rgb(30 31 41 / 0.85);
+  --custom-accent:  #bd93f9;
+}
+
+[data-theme="solarized"] {
+  --color-gray-50:  #fdf6e3;
+  --color-gray-100: #eee8d5;
+  --color-gray-200: #c8d4d0;
+  --color-gray-300: #93a1a1;
+  --color-gray-400: #839496;
+  --color-gray-500: #687c82;
+  --color-gray-600: #466068;
+  --color-gray-700: #244650;
+  --color-gray-800: rgb(16 56 64 / 0.88);
+  --color-gray-900: rgb(7 54 66 / 0.9);
+  --color-gray-950: rgb(0 43 54 / 0.85);
+  --custom-accent:  #268bd2;
+}
+
+/* Deep space starfield — cosmic void with nebula accent */
+[data-theme="starfield"] {
+  --color-gray-50:  #eef0ff;
+  --color-gray-100: #dde0f5;
+  --color-gray-200: #c8cce8;
+  --color-gray-300: #a0a8c8;
+  --color-gray-400: #7880a8;
+  --color-gray-500: #585e84;
+  --color-gray-600: #383c5c;
+  --color-gray-700: #222440;
+  --color-gray-800: rgb(18 20 42 / 0.85);
+  --color-gray-900: rgb(10 11 24 / 0.88);
+  --color-gray-950: rgb(4 5 10 / 0.82);
+  --custom-accent:  #818cf8;
+  --starfield-nebula-1: #818cf8;
+  --starfield-nebula-2: #c084fc;
+  --starfield-nebula-3: #2dd4bf;
+}
+
+/* ── Mobile optimizations ──────────────────────────────────────────────── */
+@media (max-width: 639px) {
+  ::-webkit-scrollbar { width: 2px; height: 2px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
+
+  /* Prevent iOS zoom on input focus */
+  input, select, textarea { font-size: 16px !important; }
+  input[type="range"] { font-size: inherit !important; }
+
+  /* Momentum scrolling for overflow containers */
+  .msg-area {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Mobile message rows — tighter horizontal padding */
+  .msg-row {
+    padding: 1px 10px;
+  }
+  .msg-highlight {
+    padding-left: 8px;
+  }
+
+  /* Mobile inline images — full-bleed with tighter radius */
+  .irc-inline-image {
+    max-height: 180px;
+    max-width: 100%;
+    border-radius: 10px;
+  }
+}
+
+/* ── iOS / WebKit fixes ────────────────────────────────────────────────── */
+
+/* iOS Safari: prevent elastic overscroll bounce on scrollable containers */
+.msg-area,
+.overflow-y-auto {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* iOS Safari: backdrop-filter requires -webkit prefix */
+.backdrop-blur-sm {
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* iOS: prevent callout on long-press (images, links) in non-text areas */
+nav, aside, header, .video-controls {
+  -webkit-touch-callout: none;
+}
+
+/* iOS: prevent rubber-band when scrolling at boundaries inside fixed overlays */
+.fixed {
+  overscroll-behavior: contain;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Larger touch targets for mobile */
+  .irc-link {
+    padding: 4px 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Disable hover effects that feel wrong on touch */
+  .irc-inline-image:hover { transform: none; }
+
+  /* iOS: suppress the grey highlight flash on any tappable element */
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent accidental text selection during swipes */
+  .msg-area {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  nav, aside, header {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* iOS: prevent context menu on long-press of images in chat */
+  .irc-inline-image {
+    -webkit-touch-callout: none;
+  }
+}
+
+/* iOS Safari standalone PWA: fill status bar area properly */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-area-top { padding-top: env(safe-area-inset-top); }
+  .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+/* Landscape video call — maximize screen real estate */
+@media (orientation: landscape) and (max-height: 500px) {
+  .msg-area { font-size: 13px; }
+}
+
+[data-theme="light"] {
+  --color-gray-50:  #111827;
+  --color-gray-100: #1f2937;
+  --color-gray-200: #374151;
+  --color-gray-300: #4b5563;
+  --color-gray-400: #6b7280;
+  --color-gray-500: #9ca3af;
+  --color-gray-600: #d1d5db;
+  --color-gray-700: #e5e7eb;
+  --color-gray-800: #f3f4f6;
+  --color-gray-900: #f9fafb;
+  --color-gray-950: #ffffff;
+  --custom-accent:  #4f46e5;
+}

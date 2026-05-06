@@ -105,7 +105,7 @@ To bypass the gate entirely, remove or empty `invite.json`.
 
 ## Stack
 
-- SvelteKit 5 (runes) + TypeScript
+- Next.js 15 (App Router) + React 19 + TypeScript
 - Tailwind CSS v4
-- Static adapter — no server-side rendering
+- Zustand (state management)
 - WeeChat relay protocol (WebSocket)
