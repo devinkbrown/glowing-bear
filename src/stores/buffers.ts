@@ -13,11 +13,11 @@ const MAX_LINES = 5000;
 
 // Ordered privilege tiers -- checked against nick.prefix.trim()
 const PREFIX_TIERS: { chars: Set<string>; label: string }[] = [
-  { chars: new Set(['.', '~', 'q']), label: 'Owner' },
-  { chars: new Set(['&', 'a']),      label: 'Admin' },
-  { chars: new Set(['@', 'o']),      label: 'Op' },
-  { chars: new Set(['%', 'h']),      label: 'Halfop' },
-  { chars: new Set(['+', 'v']),      label: 'Voice' },
+  { chars: new Set(['.', '~']), label: 'Owner' },
+  { chars: new Set(['&']),      label: 'Admin' },
+  { chars: new Set(['@']),      label: 'Op' },
+  { chars: new Set(['%']),      label: 'Halfop' },
+  { chars: new Set(['+']),      label: 'Voice' },
 ];
 
 function makeEntry(buffer: WeeChatBuffer): BufferEntry {
