@@ -12,7 +12,7 @@
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.24",
     "immer": "^11.1.4",
-    "next": "^15.3.2",
+    "next": "^16.2.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zod": "^4.3.6",

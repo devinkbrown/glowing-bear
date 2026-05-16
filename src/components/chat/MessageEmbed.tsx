@@ -34,6 +34,7 @@ export default function MessageEmbed({ url }: Props) {
           <iframe
             className="absolute inset-0 w-full h-full"
             src={`https://www.youtube-nocookie.com/embed/${embed.id}`}
+            title="YouTube video"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
             loading="lazy"

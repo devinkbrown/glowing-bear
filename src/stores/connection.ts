@@ -19,9 +19,11 @@ import {
   type StateChangedEvent,
 } from '@/protocol/weechat/client';
 import { notify, playSound, updateTitle } from '@/lib/notifications';
+import { isIrcxNumeric, parseIrcxLine, buildPropEntry } from '@/protocol/ircx/parser';
 import type { BuffersSlice } from './buffers';
 import type { SettingsSlice } from './settings';
 import type { VideoSlice } from './video';
+import type { IrcxSlice } from './ircx';
 
 // Helper to attach a typed CustomEvent listener and return a cleanup fn
 function on<T>(target: EventTarget, name: string, handler: (detail: T) => void): () => void {
@@ -61,22 +63,25 @@ export interface ConnectionSlice {
   isAdminBuffer: (bufferId: string) => boolean;
 }
 
-type CombinedSlice = ConnectionSlice & BuffersSlice & SettingsSlice & VideoSlice;
+type CombinedSlice = ConnectionSlice & BuffersSlice & SettingsSlice & VideoSlice & IrcxSlice;
 
 let pingInterval: ReturnType<typeof setInterval> | null = null;
 let cleanups: Array<() => void> = [];
 let pendingQueryNick: string | null = null;
-let videoPropTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingJoinChannel: string | null = null;
 let queryNickTimer: ReturnType<typeof setTimeout> | null = null;
+
+function sendPing(get: () => CombinedSlice): void {
+  const { client, connectionState } = get();
+  if (client && connectionState === ConnectionState.CONNECTED) {
+    client.sendPing(String(Date.now()));
+  }
+}
 
 function startPing(get: () => CombinedSlice): void {
   stopPing();
-  pingInterval = setInterval(() => {
-    const { client, connectionState } = get();
-    if (client && connectionState === ConnectionState.CONNECTED) {
-      client.send(`ping ${Date.now()}\n`);
-    }
-  }, 30000);
+  sendPing(get);
+  pingInterval = setInterval(() => sendPing(get), 15000);
 }
 
 function stopPing(): void {
@@ -136,7 +141,7 @@ function detectOperFromLine(
   const plain = stripCodes(line.message);
 
   // 381 RPL_YOUREOPER
-  if (line.tags.includes('irc_381') || /authenticated via/i.test(plain)) {
+  if (line.tags.includes('irc_381') || (isServerBuf && /authenticated via/i.test(plain))) {
     const roleMatch = plain.match(/[—–\-]\s*(.+)$/);
     const role = roleMatch ? roleMatch[1] : plain;
     setOperForEntry(entry, true, /admin/i.test(role), get, set);
@@ -229,19 +234,6 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
 
       on<AuthenticatedEvent>(client, 'authenticated', () => {
         set({ error: null });
-        // Sync no-video PROP
-        const { settings, videoSendFn } = get();
-        if (videoSendFn) {
-          if (videoPropTimer) clearTimeout(videoPropTimer);
-          videoPropTimer = setTimeout(() => {
-            videoPropTimer = null;
-            const fn = get().videoSendFn;
-            if (fn) {
-              if (!settings.enableVideoCalls) fn('/quote PROP * no-video :1');
-              else fn('/quote PROP * no-video :');
-            }
-          }, 1000);
-        }
       }),
 
       on<BuffersLoadedEvent>(client, 'buffersLoaded', ({ buffers }) => {
@@ -251,14 +243,6 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
         for (const b of buffers) {
           if (b.localVars['type'] === 'channel') {
             client.requestNicklist(b.id);
-          }
-        }
-        // Request webrtc-signal capability on each IRC server
-        if (get().settings.enableVideoCalls) {
-          for (const b of buffers) {
-            if (b.localVars['type'] === 'server') {
-              client.sendInput(b.id, '/quote CAP REQ webrtc-signal');
-            }
           }
         }
       }),
@@ -274,6 +258,15 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
           const short = (buffer.shortName || buffer.name).toLowerCase();
           if (channel === pendingQueryNick || short === pendingQueryNick) {
             pendingQueryNick = null;
+            get().setActiveBuffer(buffer.id);
+          }
+        }
+        // Auto-switch to joined channel
+        if (buffer.localVars['type'] === 'channel' && pendingJoinChannel) {
+          const channel = (buffer.localVars['channel'] ?? '').toLowerCase();
+          const short = (buffer.shortName || buffer.name).toLowerCase();
+          if (channel === pendingJoinChannel || short === pendingJoinChannel) {
+            pendingJoinChannel = null;
             get().setActiveBuffer(buffer.id);
           }
         }
@@ -309,6 +302,53 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
           return;
         }
 
+        // IRCX numeric interception
+        if (isIrcxNumeric(line.tags)) {
+          const parsed = parseIrcxLine(line);
+          if (parsed) {
+            switch (parsed.type) {
+              case 'prop':
+                get().addPropEntry(buildPropEntry(parsed));
+                break;
+              case 'prop_end':
+                get().finishPropList(parsed.target);
+                break;
+              case 'access_start':
+                break;
+              case 'access_entry':
+              case 'access_add':
+              case 'access_delete':
+                get().addAccessEntry(parsed.entry);
+                break;
+              case 'access_end':
+                get().finishAccessList(parsed.channel);
+                break;
+            }
+          }
+        }
+
+        // Bot tag detection
+        if (line.ircTags.has('bot') && line.nick) {
+          get().markBot(line.nick);
+        }
+
+        // Account tag detection
+        if (line.account && line.nick) {
+          get().setAccount(line.nick, line.account);
+        }
+
+        // Ophion server detection via RPL_MYINFO (004)
+        if (line.tags.includes('irc_004')) {
+          const plain = stripCodes(line.message);
+          if (/\bophion\b/i.test(plain)) {
+            const bufEntry = get().buffers.get(line.buffer);
+            if (bufEntry) {
+              const sn = bufEntry.buffer.localVars['server'] ?? bufEntry.buffer.localVars['network'] ?? '';
+              if (sn) get().markOphion(sn);
+            }
+          }
+        }
+
         const entry = get().buffers.get(line.buffer);
         if (!entry) return;
 
@@ -317,24 +357,17 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
 
         if (!line.displayed) return;
 
-        // Request webrtc-signal cap when a server finishes connecting (RPL_WELCOME)
-        if (line.tags.includes('irc_001') && get().settings.enableVideoCalls) {
-          const { client: c } = get();
-          if (c) c.sendInput(line.buffer, '/quote CAP REQ webrtc-signal');
-        }
-
         // Channel mode tracking
         if (line.tags.includes('irc_mode')) {
           const modeMatch = line.message.match(/([+-][a-zA-Z]+(?:[+-][a-zA-Z]+)*)/);
           if (modeMatch) get().applyModeChange(line.buffer, modeMatch[1]);
         }
 
-        // WEBRTC signaling — WeeChat renders unknown IRC commands as error lines:
-        //   irc: command "WEBRTC" not found: ":nick!user@host WEBRTC target TYPE :payload"
+        // LADON media signaling can appear in WeeChat as an embedded raw command.
         // We extract the embedded raw IRC message and parse it.
         {
           const plain = stripCodes(line.message);
-          const errMatch = plain.match(/command "WEBRTC" not found: ":((\S+?)!\S+)\s+WEBRTC\s+(\S+)\s+(\S+)(?:\s+:?(.*?))?"$/i);
+          const errMatch = plain.match(/command "MEDIA" not found: ":((\S+?)!\S+)\s+MEDIA\s+(\S+)\s+(\S+)(?:\s+:?(.*?))?"$/i);
           if (errMatch) {
             const [, , fromNick, target, type, payload = ''] = errMatch;
             if (fromNick && target && type) {
@@ -354,8 +387,7 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
           const bufName = entry.buffer.shortName || entry.buffer.name;
           const entryType = entry.buffer.localVars['type'];
           const title = entryType === 'private' ? `Message from ${bufName}` : `Highlight in ${bufName}`;
-          // eslint-disable-next-line no-control-regex
-          const plain = line.message.replace(/[\x02\x03\x0f\x16\x1a\x1b\x1c\x1d\x1f](\d{1,2}(,\d{1,2})?)?|\x19[^]*/g, '');
+          const plain = stripCodes(line.message);
           notify(title, plain, undefined, line.buffer);
           if (get().settings.notificationSound) playSound();
         }
@@ -412,21 +444,20 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
       }),
     ];
 
-    // Wire video send function + ICE servers
+    // Wire LADON media send function to the active IRC server buffer.
     get().setVideoSendFn((text: string) => {
       const serverBuf = get().getVideoServerBuffer();
       if (serverBuf) get().sendTo(serverBuf, text);
     });
-    get().updateIceServers();
 
     client.connect();
   },
 
   disconnect: () => {
     stopPing();
-    if (videoPropTimer) { clearTimeout(videoPropTimer); videoPropTimer = null; }
     if (queryNickTimer) { clearTimeout(queryNickTimer); queryNickTimer = null; }
     pendingQueryNick = null;
+    pendingJoinChannel = null;
     // Tear down active call
     if (get().callState !== 'idle') get().hangup();
     for (const cleanup of cleanups) cleanup();
@@ -438,6 +469,7 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
     }
     set({ connectionState: ConnectionState.DISCONNECTED });
     get().clearBuffers();
+    get().clearIrcx();
   },
 
   reconnect: () => {
@@ -456,36 +488,110 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
     const { client } = get();
     if (!client || !target || !text.trim()) return;
 
-    // Local WebRTC commands
+    // Local LADON media commands.
     if (text.startsWith('/')) {
       const parts = text.split(/\s+/);
       const cmd = parts[0].toLowerCase();
       if (cmd === '/call' || cmd === '/videocall') {
         const nick = parts[1];
-        if (nick && get().settings.enableVideoCalls) get().startCall(nick, true);
+        if (nick) get().startCall(nick, true);
         return;
       }
       if (cmd === '/vcall' || cmd === '/voicecall') {
         const nick = parts[1];
-        if (nick && get().settings.enableVideoCalls) get().startCall(nick, false);
+        if (nick) get().startCall(nick, false);
+        return;
+      }
+      if (cmd === '/joinvoice' || cmd === '/voice') {
+        const channel = parts[1] ?? get().buffers.get(target)?.buffer.localVars['channel'];
+        if (channel) get().joinRoom(channel, true);
+        return;
+      }
+      if (cmd === '/joinvideo' || cmd === '/video') {
+        const channel = parts[1] ?? get().buffers.get(target)?.buffer.localVars['channel'];
+        if (channel) get().joinRoom(channel, false);
+        return;
+      }
+      if (cmd === '/media') {
+        const [, mediaTarget, type, ...rest] = parts;
+        if (mediaTarget && type) get().sendLadonMedia(mediaTarget, type, rest.join(' ') || '{}');
         return;
       }
       if (cmd === '/hangup' || cmd === '/hup') {
         get().hangup();
         return;
       }
+      // IRCX client-side commands (ophion servers only)
+      if (get().isActiveOphion()) {
+        if (cmd === '/whisper' || cmd === '/w') {
+          const channel = get().buffers.get(target)?.buffer.localVars['channel'];
+          if (channel && parts[1]) {
+            const nick = parts[1];
+            const msg = parts.slice(2).join(' ');
+            if (msg) get().sendWhisper(channel, nick, msg);
+          }
+          return;
+        }
+        if (cmd === '/prop') {
+          const propTarget = parts[1];
+          if (propTarget) {
+            if (parts.length === 2) {
+              get().requestProps(propTarget);
+            } else if (parts.length >= 4) {
+              get().setProp(propTarget, parts[2], parts.slice(3).join(' '));
+            } else if (parts.length === 3) {
+              get().requestProps(propTarget);
+            }
+          }
+          return;
+        }
+        if (cmd === '/access') {
+          const ch = parts[1];
+          if (ch) get().requestAccess(ch);
+          return;
+        }
+        if (cmd === '/chaninfo') {
+          const ch = parts[1] ?? get().buffers.get(target)?.buffer.localVars['channel'];
+          if (ch) get().openChannelInfo(ch);
+          return;
+        }
+        if (cmd === '/profile') {
+          const nick = parts[1];
+          if (nick) get().openUserProfile(nick);
+          return;
+        }
+        if (cmd === '/services') {
+          get().openServicesPanel('nick');
+          return;
+        }
+        if (cmd === '/pushset') {
+          if (parts[1] && parts[2]) {
+            get().sendPushSet(parts[1], parts.slice(2).join(' '));
+          }
+          return;
+        }
+      }
+      // MONITOR works on any IRCv3 server
+      if (cmd === '/monitor') {
+        if (parts[1]?.toLowerCase() === 'add' && parts[2]) {
+          get().monitorAdd(parts[2]);
+        } else if (parts[1]?.toLowerCase() === 'del' && parts[2]) {
+          get().monitorRemove(parts[2]);
+        }
+        return;
+      }
     }
 
-    // Optimistic local echo for non-commands
+    // Optimistic local echo for non-commands (IRC buffers only)
     if (!text.startsWith('/') && !text.startsWith('\x01')) {
-      // Guard: if an optimistic line with identical text already exists, this is a
-      // double-submit (common on mobile keyboards) — drop it entirely
       const existing = get().buffers.get(target);
       if (existing?.lines.some(l => l.id.startsWith('_opt_') && l.message === text)) {
         return;
       }
       const entry = get().buffers.get(target);
-      const nick = entry ? ownNick(entry, get().buffers) : '';
+      const entryType = entry?.buffer.localVars['type'] ?? '';
+      const isIrcBuf = entryType === 'channel' || entryType === 'private' || entryType === 'server';
+      const nick = entry && isIrcBuf ? ownNick(entry, get().buffers) : '';
       if (nick && entry) {
         get().addLine(target, {
           id: `_opt_${Date.now()}`,
@@ -514,6 +620,15 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
           replyTo: undefined,
           account: undefined,
         }, []);
+      }
+    }
+
+    if (text.startsWith('/')) {
+      const joinMatch = text.match(/^\/join\s+([^\s]+)/i);
+      if (joinMatch) {
+        let ch = joinMatch[1];
+        if (!ch.startsWith('#') && !ch.startsWith('&')) ch = '#' + ch;
+        pendingJoinChannel = ch.toLowerCase();
       }
     }
 

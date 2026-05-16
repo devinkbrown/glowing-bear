@@ -15,6 +15,8 @@ export function useViewportHeight() {
   useEffect(() => {
     let ticking = false;
     let pendingRAF = 0;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    let orientTimers: ReturnType<typeof setTimeout>[] = [];
 
     function update() {
       const vp = window.visualViewport;
@@ -43,7 +45,8 @@ export function useViewportHeight() {
     // after the animation likely completes.
     function onResize() {
       scheduleUpdate();
-      setTimeout(update, 350);
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(update, 350);
     }
 
     // iOS fires scroll events on the visualViewport when the keyboard pushes
@@ -54,8 +57,8 @@ export function useViewportHeight() {
 
     // orientationchange fires before the geometry updates; delay the read
     function onOrientationChange() {
-      setTimeout(update, 100);
-      setTimeout(update, 500);
+      orientTimers.forEach(clearTimeout);
+      orientTimers = [setTimeout(update, 100), setTimeout(update, 500)];
     }
 
     // iOS: when a focused input is near the bottom, Safari scrolls the
@@ -81,6 +84,8 @@ export function useViewportHeight() {
 
     return () => {
       cancelAnimationFrame(pendingRAF);
+      if (resizeTimer) clearTimeout(resizeTimer);
+      orientTimers.forEach(clearTimeout);
       window.removeEventListener('resize', onResize);
       window.removeEventListener('orientationchange', onOrientationChange);
       window.removeEventListener('scroll', onScroll);

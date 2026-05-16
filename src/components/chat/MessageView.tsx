@@ -4,6 +4,8 @@ import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useStore } from '@/stores';
 import MessageLine from './MessageLine';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { bufferKind } from '@/lib/bufferKind';
+import type { BufferKind } from '@/lib/bufferKind';
 
 export default function MessageView() {
   const activeBuffer = useStore(s => s.activeBuffer);
@@ -30,6 +32,7 @@ export default function MessageView() {
   const entry = activeBuffer ? buffers.get(activeBuffer) : null;
   const lines = entry?.lines ?? [];
   const loading = entry?.loading ?? false;
+  const kind = entry ? bufferKind(entry.buffer) : 'core' as BufferKind;
 
   const filteredLines = useMemo(() => {
     if (settings.joinPartMsgs) return lines;
@@ -218,11 +221,12 @@ export default function MessageView() {
         )}
 
         {filteredLines.map((line, i) => {
+          const isSpecialBuf = kind === 'raw' || kind === 'fset' || kind === 'plugin';
           const prevLine = i > 0 ? filteredLines[i - 1] : null;
-          const showDaySep = !prevLine || getDayKey(line.date) !== getDayKey(prevLine.date);
+          const showDaySep = !isSpecialBuf && (!prevLine || getDayKey(line.date) !== getDayKey(prevLine.date));
           const showReadMarker = readMarker !== undefined && i === readMarker && i < filteredLines.length;
 
-          const grouped = !!(
+          const grouped = !isSpecialBuf && !!(
             prevLine &&
             !showDaySep &&
             line.nick &&
@@ -256,7 +260,8 @@ export default function MessageView() {
               )}
               <MessageLine line={line} grouped={grouped} compact={settings.compactMode}
                 timestampFormat={settings.timestampFormat} colorNicks={settings.colorNicks}
-                showPrefixes={settings.showPrefixes} inlineImages={settings.inlineImages} />
+                showPrefixes={settings.showPrefixes} inlineImages={settings.inlineImages}
+                bufferKind={kind} />
             </div>
           );
         })}

@@ -7,32 +7,51 @@ interface Props {
   onClose?: () => void;
   title?: string;
   width?: string;
+  wide?: boolean;
+  maxHeight?: string;
   className?: string;
 }
 
-export default function Modal({ children, onClose, title, width = 'max-w-lg', className = '' }: Props) {
+export default function Modal({ children, onClose, title, width, wide, maxHeight, className = '' }: Props) {
+  const resolvedWidth = width ?? (wide ? 'max-w-2xl' : 'max-w-lg');
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusable = panel.querySelectorAll<HTMLElement>(FOCUSABLE);
+    if (focusable.length > 0) focusable[0].focus();
+
     function onKeydown(e: KeyboardEvent) {
       if (e.key === 'Escape' && onClose) {
         e.preventDefault();
         onClose();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const nodes = panel!.querySelectorAll<HTMLElement>(FOCUSABLE);
+        if (nodes.length === 0) return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     }
     window.addEventListener('keydown', onKeydown);
-    return () => window.removeEventListener('keydown', onKeydown);
+    return () => {
+      window.removeEventListener('keydown', onKeydown);
+      previouslyFocused?.focus();
+    };
   }, [onClose]);
-
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (!panel) return;
-    const focusable = panel.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusable.length > 0) focusable[0].focus();
-  }, []);
 
   return (
     <div
@@ -41,16 +60,14 @@ export default function Modal({ children, onClose, title, width = 'max-w-lg', cl
       style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
       onClick={e => { if (e.target === overlayRef.current && onClose) onClose(); }}
     >
-      {/* iOS Safari: -webkit-backdrop-filter required for blur */}
       <div className="absolute inset-0 bg-black/60" style={{ WebkitBackdropFilter: 'blur(4px)', backdropFilter: 'blur(4px)' }} />
       <div
         ref={panelRef}
-        className={`relative w-full ${width} max-w-[calc(100vw-1.5rem)] max-h-[85dvh] rounded-2xl border border-white/[0.06] bg-gray-900 ${className}`}
+        className={`relative w-full rounded-2xl border border-white/[0.06] bg-gray-900 overflow-hidden ${className}`}
         style={{
+          maxWidth: resolvedWidth === 'max-w-sm' ? '384px' : resolvedWidth === 'max-w-lg' ? '512px' : resolvedWidth === 'max-w-2xl' ? '672px' : resolvedWidth.replace('max-w-[', '').replace(']', ''),
+          maxHeight: maxHeight ?? '85dvh',
           boxShadow: '0 25px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)',
-          overflowY: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain',
         }}
       >
         {title && (

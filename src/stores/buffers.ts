@@ -239,7 +239,7 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
         }
       }
 
-      const msgIndex = new Map(entry.msgIndex);
+      let msgIndex = new Map(entry.msgIndex);
       if (line.msgid) msgIndex.set(line.msgid, line);
 
       // Replace optimistic placeholder on confirmed echo
@@ -253,7 +253,14 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
       }
 
       let newLines = [...base, line];
-      if (newLines.length > MAX_LINES) newLines = newLines.slice(-MAX_LINES);
+      if (newLines.length > MAX_LINES) {
+        const dropped = newLines.slice(0, newLines.length - MAX_LINES);
+        newLines = newLines.slice(-MAX_LINES);
+        if (msgIndex.size > MAX_LINES) {
+          const keep = new Set(newLines.map(l => l.msgid).filter(Boolean));
+          msgIndex = new Map([...msgIndex].filter(([k]) => keep.has(k)));
+        }
+      }
 
       // Client-side highlight words
       if (!line.highlight && line.message && highlightWords.length > 0) {
@@ -311,7 +318,7 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
       let newLines: WeeChatLine[];
       if (prepend) {
         newLines = [...fresh, ...entry.lines];
-        if (newLines.length > MAX_LINES) newLines = newLines.slice(0, MAX_LINES);
+        if (newLines.length > MAX_LINES) newLines = newLines.slice(-MAX_LINES);
       } else {
         newLines = [...entry.lines, ...fresh];
         if (newLines.length > MAX_LINES) newLines = newLines.slice(-MAX_LINES);

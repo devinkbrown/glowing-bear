@@ -1,4 +1,4 @@
-const ICON = '/favicon.svg';
+const ICON = '/darkbear/favicon.svg';
 const NOTIFY_TIMEOUT = 5000;
 const TITLE_BASE = 'DarkBear';
 

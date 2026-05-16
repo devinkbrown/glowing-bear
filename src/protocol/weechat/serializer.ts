@@ -100,6 +100,14 @@ export function nicklistCmd(id: string, buffer: string): string {
 }
 
 /**
+ * Send a ping with a timestamp argument so we can measure round-trip lag.
+ * The response will arrive with id "_pong".
+ */
+export function pingCmd(arg: string): string {
+	return cmd('_pong', 'ping', arg);
+}
+
+/**
  * Cleanly terminate the relay session.
  */
 export function quitCmd(): string {

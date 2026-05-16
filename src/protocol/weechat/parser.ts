@@ -130,10 +130,18 @@ async function decompress(data: Uint8Array): Promise<ArrayBuffer> {
 	return out.buffer;
 }
 
+const MAX_COLLECTION_COUNT = 100000;
+
 export function parseObject(r: Reader): WeeChatObject {
 	const type = r.readType();
 	const value = parseValue(r, type);
 	return { type, value };
+}
+
+function validateCount(count: number, label: string): void {
+	if (count > MAX_COLLECTION_COUNT) {
+		throw new Error(`${label} count exceeds limit: ${count}`);
+	}
 }
 
 function parseValue(r: Reader, type: WeeChatType): unknown {
@@ -172,6 +180,7 @@ function parseValue(r: Reader, type: WeeChatType): unknown {
 			const keyType = r.readType();
 			const valType = r.readType();
 			const count = r.readUint32();
+			validateCount(count, 'htb');
 			const map = new Map<unknown, unknown>();
 			for (let i = 0; i < count; i++) {
 				const k = parseValue(r, keyType);
@@ -193,13 +202,12 @@ function parseValue(r: Reader, type: WeeChatType): unknown {
 		case 'inl': {
 			const name = r.readStr();
 			const count = r.readUint32();
+			validateCount(count, 'inl');
 			const items: Array<Record<string, string>> = [];
 			for (let i = 0; i < count; i++) {
 				const obj: Record<string, string> = {};
-				// Each infolist item is a set of name+type+value triples
-				// The count of variables in each item is preceded by the item count,
-				// but WeeChat sends variable count per item as a 4-byte int
 				const varCount = r.readUint32();
+				validateCount(varCount, 'inl-vars');
 				for (let j = 0; j < varCount; j++) {
 					const varName = r.readStr();
 					const varType = r.readType();
@@ -213,6 +221,7 @@ function parseValue(r: Reader, type: WeeChatType): unknown {
 		case 'arr': {
 			const arrType = r.readType();
 			const count = r.readUint32();
+			validateCount(count, 'arr');
 			const items: unknown[] = [];
 			for (let i = 0; i < count; i++) {
 				items.push(parseValue(r, arrType));
@@ -231,6 +240,7 @@ function parseHdata(r: Reader): HdataResult {
 	// keys string, e.g. "number:int,name:str,..."
 	const keysStr = r.readStr();
 	const count = r.readUint32();
+	validateCount(count, 'hda');
 
 	// Number of pointers per item = number of path elements
 	const pathParts = hpath.split('/');
@@ -306,10 +316,10 @@ export class WeeRelayParser {
 		const payload = new Uint8Array(data, 5);
 		const decompressed = await decompress(payload);
 
-		// Rebuild a synthetic "uncompressed" buffer with the original 5-byte header
-		// so parseSync can read length + compression=0 + id + objects.
-		// We construct a new buffer: 4-byte length (updated) + 1 byte (0) + decompressed
 		const total = 5 + decompressed.byteLength;
+		if (total > 67108864) {
+			throw new Error(`Decompressed message exceeds 64MB limit: ${total}`);
+		}
 		const rebuilt = new ArrayBuffer(total);
 		const rv = new DataView(rebuilt);
 		rv.setUint32(0, total, false);

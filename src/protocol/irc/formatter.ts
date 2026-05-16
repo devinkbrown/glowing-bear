@@ -8,7 +8,7 @@ const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|svg|avif)(\?[^\s]*)?$/i;
 const IMAGE_HOSTS = /^https?:\/\/(i\.imgur\.com|i\.redd\.it|pbs\.twimg\.com|media\.discordapp\.net|cdn\.discordapp\.com|i\.ibb\.co|files\.catbox\.moe)\//i;
 // Imgur short URLs: imgur.com/XXXXX (not albums/galleries)
 const IMGUR_SHORT = /^https?:\/\/(?:www\.)?imgur\.com\/([a-zA-Z0-9]+)$/;
-const URL_RE = /https?:\/\/[^\s\x00-\x1f<>"]+/g;
+const URL_RE_SRC = /https?:\/\/[^\s\x00-\x1f<>"]+/;
 
 // ── Embed detection regexps ───────────────────────────────────────────────────
 const YOUTUBE_RE = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})([^)\s]*)?/i;
@@ -29,8 +29,8 @@ export type MediaEmbed =
 export function extractEmbeds(text: string): MediaEmbed[] {
 	const embeds: MediaEmbed[] = [];
 	let m: RegExpExecArray | null;
-	URL_RE.lastIndex = 0;
-	while ((m = URL_RE.exec(text)) !== null) {
+	const urlRe = new RegExp(URL_RE_SRC.source, 'g');
+	while ((m = urlRe.exec(text)) !== null) {
 		const url = m[0];
 		const ytMatch = YOUTUBE_RE.exec(url);
 		if (ytMatch) {
@@ -99,9 +99,9 @@ function tokenizeUrls(text: string): Token[] {
 	const tokens: Token[] = [];
 	let lastIdx = 0;
 	let match: RegExpExecArray | null;
-	URL_RE.lastIndex = 0;
+	const urlRe = new RegExp(URL_RE_SRC.source, 'g');
 
-	while ((match = URL_RE.exec(text)) !== null) {
+	while ((match = urlRe.exec(text)) !== null) {
 		if (match.index > lastIdx) {
 			tokens.push({ type: 'text', value: text.slice(lastIdx, match.index) });
 		}
@@ -310,7 +310,7 @@ function applyIrcFormatting(text: string): string {
 					i++;
 				} else if (next === 0x40) {
 					// \x19@ + 5 chars = extended 256-color pair
-					i += 6;
+					i = Math.min(i + 6, text.length);
 				} else if (next === 0x46 || next === 0x42 || next === 0x2a || next === 0x7e) {
 					// \x19{F|B|*|~} + decimal color number (variable length)
 					i++; // skip type byte
@@ -356,7 +356,7 @@ function preStripWeeColors(text: string): string {
 	// \x19 + subcode + spec (when \x19 survived)
 	// Orphaned @ + 5-char extended pair (when \x19 was dropped)
 	// Only strip when all 5 chars are digits or '|' (WeeChat color index chars)
-	return text.replace(/@[\d|,]{5}/g, '');
+	return text.replace(/@[\d]{5}/g, '');
 }
 
 /**

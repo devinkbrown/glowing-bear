@@ -3,43 +3,56 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useStore } from '@/stores';
 import { ConnectionState } from '@/types';
+import type { ThemeName } from '@/types';
 import AstronautBear from '@/components/ui/AstronautBear';
+import ThemeBg from '@/components/ui/ThemeBg';
+
+const THEME_LIST: { id: ThemeName; name: string; accent: string }[] = [
+  { id: 'darkbear', name: 'DarkBear', accent: '#818cf8' },
+  { id: 'midnight', name: 'Midnight', accent: '#8b9cf8' },
+  { id: 'obsidian', name: 'Obsidian', accent: '#a78bfa' },
+  { id: 'nord', name: 'Nord', accent: '#88c0d0' },
+  { id: 'gruvbox', name: 'Gruvbox', accent: '#d79921' },
+  { id: 'rose-pine', name: 'Rose Pine', accent: '#eb6f92' },
+  { id: 'abyss', name: 'Abyss', accent: '#2dd4bf' },
+  { id: 'ember', name: 'Ember', accent: '#f97316' },
+  { id: 'aurora', name: 'Aurora', accent: '#a78bfa' },
+  { id: 'catppuccin', name: 'Catppuccin', accent: '#cba6f7' },
+  { id: 'tokyo-night', name: 'Tokyo Night', accent: '#7aa2f7' },
+  { id: 'dracula', name: 'Dracula', accent: '#bd93f9' },
+  { id: 'solarized', name: 'Solarized', accent: '#268bd2' },
+  { id: 'starfield', name: 'Starfield', accent: '#818cf8' },
+  { id: 'lightning', name: 'Lightning', accent: '#60a5fa' },
+  { id: 'phoenix', name: 'Phoenix', accent: '#f59e0b' },
+  { id: 'retro', name: 'Retro Arcade', accent: '#ff00ff' },
+  { id: 'light', name: 'Light', accent: '#4f46e5' },
+  { id: 'custom', name: 'Custom', accent: '#888' },
+];
+
+const THEME_ACCENT: Record<string, { accent: string; bg1: string; bg2: string; bg3: string }> = {
+  darkbear:     { accent: '#818cf8', bg1: '#0c0d1a', bg2: '#06060d', bg3: '#020208' },
+  midnight:     { accent: '#60a5fa', bg1: '#0a0e1a', bg2: '#060a12', bg3: '#020408' },
+  obsidian:     { accent: '#a78bfa', bg1: '#0c0a14', bg2: '#08060e', bg3: '#040208' },
+  nord:         { accent: '#88c0d0', bg1: '#0d1117', bg2: '#0a0e14', bg3: '#060a0e' },
+  gruvbox:      { accent: '#fabd2f', bg1: '#1a1410', bg2: '#120e0a', bg3: '#0a0806' },
+  'rose-pine':  { accent: '#c4a7e7', bg1: '#150e18', bg2: '#0e0812', bg3: '#08040a' },
+  abyss:        { accent: '#0ea5e9', bg1: '#020810', bg2: '#01060c', bg3: '#000408' },
+  ember:        { accent: '#f97316', bg1: '#120a04', bg2: '#0c0602', bg3: '#060200' },
+  aurora:       { accent: '#34d399', bg1: '#080d12', bg2: '#040a0e', bg3: '#020608' },
+  catppuccin:   { accent: '#cba6f7', bg1: '#11111b', bg2: '#0c0c14', bg3: '#06060c' },
+  'tokyo-night':{ accent: '#7aa2f7', bg1: '#0a0e16', bg2: '#080a12', bg3: '#04060a' },
+  dracula:      { accent: '#bd93f9', bg1: '#16101e', bg2: '#0e0a14', bg3: '#06040a' },
+  solarized:    { accent: '#268bd2', bg1: '#001620', bg2: '#001018', bg3: '#000810' },
+  starfield:    { accent: '#818cf8', bg1: '#0c0d1a', bg2: '#06060d', bg3: '#020208' },
+  lightning:    { accent: '#60a5fa', bg1: '#080a12', bg2: '#06080e', bg3: '#02040a' },
+  phoenix:      { accent: '#f59e0b', bg1: '#120a04', bg2: '#0c0602', bg3: '#060200' },
+  retro:        { accent: '#ff00ff', bg1: '#0a0a18', bg2: '#060612', bg3: '#02020a' },
+  light:        { accent: '#4f46e5', bg1: '#e8eaf0', bg2: '#dde0e8', bg3: '#d0d4e0' },
+  custom:       { accent: '#818cf8', bg1: '#0c0d1a', bg2: '#06060d', bg3: '#020208' },
+};
 
 interface Props {
   onClose?: () => void;
-}
-
-function Starfield() {
-  const stars = useMemo(() => {
-    const out: { x: number; y: number; size: number; opacity: number; delay: number; dur: number }[] = [];
-    let seed = 42;
-    const rand = () => { seed = (seed * 16807 + 0) % 2147483647; return seed / 2147483647; };
-    for (let i = 0; i < 90; i++) {
-      out.push({
-        x: rand() * 100,
-        y: rand() * 100,
-        size: rand() < 0.85 ? (0.5 + rand() * 1.2) : (1.8 + rand() * 1),
-        opacity: 0.15 + rand() * 0.55,
-        delay: rand() * 6,
-        dur: 2 + rand() * 4,
-      });
-    }
-    return out;
-  }, []);
-
-  return (
-    <div className="absolute inset-0 overflow-hidden">
-      {stars.map((s, i) => (
-        <div key={i} className="absolute rounded-full bg-white"
-          style={{
-            left: `${s.x}%`, top: `${s.y}%`,
-            width: `${s.size}px`, height: `${s.size}px`,
-            opacity: s.opacity,
-            animation: `star-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
-          }} />
-      ))}
-    </div>
-  );
 }
 
 function CmdLine({ cmd, label }: { cmd: string; label?: string }) {
@@ -677,6 +690,7 @@ export default function ConnectModal({ onClose }: Props) {
   const settings = useStore(s => s.settings);
   const updateRelay = useStore(s => s.updateRelay);
   const saveSettings = useStore(s => s.saveSettings);
+  const setTheme = useStore(s => s.setTheme);
   const connectionState = useStore(s => s.connectionState);
   const error = useStore(s => s.error);
   const connect = useStore(s => s.connect);
@@ -694,8 +708,11 @@ export default function ConnectModal({ onClose }: Props) {
   const [showSaveProfile, setShowSaveProfile] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
   const hostRef = useRef<HTMLInputElement>(null);
   const totpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const themeScrollRef = useRef<HTMLDivElement>(null);
+  const themeDrag = useRef({ active: false, startX: 0, scrollLeft: 0, moved: false });
 
   const connecting =
     connectionState === ConnectionState.CONNECTING ||
@@ -704,6 +721,31 @@ export default function ConnectModal({ onClose }: Props) {
 
   useEffect(() => {
     if (hostRef.current && !host) hostRef.current.focus();
+  }, []);
+
+  useEffect(() => {
+    if (showThemePicker && themeScrollRef.current) {
+      const active = themeScrollRef.current.querySelector('[data-active="true"]');
+      if (active) active.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    }
+  }, [showThemePicker]);
+
+  const onThemePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const el = themeScrollRef.current;
+    if (!el) return;
+    themeDrag.current = { active: true, startX: e.clientX, scrollLeft: el.scrollLeft, moved: false };
+  }, []);
+
+  const onThemePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const d = themeDrag.current;
+    if (!d.active) return;
+    const dx = e.clientX - d.startX;
+    if (Math.abs(dx) > 3) d.moved = true;
+    themeScrollRef.current!.scrollLeft = d.scrollLeft - dx;
+  }, []);
+
+  const onThemePointerUp = useCallback(() => {
+    themeDrag.current.active = false;
   }, []);
 
   const doConnect = useCallback(() => {
@@ -766,27 +808,24 @@ export default function ConnectModal({ onClose }: Props) {
     connectionState === ConnectionState.AUTHENTICATING ? 'Authenticating...' :
     null;
 
+  const tc = THEME_ACCENT[settings.theme] ?? THEME_ACCENT.retro;
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Deep space background */}
-      <div className="fixed inset-0" style={{ background: 'radial-gradient(ellipse at 30% 20%, #0c0d1a 0%, #06060d 50%, #020208 100%)' }} />
+      {/* Theme-aware background */}
+      <div className="fixed inset-0" style={{ background: `radial-gradient(ellipse at 30% 20%, ${tc.bg1} 0%, ${tc.bg2} 50%, ${tc.bg3} 100%)` }} />
 
-      {/* Starfield */}
+      {/* Animated theme background */}
       <div className="fixed inset-0 pointer-events-none">
-        <Starfield />
+        <ThemeBg theme={settings.theme} />
 
-        {/* Nebula clouds */}
+        {/* Nebula clouds — colored to theme accent */}
         <div className="absolute w-[600px] h-[600px] sm:w-[900px] sm:h-[900px] -top-[200px] -right-[200px] rounded-full opacity-[0.06]"
-          style={{ background: 'radial-gradient(circle, #818cf8, transparent 50%)', animation: 'login-float-a 30s ease-in-out infinite' }} />
+          style={{ background: `radial-gradient(circle, ${tc.accent}, transparent 50%)`, animation: 'login-float-a 30s ease-in-out infinite' }} />
         <div className="absolute w-[500px] h-[500px] sm:w-[800px] sm:h-[800px] -bottom-[250px] -left-[200px] rounded-full opacity-[0.04]"
-          style={{ background: 'radial-gradient(circle, #c084fc, transparent 50%)', animation: 'login-float-b 35s ease-in-out infinite' }} />
+          style={{ background: `radial-gradient(circle, ${tc.accent}88, transparent 50%)`, animation: 'login-float-b 35s ease-in-out infinite' }} />
         <div className="absolute w-[300px] h-[300px] top-[30%] right-[15%] rounded-full opacity-[0.03]"
-          style={{ background: 'radial-gradient(circle, #2dd4bf, transparent 55%)', animation: 'login-float-c 22s ease-in-out infinite' }} />
-
-        {/* Shooting stars */}
-        <div className="login-shooting-star" style={{ top: '12%', left: '10%', animationDelay: '0s' }} />
-        <div className="login-shooting-star" style={{ top: '35%', left: '65%', animationDelay: '4s' }} />
-        <div className="login-shooting-star" style={{ top: '58%', left: '30%', animationDelay: '8s' }} />
+          style={{ background: `radial-gradient(circle, ${tc.accent}66, transparent 55%)`, animation: 'login-float-c 22s ease-in-out infinite' }} />
 
         {/* Noise grain */}
         <div className="absolute inset-0 opacity-[0.03]"
@@ -803,8 +842,8 @@ export default function ConnectModal({ onClose }: Props) {
           <div className="relative" style={{ animation: 'astro-float 6s ease-in-out infinite' }}>
             {/* Glow behind astronaut */}
             <div className="absolute -inset-6 sm:-inset-8 rounded-full"
-              style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.1) 0%, transparent 60%)', animation: 'pulse-glow 4s ease-in-out infinite' }} />
-            <AstronautBear size={120} className="sm:w-[150px] sm:h-[150px]" />
+              style={{ background: `radial-gradient(circle, ${tc.accent}1a 0%, transparent 60%)`, animation: 'pulse-glow 4s ease-in-out infinite' }} />
+            <AstronautBear size={120} className="sm:w-[150px] sm:h-[150px]" accent={tc.accent} theme={settings.theme} />
           </div>
           <h1 className="text-[26px] sm:text-[32px] font-bold tracking-tight text-gray-100 mt-1 sm:mt-2"
             style={{ animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both' }}>
@@ -814,6 +853,52 @@ export default function ConnectModal({ onClose }: Props) {
             style={{ animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both' }}>
             WeeChat Relay Client
           </p>
+
+          {/* Theme selector trigger */}
+          <button onClick={() => setShowThemePicker(!showThemePicker)}
+            className="group mt-4 flex items-center gap-2.5 px-4 py-2 rounded-full bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.12] transition-all"
+            style={{ animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both' }}>
+            <span className="w-3 h-3 rounded-full ring-1 ring-white/20 shadow-[0_0_6px_var(--dot-glow)]"
+              style={{ background: tc.accent, '--dot-glow': `${tc.accent}66` } as React.CSSProperties} />
+            <span className="text-[11px] text-gray-400 group-hover:text-gray-300 transition-colors font-medium">
+              {THEME_LIST.find(t => t.id === settings.theme)?.name ?? 'Theme'}
+            </span>
+            <svg className={`w-2.5 h-2.5 text-gray-600 transition-transform duration-200 ${showThemePicker ? 'rotate-180' : ''}`}
+              viewBox="0 0 8 8" fill="currentColor"><path d="M1 3l3 3 3-3z" /></svg>
+          </button>
+
+          {/* Theme picker dropdown */}
+          {showThemePicker && (
+            <div className="mt-2 w-full max-w-[440px] animate-fade-in"
+              style={{ animation: 'fadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both' }}>
+              <div ref={themeScrollRef}
+                onPointerDown={onThemePointerDown}
+                onPointerMove={onThemePointerMove}
+                onPointerUp={onThemePointerUp}
+                onPointerCancel={onThemePointerUp}
+                className="flex gap-1.5 overflow-x-auto pb-2 px-1 -mx-1 guide-no-scrollbar cursor-grab active:cursor-grabbing select-none">
+                {THEME_LIST.map(t => {
+                  const active = settings.theme === t.id;
+                  return (
+                    <button key={t.id} data-active={active}
+                      onClick={() => { if (themeDrag.current.moved) return; setTheme(t.id); saveSettings(); }}
+                      className={`shrink-0 flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl transition-all
+                        ${active
+                          ? 'bg-white/[0.08] border border-white/[0.15] shadow-[0_0_20px_var(--sel-glow)]'
+                          : 'bg-white/[0.02] border border-transparent hover:bg-white/[0.05] hover:border-white/[0.08]'}`}
+                      style={{ '--sel-glow': `${t.accent}22` } as React.CSSProperties}>
+                      <span className={`w-5 h-5 rounded-full transition-all ${active ? 'ring-2 ring-white/30 scale-110' : 'ring-1 ring-white/10'}`}
+                        style={{ background: t.accent, boxShadow: active ? `0 0 12px ${t.accent}55` : 'none' }} />
+                      <span className={`text-[9px] font-medium tracking-wide whitespace-nowrap transition-colors
+                        ${active ? 'text-gray-200' : 'text-gray-600'}`}>
+                        {t.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Form area */}
@@ -1213,11 +1298,6 @@ export default function ConnectModal({ onClose }: Props) {
           transform: translateY(-1px);
         }
 
-        @keyframes star-twinkle {
-          0%, 100% { opacity: var(--tw-opacity, 0.3); transform: scale(1); }
-          50% { opacity: 0.08; transform: scale(0.6); }
-        }
-
         @keyframes astro-float {
           0%, 100% { transform: translateY(0) rotate(0deg); }
           25% { transform: translateY(-6px) rotate(1deg); }
@@ -1246,21 +1326,6 @@ export default function ConnectModal({ onClose }: Props) {
           80% { transform: translateX(2px); }
         }
 
-        .login-shooting-star {
-          position: absolute;
-          width: 80px;
-          height: 1px;
-          background: linear-gradient(90deg, rgba(255,255,255,0.5), transparent);
-          transform: rotate(-35deg);
-          animation: shooting-star 6s ease-in infinite;
-          opacity: 0;
-        }
-        @keyframes shooting-star {
-          0% { opacity: 0; transform: rotate(-35deg) translateX(0); }
-          5% { opacity: 1; }
-          15% { opacity: 0; transform: rotate(-35deg) translateX(300px); }
-          100% { opacity: 0; }
-        }
       `}</style>
     </div>
   );

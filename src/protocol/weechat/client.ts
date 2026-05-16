@@ -16,6 +16,7 @@ import {
 	initCmd,
 	inputCmd,
 	nicklistCmd,
+	pingCmd,
 	quitCmd,
 	syncCmd,
 } from './serializer';
@@ -103,7 +104,7 @@ function itemToLine(item: { pointers: string[]; objects: Record<string, unknown>
 		}
 	}
 	if (!nick) {
-		const plain = stripColors(prefix).replace(/^[@+%~&!]/, '').trim();
+		const plain = stripColors(prefix).replace(/^[.@+%~&!]/, '').trim();
 		if (plain) nick = plain;
 	}
 
@@ -122,16 +123,6 @@ function itemToLine(item: { pointers: string[]; objects: Record<string, unknown>
 	// Parse IRCv3 message tags
 	const ircTags = parseIrcv3Tags(tags);
 
-	// Use server-time if available (overrides WeeChat's date)
-	const serverTime = ircTags.get('time');
-	if (serverTime) {
-		const parsed = new Date(serverTime);
-		if (!isNaN(parsed.getTime())) {
-			(date as unknown as { _v: Date })._v; // noop to avoid lint
-			// reassign via mutable approach
-			Object.assign(item.objects, { _serverDate: parsed });
-		}
-	}
 	const effectiveDate = (() => {
 		const st = ircTags.get('time');
 		if (st) { const d = new Date(st); if (!isNaN(d.getTime())) return d; }
@@ -378,6 +369,10 @@ export class WeeRelayClient extends EventTarget {
 		try { this.ws.send(text); } catch { /* closing race */ }
 	}
 
+	sendPing(arg: string): void {
+		this.send(pingCmd(arg));
+	}
+
 	sendInput(buffer: string, text: string): void {
 		this.send(inputCmd(buffer, text));
 	}
@@ -472,10 +467,9 @@ export class WeeRelayClient extends EventTarget {
 			const msgLen =
 				((hdr[0] << 24) | (hdr[1] << 16) | (hdr[2] << 8) | hdr[3]) >>> 0;
 
-			if (msgLen < 5) {
-				// Malformed; clear the accumulator to avoid stalling
+			if (msgLen < 5 || msgLen > 67108864) {
 				this.resetAccumulator();
-				this.emitError('Received malformed relay frame (length < 5), dropping buffer');
+				this.emitError(`Received malformed relay frame (length=${msgLen}), dropping buffer`);
 				break;
 			}
 
@@ -609,8 +603,9 @@ export class WeeRelayClient extends EventTarget {
 
 			case '_pong':
 				for (const obj of msg.objects) {
-					if (obj.type === 'str') {
+					if (obj.value != null) {
 						this.dispatch('pong', { arg: String(obj.value) });
+						break;
 					}
 				}
 				return;

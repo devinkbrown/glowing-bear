@@ -16,8 +16,8 @@ const TIER_ICONS: Record<string, { icon: string; label: string }> = {
   'Regular': { icon: '', label: 'Regular' },
 };
 
-const TIER_SIGILS: Record<string, string> = {
-  'Owner': '~', 'Admin': '&', 'Op': '@', 'Halfop': '%', 'Voice': '+', 'Regular': '',
+const TIER_SIGILS_FALLBACK: Record<string, string> = {
+  'Owner': '.', 'Admin': '&', 'Op': '@', 'Halfop': '%', 'Voice': '+', 'Regular': '',
 };
 
 interface Props {
@@ -38,9 +38,13 @@ export default function UserList({ mobile, onClose }: Props) {
   const sendInput = useStore(s => s.sendInput);
   const startCall = useStore(s => s.startCall);
   const colorNicks = useStore(s => s.settings.colorNicks);
-  const enableVideoCalls = useStore(s => s.settings.enableVideoCalls);
   const callState = useStore(s => s.callState);
   const isOper = useStore(s => s.isOper);
+  const isBot = useStore(s => s.isBot);
+  const openUserProfile = useStore(s => s.openUserProfile);
+  const sendWhisper = useStore(s => s.sendWhisper);
+  const isActiveOphion = useStore(s => s.isActiveOphion);
+  const ophion = isActiveOphion();
 
   const [filter, setFilter] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -87,16 +91,16 @@ export default function UserList({ mobile, onClose }: Props) {
 
   useEffect(() => {
     if (!actionPopup) return;
-    function onClick(e: MouseEvent) {
+    function onPointerDown(e: Event) {
       if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
         setActionPopup(null);
       }
     }
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('touchstart', onClick as EventListener);
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
     return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('touchstart', onClick as EventListener);
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
     };
   }, [actionPopup]);
 
@@ -116,6 +120,16 @@ export default function UserList({ mobile, onClose }: Props) {
     switch (action) {
       case 'query': openQuery(nick); onClose?.(); break;
       case 'whois': sendInput(`/whois ${nick}`); break;
+      case 'profile': openUserProfile(nick); break;
+      case 'whisper': {
+        const entry = activeBuffer ? buffers.get(activeBuffer) : null;
+        const ch = entry?.buffer.localVars['channel'];
+        if (ch) {
+          const msg = prompt(`Whisper to ${nick} in ${ch}:`);
+          if (msg) sendWhisper(ch, nick, msg);
+        }
+        break;
+      }
       case 'video': startCall(nick, true); onClose?.(); break;
       case 'voice': startCall(nick, false); onClose?.(); break;
       case 'kick': sendInput(`/kick ${nick}`); break;
@@ -183,7 +197,6 @@ export default function UserList({ mobile, onClose }: Props) {
         {Array.from(filteredGroups).map(([label, nicks]) => {
           const isCollapsed = collapsedGroups.has(label);
           const accent = tierAccent(label);
-          const sigil = TIER_SIGILS[label] ?? '';
           const tierInfo = TIER_ICONS[label];
 
           return (
@@ -211,7 +224,9 @@ export default function UserList({ mobile, onClose }: Props) {
                     const isActive = actionPopup?.nick === nick.name;
                     const color = colorNicks ? nickColor(nick.name) : undefined;
                     const initials = nick.name.slice(0, 2).toUpperCase();
+                    const sigil = nick.prefix.trim() || TIER_SIGILS_FALLBACK[label] || '';
 
+                    const nickIsBot = isBot(nick.name);
                     return (
                       <button key={nick.name} onClick={e => handleNickClick(nick.name, e)}
                         className={`w-full flex items-center gap-2 sm:gap-1.5 px-1.5 sm:px-1 py-1.5 sm:py-[4px] rounded-lg sm:rounded-md text-[14px] sm:text-[12px] transition-all
@@ -234,10 +249,15 @@ export default function UserList({ mobile, onClose }: Props) {
                             </span>
                           )}
                         </div>
-                        {/* Name */}
-                        <span className="truncate flex-1 text-left leading-tight"
+                        {/* Name + bot badge */}
+                        <span className="truncate flex-1 text-left leading-tight flex items-center gap-1"
                           style={color ? { color } : undefined}>
                           {nick.name}
+                          {nickIsBot && (
+                            <span className="inline-flex px-1 py-px rounded text-[7px] sm:text-[6px] font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 leading-none shrink-0">
+                              BOT
+                            </span>
+                          )}
                         </span>
                       </button>
                     );
@@ -299,11 +319,15 @@ export default function UserList({ mobile, onClose }: Props) {
             <div className="py-1.5">
               <PopupBtn icon="msg" label="Message" onClick={() => doAction('query')} />
               <PopupBtn icon="whois" label="Whois" onClick={() => doAction('whois')} />
-              {enableVideoCalls && callState === 'idle' && (
+              {ophion && <PopupBtn icon="profile" label="Profile" onClick={() => doAction('profile')} />}
+              {ophion && entry?.buffer.localVars['type'] === 'channel' && (
+                <PopupBtn icon="whisper" label="Whisper" onClick={() => doAction('whisper')} />
+              )}
+              {callState === 'idle' && (
                 <>
                   <div className="h-px bg-white/[0.04] mx-3 my-1" />
-                  <PopupBtn icon="video" label="Video Call" onClick={() => doAction('video')} accent="emerald" />
-                  <PopupBtn icon="voice" label="Voice Call" onClick={() => doAction('voice')} accent="indigo" />
+                  <PopupBtn icon="video" label="LADON Video" onClick={() => doAction('video')} accent="emerald" />
+                  <PopupBtn icon="voice" label="LADON Voice" onClick={() => doAction('voice')} accent="indigo" />
                 </>
               )}
               {isOper && (
@@ -374,6 +398,16 @@ function PopupBtn({ icon, label, onClick, danger, accent }: { icon: string; labe
         {icon === 'ban' && (
           <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="8" cy="8" r="6" /><path d="M3.5 3.5l9 9" strokeLinecap="round" />
+          </svg>
+        )}
+        {icon === 'profile' && (
+          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <rect x="3" y="1" width="10" height="14" rx="2" /><circle cx="8" cy="5.5" r="2" /><path d="M5 12c0-1.5 1.5-2.5 3-2.5s3 1 3 2.5" />
+          </svg>
+        )}
+        {icon === 'whisper' && (
+          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M2 3h12v7H6l-4 3V3z" /><path d="M5 6h6M5 8h4" />
           </svg>
         )}
       </span>

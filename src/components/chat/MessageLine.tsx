@@ -1,12 +1,14 @@
 'use client';
 
-import { useMemo, useState, useRef, useCallback } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import type { WeeChatLine } from '@/types';
 import { nickColor } from '@/lib/nickcolor';
 import { formatTimestamp } from '@/lib/timestamps';
 import { formatText } from '@/protocol/irc/formatter';
 import { stripColors } from '@/protocol/weechat/strip-colors';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useStore } from '@/stores';
+import type { BufferKind } from '@/lib/bufferKind';
 
 interface Props {
   line: WeeChatLine;
@@ -16,6 +18,7 @@ interface Props {
   colorNicks: boolean;
   showPrefixes: boolean;
   inlineImages: boolean;
+  bufferKind?: BufferKind;
 }
 
 const IMAGE_RE = /https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?\S*)?/gi;
@@ -73,15 +76,31 @@ function MessageContextMenu({ menu, onClose }: { menu: ContextMenu; onClose: () 
   );
 }
 
-export default function MessageLine({ line, grouped, compact, timestampFormat, colorNicks, showPrefixes, inlineImages }: Props) {
+export default function MessageLine(props: Props) {
+  const { bufferKind: kind } = props;
+  if (kind === 'raw' || kind === 'fset' || kind === 'plugin') {
+    return <SpecialLine line={props.line} kind={kind} timestampFormat={props.timestampFormat} />;
+  }
+  return <IrcMessageLine {...props} />;
+}
+
+function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, showPrefixes, inlineImages }: Props) {
   const isDesktop = useMediaQuery('(min-width: 640px)');
+  const isBot = useStore(s => s.isBot);
   const timestamp = timestampFormat !== 'off' ? formatTimestamp(line.date, timestampFormat) : '';
   const nick = line.nick ?? '';
+  const nickIsBot = nick ? isBot(nick) : false;
   const nickStyle = colorNicks && nick ? { color: nickColor(nick) } : undefined;
 
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressStartPos = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    return () => {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    };
+  }, []);
 
   const formattedMessage = useMemo(() => formatText(line.message), [line.message]);
 
@@ -95,7 +114,7 @@ export default function MessageLine({ line, grouped, compact, timestampFormat, c
   }, [line.message]);
 
   const cleanPrefix = showPrefixes && line.prefix ? stripColors(line.prefix) : '';
-  const prefix = cleanPrefix ? (cleanPrefix.match(/^([~&@%+!])/) ?? [''])[0] : '';
+  const prefix = cleanPrefix ? (cleanPrefix.match(/^([.~&@%+!])/) ?? [''])[0] : '';
 
   // Strip IRC formatting codes for plain text copy
   const plainText = useMemo(() => {
@@ -191,6 +210,27 @@ export default function MessageLine({ line, grouped, compact, timestampFormat, c
     );
   }
 
+  // ── Whisper ──
+  if (line.isWhisper) {
+    return (
+      <div className={`msg-row ${compact ? '' : 'py-0.5'} bg-amber-500/[0.03] border-l-2 border-amber-500/30`} {...touchProps}>
+        {timestamp && <span className={`msg-ts ${grouped ? 'invisible' : ''}`}>{timestamp}</span>}
+        {!grouped ? (
+          <span className="msg-nick" style={nickStyle}>
+            <span className="text-amber-500/60 text-[10px] font-medium mr-1">WHISPER</span>
+            {prefix}{nick}
+          </span>
+        ) : (
+          <span className="msg-nick" />
+        )}
+        <div className="msg-body">
+          <span className="irc-msg-text text-[13px] text-amber-200/80" dangerouslySetInnerHTML={{ __html: formattedMessage }} />
+        </div>
+        {contextMenu && <MessageContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />}
+      </div>
+    );
+  }
+
   // ── Regular message ──
 
   if (!isDesktop) {
@@ -198,8 +238,9 @@ export default function MessageLine({ line, grouped, compact, timestampFormat, c
       <div className={`${compact ? '' : grouped ? '' : 'mt-2.5'} ${line.highlight ? 'msg-highlight' : ''}`} {...touchProps}>
         {!grouped && (
           <div className="flex items-baseline gap-2 px-3 pt-1.5">
-            <span className="font-semibold text-[13px] truncate max-w-[60%]" style={nickStyle}>
+            <span className="font-semibold text-[13px] truncate max-w-[60%] inline-flex items-center gap-1" style={nickStyle}>
               {prefix}{nick}
+              {nickIsBot && <span className="px-1 py-px rounded text-[7px] font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 leading-none">BOT</span>}
             </span>
             {timestamp && (
               <span className="text-[10px] text-gray-500 font-mono tabular-nums shrink-0">{timestamp}</span>
@@ -225,7 +266,10 @@ export default function MessageLine({ line, grouped, compact, timestampFormat, c
         <span className={`msg-ts ${grouped ? 'invisible' : ''}`}>{timestamp}</span>
       )}
       {!grouped ? (
-        <span className="msg-nick" style={nickStyle}>{prefix}{nick}</span>
+        <span className="msg-nick" style={nickStyle}>
+          {prefix}{nick}
+          {nickIsBot && <span className="ml-1 inline-flex px-1 py-px rounded text-[7px] font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 leading-none align-middle">BOT</span>}
+        </span>
       ) : (
         <span className="msg-nick" />
       )}
@@ -238,6 +282,47 @@ export default function MessageLine({ line, grouped, compact, timestampFormat, c
         ))}
       </div>
       {contextMenu && <MessageContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />}
+    </div>
+  );
+}
+
+function SpecialLine({ line, kind, timestampFormat }: { line: WeeChatLine; kind: BufferKind; timestampFormat: string }) {
+  const formatted = useMemo(() => formatText(line.message), [line.message]);
+  const prefix = line.prefix ? stripColors(line.prefix).trim() : '';
+  const timestamp = timestampFormat !== 'off' ? formatTimestamp(line.date, timestampFormat as '12h' | '24h' | 'relative') : '';
+
+  if (kind === 'raw') {
+    const isSend = prefix === '>>>' || prefix === '>>' || prefix.includes('→') || prefix.includes('>>');
+    const isRecv = prefix === '<<<' || prefix === '<<' || prefix.includes('←') || prefix.includes('<<');
+    return (
+      <div className={`flex items-start gap-1.5 px-3 sm:px-2 py-px font-mono text-[11px] leading-[1.6] hover:bg-white/[0.02] transition-colors ${
+        isSend ? 'text-sky-400/70' : isRecv ? 'text-emerald-400/60' : 'text-gray-500'
+      }`}>
+        {timestamp && <span className="text-gray-600 shrink-0 w-[52px] text-right tabular-nums select-none">{timestamp}</span>}
+        <span className={`w-4 text-center shrink-0 font-bold ${isSend ? 'text-sky-500/60' : isRecv ? 'text-emerald-500/50' : 'text-gray-600'}`}>
+          {isSend ? '→' : isRecv ? '←' : '·'}
+        </span>
+        <span className="flex-1 break-all whitespace-pre-wrap irc-msg-text" dangerouslySetInnerHTML={{ __html: formatted }} />
+      </div>
+    );
+  }
+
+  if (kind === 'fset') {
+    return (
+      <div className="flex items-start gap-1.5 px-3 sm:px-2 py-px font-mono text-[11px] leading-[1.6] text-gray-300 hover:bg-white/[0.02] transition-colors">
+        {prefix && (
+          <span className="text-gray-500 shrink-0 select-none">{prefix}</span>
+        )}
+        <span className="flex-1 whitespace-pre-wrap irc-msg-text" dangerouslySetInnerHTML={{ __html: formatted }} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-1.5 px-3 sm:px-2 py-px text-[12px] leading-[1.6] text-gray-400">
+      {timestamp && <span className="text-gray-600 shrink-0 text-[11px] font-mono tabular-nums select-none">{timestamp}</span>}
+      {prefix && <span className="text-gray-500 shrink-0 font-medium">{prefix}</span>}
+      <span className="flex-1 irc-msg-text whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: formatted }} />
     </div>
   );
 }

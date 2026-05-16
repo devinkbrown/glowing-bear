@@ -21,6 +21,10 @@ import InputBar from '@/components/input/InputBar';
 import UserList from '@/components/panels/UserList';
 import VideoRoom from '@/components/video/VideoRoom';
 import CallNotification from '@/components/video/CallNotification';
+import ChannelInfoPanel from '@/components/ircx/ChannelInfoPanel';
+import UserProfileCard from '@/components/ircx/UserProfileCard';
+import ServicesPanel from '@/components/ircx/ServicesPanel';
+import ChannelListModal from '@/components/ircx/ChannelListModal';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import StarfieldBg from '@/components/ui/StarfieldBg';
 import ThemeBg from '@/components/ui/ThemeBg';
@@ -38,6 +42,12 @@ export default function ClientApp() {
   const buffers = useStore(s => s.buffers);
   const settings = useStore(s => s.settings);
   const toggleSearch = useStore(s => s.toggleSearch);
+  const channelInfoTarget = useStore(s => s.channelInfoTarget);
+  const closeChannelInfo = useStore(s => s.closeChannelInfo);
+  const userProfileTarget = useStore(s => s.userProfileTarget);
+  const closeUserProfile = useStore(s => s.closeUserProfile);
+  const servicesPanel = useStore(s => s.servicesPanel);
+  const closeServicesPanel = useStore(s => s.closeServicesPanel);
 
   const isMobile = useMediaQuery('(max-width: 1024px)');
   const mainRef = useRef<HTMLDivElement>(null);
@@ -64,6 +74,17 @@ export default function ClientApp() {
   useEffect(() => {
     if (isMobile) setUserListOpen(false);
   }, [activeBuffer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Jump to buffer from notification click
+  const setActiveBuffer = useStore(s => s.setActiveBuffer);
+  useEffect(() => {
+    const onJump = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (id) setActiveBuffer(id);
+    };
+    window.addEventListener('jump-to-buffer', onJump);
+    return () => window.removeEventListener('jump-to-buffer', onJump);
+  }, [setActiveBuffer]);
 
   // Mark active buffer as read when window regains focus
   const clearUnread = useStore(s => s.clearUnread);
@@ -140,7 +161,8 @@ export default function ClientApp() {
   }, [settings.sidebarWidth]);
 
   const activeEntry = activeBuffer ? buffers.get(activeBuffer) : null;
-  const isChannel = activeEntry?.buffer.localVars['type'] === 'channel';
+  const isChannel = activeEntry?.buffer.localVars['type'] === 'channel' &&
+    (activeEntry.buffer.localVars['plugin'] ?? '') !== 'fset';
   const hasThemedBg = !settings.bgImage && settings.theme !== 'light' && settings.theme !== 'custom';
 
   return (
@@ -217,6 +239,12 @@ export default function ClientApp() {
         {activeModal === 'bufferSwitcher' && <BufferSwitcher onClose={closeModal} />}
         {activeModal === 'help' && <HelpModal onClose={closeModal} />}
         {activeModal === 'about' && <AboutModal onClose={closeModal} />}
+        {activeModal === 'channelList' && <ChannelListModal onClose={closeModal} />}
+
+        {/* IRCX panels (independent of modal system) */}
+        {channelInfoTarget && <ChannelInfoPanel onClose={closeChannelInfo} />}
+        {userProfileTarget && <UserProfileCard onClose={closeUserProfile} />}
+        {servicesPanel && <ServicesPanel onClose={closeServicesPanel} />}
 
         {/* Video overlay */}
         <VideoRoom />

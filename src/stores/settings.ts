@@ -56,7 +56,6 @@ function loadFromStorage(): AppSettings {
         if (data.bgBlur !== undefined) migrated.bgBlur = data.bgBlur;
         if (data.bgTint !== undefined) migrated.bgTint = data.bgTint;
         if (data.bgTintOpacity !== undefined) migrated.bgTintOpacity = data.bgTintOpacity;
-        if (data.enableVideoCalls !== undefined) migrated.enableVideoCalls = data.enableVideoCalls;
         return migrated;
       }
       return { ...DEFAULT_SETTINGS };

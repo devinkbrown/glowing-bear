@@ -13,6 +13,11 @@ export default function TypingIndicator() {
   const hasTypers = entry ? entry.typing.size > 0 : false;
 
   useEffect(() => {
+    if (!activeBuffer) return;
+    pruneTyping(activeBuffer);
+  }, [activeBuffer, pruneTyping]);
+
+  useEffect(() => {
     if (!hasTypers || !activeBuffer) return;
     const id = setInterval(() => {
       pruneTyping(activeBuffer);

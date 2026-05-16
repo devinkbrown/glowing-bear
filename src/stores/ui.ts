@@ -6,6 +6,10 @@ export type ModalType =
   | 'bufferSwitcher'
   | 'help'
   | 'about'
+  | 'channelInfo'
+  | 'userProfile'
+  | 'services'
+  | 'channelList'
   | null;
 
 export interface UISlice {

@@ -2,12 +2,14 @@ import type { StateCreator } from 'zustand';
 import type { BuffersSlice } from './buffers';
 
 const COMMANDS = [
-  '/away', '/back', '/ban', '/clear', '/close',
-  '/deop', '/devoice', '/help', '/ignore', '/invite',
-  '/join', '/kick', '/list', '/me', '/mode',
-  '/msg', '/nick', '/notice', '/op', '/part',
-  '/query', '/quit', '/reconnect', '/server', '/topic',
-  '/unban', '/voice', '/whois',
+  '/access', '/away', '/back', '/ban', '/call', '/chaninfo', '/clear', '/close',
+  '/deop', '/devoice', '/hangup', '/help', '/ignore', '/invite',
+  '/join', '/joinvideo', '/joinvoice', '/kick', '/list', '/me', '/media', '/mode',
+  '/monitor', '/msg', '/nick', '/notice', '/op', '/part',
+  '/profile', '/prop', '/pushset',
+  '/query', '/quit', '/reconnect', '/server', '/services', '/topic',
+  '/unban', '/vcall', '/video', '/videocall', '/voice', '/voicecall',
+  '/whisper', '/whois',
 ] as const;
 
 export interface CompletionSlice {

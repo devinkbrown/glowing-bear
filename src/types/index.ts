@@ -3,7 +3,8 @@
 export type ThemeName =
   | 'darkbear' | 'midnight' | 'obsidian' | 'nord' | 'gruvbox' | 'rose-pine'
   | 'abyss' | 'ember' | 'aurora' | 'catppuccin' | 'tokyo-night'
-  | 'dracula' | 'solarized' | 'starfield' | 'lightning' | 'light' | 'custom';
+  | 'dracula' | 'solarized' | 'starfield' | 'lightning' | 'phoenix'
+  | 'retro' | 'light' | 'custom';
 
 export interface CustomThemeColors {
   gray950: string;
@@ -153,7 +154,6 @@ export interface AppSettings {
   bgBlur: number;
   bgTint: string;
   bgTintOpacity: number;
-  enableVideoCalls: boolean;
   sidebarWidth: number;
   fontSize: number;
   timestampFormat: '12h' | '24h' | 'off' | 'relative';
@@ -172,9 +172,6 @@ export interface AppSettings {
   highlightWords: string[];
   uploadUrl: string;
   tenorApiKey: string;
-  turnUrl: string;
-  turnUsername: string;
-  turnCredential: string;
   animateThemes: boolean;
 }
 
@@ -189,7 +186,7 @@ export const DEFAULT_RELAY: RelaySettings = {
 export const DEFAULT_SETTINGS: AppSettings = {
   relay: { ...DEFAULT_RELAY },
   profiles: [],
-  theme: 'starfield',
+  theme: 'retro',
   customColors: { ...DEFAULT_CUSTOM_COLORS },
   fontFamily: 'system',
   watermarkOpacity: 15,
@@ -198,7 +195,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   bgBlur: 0,
   bgTint: '',
   bgTintOpacity: 30,
-  enableVideoCalls: true,
   sidebarWidth: 240,
   fontSize: 14,
   timestampFormat: '24h',
@@ -217,8 +213,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   highlightWords: [],
   uploadUrl: 'https://eshmaki.me/upload',
   tenorApiKey: '',
-  turnUrl: '',
-  turnUsername: '',
-  turnCredential: '',
   animateThemes: true,
 };

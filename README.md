@@ -13,7 +13,16 @@ DarkBear connects to WeeChat's relay protocol over WebSocket. WeeChat runs on yo
 - Nick and command tab completion
 - Message search per buffer
 - IRC formatting: bold, italic, color (ANSI rendered)
-- IRCv3: SASL, away-notify, account-notify, message tags
+- IRCv3: SASL, away-notify, account-notify, message tags, bot mode
+- IRCX: PROP (channel/user properties), ACCESS (channel access lists), WHISPER, CREATE, LISTX
+- Services: NickServ, ChanServ, MemoServ integration panels
+- User profiles (IRCX PROP): avatar, bio, location, URL, gender
+- Channel info panel with live property editing and access list management
+- Bot mode badges on messages and user list
+- Account display and tracking
+- MONITOR (online notification tracking)
+- PUSHSET (push notification configuration)
+- LADON media: WebRTC video/voice calls and channel rooms
 - Oper console
 - Mobile responsive — sidebar overlay, swipe gestures
 - Invite-code gate (optional, client-side)
@@ -100,6 +109,20 @@ To bypass the gate entirely, remove or empty `invite.json`.
 | `Ctrl+F` | Search buffer |
 | `/` | Focus input |
 | `Ctrl+Shift+S` | Split pane |
+| `Ctrl+I` | Channel info (IRCX) |
+
+## IRCX / ophion commands
+
+| Command | Description |
+|---------|-------------|
+| `/whisper #ch nick msg` | IRCX whisper (in-channel private message) |
+| `/prop target [key] [val]` | View or set IRCX properties |
+| `/access #channel` | View channel access list |
+| `/chaninfo [#channel]` | Open channel info panel |
+| `/profile nick` | Open user profile card |
+| `/services` | Open NickServ/ChanServ/Memo panel |
+| `/monitor add\|del nick` | MONITOR online tracking |
+| `/pushset key value` | Configure push notifications |
 | `?` | Help |
 | `Esc` | Close modal |
 

@@ -3,9 +3,23 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '@/stores';
 import GifPicker from './GifPicker';
+import { bufferKind } from '@/lib/bufferKind';
+
+function inputPlaceholder(entry?: { buffer: import('@/types').WeeChatBuffer }): string {
+  if (!entry) return '';
+  const kind = bufferKind(entry.buffer);
+  switch (kind) {
+    case 'raw': return 'Raw log (read-only)';
+    case 'fset': return '/fset filter or command...';
+    case 'core': return 'WeeChat command...';
+    case 'plugin': return 'Command...';
+    default: return 'Message...';
+  }
+}
 
 export default function InputBar() {
   const activeBuffer = useStore(s => s.activeBuffer);
+  const buffers = useStore(s => s.buffers);
   const sendInput = useStore(s => s.sendInput);
   const complete = useStore(s => s.complete);
   const cycleCompletion = useStore(s => s.cycleCompletion);
@@ -25,13 +39,15 @@ export default function InputBar() {
   const fileRef = useRef<HTMLInputElement>(null);
   const drafts = useRef<Map<string, string>>(new Map());
   const lastSubmitTime = useRef(0);
+  const textRef = useRef(text);
+  textRef.current = text;
 
   useEffect(() => {
     if (!activeBuffer) return;
     return () => {
-      if (activeBuffer && text) drafts.current.set(activeBuffer, text);
+      if (activeBuffer && textRef.current) drafts.current.set(activeBuffer, textRef.current);
     };
-  }, [activeBuffer]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeBuffer]);
 
   useEffect(() => {
     if (activeBuffer) {
@@ -222,7 +238,7 @@ export default function InputBar() {
           onChange={e => setText(e.target.value)}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
-          placeholder={activeBuffer ? 'Message...' : ''}
+          placeholder={activeBuffer ? inputPlaceholder(buffers.get(activeBuffer)) : ''}
           disabled={!activeBuffer}
           rows={1}
           enterKeyHint="send"

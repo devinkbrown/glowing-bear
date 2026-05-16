@@ -91,6 +91,21 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Ctrl+I: channel info (IRCX PROP + ACCESS) — ophion servers only, skip in text inputs
+      if (e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'i' || e.key === 'I')) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        const state = useStore.getState();
+        if (!state.isActiveOphion()) return;
+        e.preventDefault();
+        const entry = state.activeBuffer ? state.buffers.get(state.activeBuffer) : null;
+        if (entry?.buffer.localVars['type'] === 'channel') {
+          const ch = entry.buffer.localVars['channel'] ?? entry.buffer.shortName;
+          if (ch) state.openChannelInfo(ch);
+        }
+        return;
+      }
+
       // In-call shortcuts (only when not in text input)
       if (!e.ctrlKey && !e.altKey && !e.metaKey) {
         const tag = (e.target as HTMLElement)?.tagName;

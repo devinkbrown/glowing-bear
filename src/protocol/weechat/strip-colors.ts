@@ -22,7 +22,7 @@ export function stripColors(s: string): string {
 			if (n === 0x1c) {
 				i++; // \x19\x1c = reset
 			} else if (n === 0x40) {
-				i += 6; // \x19@ + 5-char extended pair
+				i = Math.min(i + 6, s.length); // \x19@ + 5-char extended pair
 			} else if (n === 0x46 || n === 0x42 || n === 0x2a || n === 0x7e ||
 			           n === 0x21 || n === 0x5f || n === 0x25 || n === 0x45) {
 				// \x19{F|B|*|~|!|_|%|E} + color spec
@@ -43,13 +43,14 @@ export function stripColors(s: string): string {
 			}
 			// else: unknown subcode — just consumed \x19
 		} else if (c === 0x1a) {
-			i += 2; // WeeChat attr set/remove (1-byte opcode + 1-byte attr)
+			i = Math.min(i + 2, s.length); // WeeChat attr set/remove (1-byte opcode + 1-byte attr)
 		} else if (c === 0x1b) {
 			// ANSI escape \x1b[...m or lone WeeChat escape
 			i++;
 			if (i < s.length && s[i] === '[') {
-				while (i < s.length && s[i] !== 'm') i++;
-				if (i < s.length) i++;
+				const seqStart = i;
+				while (i < s.length && s[i] !== 'm' && i - seqStart < 16) i++;
+				if (i < s.length && s[i] === 'm') i++;
 			}
 		} else if (c === 0x1c) {
 			i++; // WeeChat reset all
@@ -85,8 +86,7 @@ export function stripColors(s: string): string {
  */
 function skipColorSpec(s: string, i: number): number {
 	if (i < s.length && s.charCodeAt(i) === 0x40) {
-		// Extended color: @ + 5 chars
-		i += 6;
+		i = Math.min(i + 6, s.length);
 	}
 	// Skip any remaining digits, pipes (attribute separators)
 	while (i < s.length) {

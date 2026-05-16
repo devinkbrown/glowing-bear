@@ -1,9 +1,16 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+import { useState, useEffect, Suspense, lazy } from 'react';
 
-const ClientApp = dynamic(() => import('@/components/ClientApp'), { ssr: false });
+const ClientApp = lazy(() => import('@/components/ClientApp'));
 
 export default function Page() {
-  return <ClientApp />;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+  return (
+    <Suspense fallback={null}>
+      <ClientApp />
+    </Suspense>
+  );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useStore } from '@/stores';
+import { bufferKind } from '@/lib/bufferKind';
 
 interface Props {
   onClose: () => void;
@@ -66,7 +67,7 @@ export default function BufferSwitcher({ onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[8vh] sm:pt-[18vh] px-3 sm:px-0"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" />
-      <div className="relative w-full max-w-[440px] max-w-[calc(100vw-1.5rem)] rounded-2xl border border-white/[0.06] bg-gray-900 shadow-2xl overflow-hidden animate-slide-down"
+      <div className="relative w-full max-w-[min(440px,calc(100vw-1.5rem))] rounded-2xl border border-white/[0.06] bg-gray-900 shadow-2xl overflow-hidden animate-slide-down"
         style={{ boxShadow: '0 25px 80px rgba(0,0,0,0.5)' }}>
 
         {/* Search */}
@@ -90,9 +91,7 @@ export default function BufferSwitcher({ onClose }: Props) {
               onMouseEnter={() => setSelected(i)}
               className={`w-full text-left px-4 py-3.5 sm:py-2.5 flex items-center gap-3 text-[15px] sm:text-[13px] transition-colors
                 ${i === selected ? 'bg-indigo-500/10 text-indigo-200' : 'text-gray-400 hover:bg-white/[0.02]'}`}>
-              <span className="text-[13px] sm:text-[11px] text-gray-600 font-mono w-5 sm:w-4 text-center shrink-0">
-                {item.type === 'channel' ? '#' : item.type === 'private' ? '@' : '*'}
-              </span>
+              <BufTypeGlyph type={item.type} fullName={item.fullName} />
               <span className="truncate flex-1">{item.name}</span>
               {item.highlighted > 0 && (
                 <span className="text-[10px] font-bold bg-red-500/80 text-white rounded-full px-2 py-0.5 min-w-[22px] text-center">{item.highlighted}</span>
@@ -106,4 +105,14 @@ export default function BufferSwitcher({ onClose }: Props) {
       </div>
     </div>
   );
+}
+
+function BufTypeGlyph({ type, fullName }: { type: string; fullName: string }) {
+  const cls = "text-[13px] sm:text-[11px] text-gray-600 font-mono w-5 sm:w-4 text-center shrink-0";
+  if (type === 'channel') return <span className={cls}>#</span>;
+  if (type === 'private') return <span className={cls}>@</span>;
+  if (type === 'server') return <span className={cls}>~</span>;
+  if (/fset/i.test(fullName)) return <span className={cls} title="Settings">S</span>;
+  if (/raw/i.test(fullName)) return <span className={cls} title="Raw log">R</span>;
+  return <span className={cls}>*</span>;
 }

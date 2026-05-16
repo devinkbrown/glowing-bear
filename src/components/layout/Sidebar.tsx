@@ -5,6 +5,8 @@ import { useStore } from '@/stores';
 import { ConnectionState } from '@/types';
 import type { BufferEntry } from '@/types';
 import BearLogo from '@/components/ui/BearLogo';
+import { bufferKind } from '@/lib/bufferKind';
+import type { BufferKind } from '@/lib/bufferKind';
 
 interface Props {
   onSelect?: () => void;
@@ -88,7 +90,7 @@ export default function Sidebar({ onSelect }: Props) {
     }
 
     return { core, servers: Array.from(serverMap.values()) };
-  }, [getSorted, filterQuery, settings.onlyUnread, activeBuffer]);
+  }, [getSorted, buffers, filterQuery, settings.onlyUnread, activeBuffer]);
 
   const toggleCollapse = useCallback((key: string) => {
     setCollapsed(prev => {
@@ -171,7 +173,8 @@ export default function Sidebar({ onSelect }: Props) {
               {/* Server header */}
               <div className="flex items-center gap-0.5 pl-1 pr-2 mb-px">
                 <button onClick={() => toggleCollapse(grp.serverName)}
-                  className="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center text-gray-500 hover:text-gray-300 transition-colors">
+                  className="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center text-gray-500 hover:text-gray-300 transition-colors"
+                  aria-label={isCollapsed ? `Expand ${grp.serverName}` : `Collapse ${grp.serverName}`}>
                   <svg className={`w-[9px] h-[9px] transition-transform duration-100 ${isCollapsed ? '-rotate-90' : ''}`}
                     viewBox="0 0 8 8" fill="currentColor"><path d="M1 2l3 3.5L7 2z" /></svg>
                 </button>
@@ -256,8 +259,7 @@ function BufItem({ entry, active, onClick, indent, pinned, muted, query }: {
   indent?: boolean; pinned?: boolean; muted?: boolean; query?: boolean;
 }) {
   const name = entry.buffer.shortName || entry.buffer.name;
-  const isChannel = entry.buffer.localVars['type'] === 'channel';
-  const displayName = name;
+  const kind = bufferKind(entry.buffer);
 
   return (
     <button onClick={onClick} title={entry.buffer.fullName}
@@ -270,10 +272,9 @@ function BufItem({ entry, active, onClick, indent, pinned, muted, query }: {
             : entry.unread > 0
               ? 'text-gray-300'
               : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.02]'}`}>
-      {/* Active indicator */}
       {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 sm:h-4 rounded-r-full bg-indigo-500" />}
-      {/* Name */}
-      <span className="truncate flex-1 leading-snug">{displayName}</span>
+      <BufIcon kind={kind} />
+      <span className="truncate flex-1 leading-snug">{name}</span>
       {pinned && <span className="w-1 h-1 rounded-full bg-indigo-500/50 shrink-0" />}
       {muted && <span className="text-[10px] text-gray-600 shrink-0">/</span>}
       {entry.highlighted > 0 ? (
@@ -283,6 +284,38 @@ function BufItem({ entry, active, onClick, indent, pinned, muted, query }: {
       ) : null}
     </button>
   );
+}
+
+function BufIcon({ kind }: { kind: BufferKind }) {
+  const cls = "w-3.5 h-3.5 shrink-0 opacity-40";
+  switch (kind) {
+    case 'raw':
+      return (
+        <svg className={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <rect x="1" y="2" width="14" height="12" rx="2" /><path d="M4 6l2 2-2 2M8 10h4" />
+        </svg>
+      );
+    case 'fset':
+      return (
+        <svg className={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <circle cx="8" cy="8" r="2.5" /><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.4 1.4M11.55 11.55l1.4 1.4M3.05 12.95l1.4-1.4M11.55 4.45l1.4-1.4" />
+        </svg>
+      );
+    case 'core':
+      return (
+        <svg className={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <rect x="2" y="3" width="12" height="10" rx="2" /><path d="M5 8h6M5 11h3" />
+        </svg>
+      );
+    case 'plugin':
+      return (
+        <svg className={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <rect x="3" y="1" width="10" height="14" rx="2" /><path d="M6 5h4M6 8h4M6 11h2" />
+        </svg>
+      );
+    default:
+      return null;
+  }
 }
 
 function Pip({ count, hot }: { count: number; hot?: boolean }) {

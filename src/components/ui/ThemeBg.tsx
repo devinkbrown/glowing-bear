@@ -28,12 +28,17 @@ export default function ThemeBg({ theme }: Props) {
     case 'dracula': return <DraculaBg />;
     case 'solarized': return <SolarizedBg />;
     case 'lightning': return <LightningBg />;
+    case 'phoenix': return <PhoenixBg />;
+    case 'retro': return <RetroArcadeBg />;
+    case 'starfield': return <StarfieldBg />;
+    case 'light': return <LightBg />;
+    case 'custom': return <CustomBg />;
     default: return null;
   }
 }
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
-  <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-50" aria-hidden="true">
+  <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-75" aria-hidden="true">
     {children}
   </div>
 );
@@ -106,11 +111,11 @@ function DarkBearBg() {
       }} />
 
       {/* Morphing gradient blobs */}
-      <div className="absolute w-[500px] h-[500px] top-[5%] left-[15%] rounded-full"
+      <div className="absolute w-[min(500px,40vw)] h-[min(500px,40vw)] top-[5%] left-[15%] rounded-full"
         style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.12), transparent 55%)', animation: 'db-morph-a 25s ease-in-out infinite', filter: 'blur(40px)' }} />
-      <div className="absolute w-[400px] h-[400px] bottom-[10%] right-[5%] rounded-full"
+      <div className="absolute w-[min(400px,35vw)] h-[min(400px,35vw)] bottom-[10%] right-[5%] rounded-full"
         style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.1), transparent 55%)', animation: 'db-morph-b 30s ease-in-out infinite', filter: 'blur(35px)' }} />
-      <div className="absolute w-[300px] h-[300px] top-[50%] left-[60%] rounded-full"
+      <div className="absolute w-[min(300px,28vw)] h-[min(300px,28vw)] top-[50%] left-[60%] rounded-full"
         style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.08), transparent 55%)', animation: 'db-morph-c 22s ease-in-out infinite', filter: 'blur(30px)' }} />
 
       {/* SVG layer: edges, nodes, data streams */}
@@ -519,9 +524,9 @@ function ObsidianBg() {
             animation: `ob-shatter ${p.dur}s ease-in-out ${p.delay}s infinite` }} />
       ))}
       {/* Breathing center glow - VISIBLY PULSING */}
-      <div className="absolute w-[550px] h-[550px] top-[42%] left-[50%] -translate-x-1/2 -translate-y-1/2 rounded-full"
+      <div className="absolute w-[min(550px,45vw)] h-[min(550px,45vw)] top-[42%] left-[50%] -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={{ background: 'radial-gradient(circle, rgba(167,139,250,0.3), transparent 50%)', filter: 'blur(30px)', animation: 'ob-center-glow 16s ease-in-out infinite' }} />
-      <div className="absolute w-[300px] h-[300px] top-[42%] left-[50%] -translate-x-1/2 -translate-y-1/2 rounded-full"
+      <div className="absolute w-[min(300px,25vw)] h-[min(300px,25vw)] top-[42%] left-[50%] -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={{ background: 'radial-gradient(circle, rgba(220,215,240,0.25), transparent 50%)', filter: 'blur(15px)', animation: 'ob-center-silver 16s ease-in-out 8s infinite' }} />
       <style>{`
         @keyframes ob-sweep       { 0%,100%{transform:rotate(var(--ob-ang,0deg)) translateX(-28%);opacity:0.8} 50%{transform:rotate(var(--ob-ang,0deg)) translateX(28%);opacity:1} }
@@ -825,15 +830,15 @@ function RosePineBg() {
   return (
     <Shell>
       {/* 5 fog/mist layers - SOFT BUT VISIBLE */}
-      <div className="absolute w-[650px] h-[400px] top-[18%] right-[-12%] rounded-full"
+      <div className="absolute w-[min(650px,50vw)] h-[min(400px,30vw)] top-[18%] right-[-12%] rounded-full"
         style={{ background: 'radial-gradient(ellipse, rgba(235,111,146,0.25), transparent 50%)', filter: 'blur(30px)', animation: 'rp-drift-a 22s ease-in-out infinite' }} />
-      <div className="absolute w-[520px] h-[350px] bottom-[8%] left-[-12%] rounded-full"
+      <div className="absolute w-[min(520px,42vw)] h-[min(350px,28vw)] bottom-[8%] left-[-12%] rounded-full"
         style={{ background: 'radial-gradient(ellipse, rgba(196,167,231,0.3), transparent 50%)', filter: 'blur(28px)', animation: 'rp-drift-b 28s ease-in-out infinite' }} />
-      <div className="absolute w-[420px] h-[300px] top-[45%] left-[35%] rounded-full"
+      <div className="absolute w-[min(420px,35vw)] h-[min(300px,25vw)] top-[45%] left-[35%] rounded-full"
         style={{ background: 'radial-gradient(ellipse, rgba(246,193,119,0.25), transparent 50%)', filter: 'blur(22px)', animation: 'rp-drift-c 34s ease-in-out 6s infinite' }} />
-      <div className="absolute w-[380px] h-[260px] top-[5%] left-[20%] rounded-full"
+      <div className="absolute w-[min(380px,30vw)] h-[min(260px,22vw)] top-[5%] left-[20%] rounded-full"
         style={{ background: 'radial-gradient(ellipse, rgba(235,111,146,0.2), transparent 50%)', filter: 'blur(20px)', animation: 'rp-drift-a 40s ease-in-out 10s infinite reverse' }} />
-      <div className="absolute w-[300px] h-[200px] bottom-[25%] right-[10%] rounded-full"
+      <div className="absolute w-[min(300px,24vw)] h-[min(200px,16vw)] bottom-[25%] right-[10%] rounded-full"
         style={{ background: 'radial-gradient(ellipse, rgba(196,167,231,0.2), transparent 50%)', filter: 'blur(18px)', animation: 'rp-drift-b 30s ease-in-out 4s infinite reverse' }} />
       {/* Moonbeam diagonal shaft - VISIBLE LIGHT CAST */}
       <div className="absolute" style={{
@@ -2068,161 +2073,234 @@ function SolarizedBg() {
 function LightningBg() {
   const rain = useMemo(() => {
     const rand = seededRand(900);
-    return Array.from({ length: 120 }, () => ({
-      x: rand() * 120 - 10,
-      len: 18 + rand() * 28,
-      dur: 0.35 + rand() * 0.4,
-      delay: rand() * 2,
-      opacity: 0.2 + rand() * 0.35,
-    }));
+    return Array.from({ length: 180 }, () => {
+      const windLayer = rand();
+      const angle = 8 + rand() * 12 + (windLayer > 0.7 ? rand() * 8 : 0);
+      return {
+        x: rand() * 130 - 15,
+        len: 14 + rand() * 32,
+        width: rand() > 0.85 ? 1.5 : 1,
+        dur: 0.25 + rand() * 0.45,
+        delay: rand() * 3,
+        opacity: 0.15 + rand() * 0.4,
+        angle,
+        layer: windLayer < 0.4 ? 0 : windLayer < 0.75 ? 1 : 2,
+      };
+    });
   }, []);
 
   const clouds = useMemo(() => {
     const rand = seededRand(902);
-    return Array.from({ length: 10 }, (_, i) => ({
-      x: -20 + rand() * 120,
-      y: -10 + rand() * 30,
-      w: 250 + rand() * 400,
-      h: 80 + rand() * 120,
-      opacity: 0.4 + rand() * 0.4,
-      dur: 25 + rand() * 35,
-      delay: rand() * 15,
-      layer: i < 4 ? 0 : i < 7 ? 1 : 2,
+    return Array.from({ length: 14 }, (_, i) => ({
+      x: -25 + rand() * 130,
+      y: -12 + rand() * 28,
+      w: 200 + rand() * 500,
+      h: 60 + rand() * 140,
+      opacity: 0.35 + rand() * 0.5,
+      dur: 18 + rand() * 40,
+      delay: rand() * 20,
+      layer: i < 5 ? 0 : i < 9 ? 1 : 2,
+      roilDur: 8 + rand() * 12,
+      roilDelay: rand() * 8,
+    }));
+  }, []);
+
+  const sheetFlashes = useMemo(() => {
+    const rand = seededRand(904);
+    return Array.from({ length: 5 }, () => ({
+      x: rand() * 80 + 5,
+      y: rand() * 15 + 3,
+      w: 20 + rand() * 25,
+      h: 10 + rand() * 12,
+      cycle: 6 + rand() * 14,
+      delay: rand() * 18,
+      flashes: 1 + Math.floor(rand() * 3),
     }));
   }, []);
 
   const bolts = useMemo(() => {
     const rand = seededRand(903);
-    return Array.from({ length: 6 }, () => {
-      const startX = 8 + rand() * 84;
-      const segs: { x: number; y: number }[] = [{ x: startX, y: 5 + rand() * 10 }];
+    const flashPatterns = [
+      { vals: '0;0;1;0;0.6;0;0', times: '0;0.74;0.75;0.76;0.78;0.80;1' },
+      { vals: '0;0;1;0;0.8;0;0.5;0;0', times: '0;0.72;0.73;0.74;0.76;0.78;0.80;0.82;1' },
+      { vals: '0;0;1;0;0;0.7;0;0.4;0;0', times: '0;0.74;0.75;0.76;0.79;0.80;0.82;0.84;0.86;1' },
+      { vals: '0;0;1;0.3;0;0', times: '0;0.74;0.75;0.77;0.80;1' },
+    ];
+    return Array.from({ length: 7 }, () => {
+      const startX = 6 + rand() * 88;
+      const segs: { x: number; y: number }[] = [{ x: startX, y: 3 + rand() * 8 }];
       let cx = startX;
       let cy = segs[0].y;
-      const n = 5 + Math.floor(rand() * 5);
+      const n = 7 + Math.floor(rand() * 7);
+      const drift = (rand() - 0.5) * 0.6;
       for (let j = 0; j < n; j++) {
-        cx += (rand() - 0.5) * 16;
-        cy += 6 + rand() * 10;
-        segs.push({ x: Math.max(3, Math.min(97, cx)), y: Math.min(92, cy) });
+        const jitter = (rand() - 0.5) * 18;
+        const bigKink = rand() > 0.82 ? (rand() - 0.5) * 12 : 0;
+        cx += jitter + bigKink + drift * 3;
+        cy += 4 + rand() * 8;
+        cx = Math.max(2, Math.min(98, cx));
+        cy = Math.min(95, cy);
+        segs.push({ x: cx, y: cy });
       }
       const branches: { x: number; y: number }[][] = [];
-      for (let b = 0; b < 2 + Math.floor(rand() * 2); b++) {
+      const nBranches = 2 + Math.floor(rand() * 3);
+      for (let b = 0; b < nBranches; b++) {
         const bi = 1 + Math.floor(rand() * Math.max(1, segs.length - 2));
         const bsegs: { x: number; y: number }[] = [{ x: segs[bi].x, y: segs[bi].y }];
         let bx = segs[bi].x;
         let by = segs[bi].y;
-        const bn = 2 + Math.floor(rand() * 3);
+        const side = rand() > 0.5 ? 1 : -1;
+        const bn = 2 + Math.floor(rand() * 4);
         for (let k = 0; k < bn; k++) {
-          bx += (rand() - 0.4) * 14;
-          by += 4 + rand() * 8;
-          bsegs.push({ x: Math.max(2, Math.min(98, bx)), y: Math.min(95, by) });
+          bx += side * (3 + rand() * 10) + (rand() - 0.5) * 4;
+          by += 3 + rand() * 7;
+          bsegs.push({ x: Math.max(1, Math.min(99, bx)), y: Math.min(96, by) });
         }
         branches.push(bsegs);
       }
+      const pat = flashPatterns[Math.floor(rand() * flashPatterns.length)];
       return {
         segs,
         branches,
-        cycle: 4 + rand() * 8,
-        delay: rand() * 12,
+        cycle: 5 + rand() * 10,
+        delay: rand() * 16,
+        pattern: pat,
+        intensity: 0.7 + rand() * 0.3,
       };
     });
   }, []);
 
+  const splashes = useMemo(() => {
+    const rand = seededRand(905);
+    return Array.from({ length: 30 }, () => ({
+      x: rand() * 100,
+      dur: 0.3 + rand() * 0.4,
+      delay: rand() * 2,
+      size: 2 + rand() * 3,
+    }));
+  }, []);
+
   return (
     <Shell>
-      {/* Storm clouds — three depth layers */}
+      {/* Storm clouds — layered with roiling motion */}
       {clouds.map((c, i) => (
         <div key={`cl${i}`} className="absolute rounded-full"
           style={{
             left: `${c.x}%`, top: `${c.y}%`,
             width: `${c.w}px`, height: `${c.h}px`,
             background: c.layer === 0
-              ? 'radial-gradient(ellipse, rgba(15,20,40,0.85) 0%, rgba(10,14,30,0.5) 40%, transparent 68%)'
+              ? 'radial-gradient(ellipse, rgba(12,16,35,0.9) 0%, rgba(8,12,28,0.55) 35%, transparent 65%)'
               : c.layer === 1
-              ? 'radial-gradient(ellipse, rgba(20,28,50,0.7) 0%, rgba(15,20,40,0.35) 45%, transparent 70%)'
-              : 'radial-gradient(ellipse, rgba(25,35,60,0.5) 0%, rgba(18,24,44,0.2) 50%, transparent 72%)',
-            filter: `blur(${14 + c.layer * 6}px)`,
-            animation: `ln-cloud ${c.dur}s ease-in-out ${c.delay}s infinite`,
+              ? 'radial-gradient(ellipse, rgba(18,24,48,0.75) 0%, rgba(12,18,38,0.35) 40%, transparent 68%)'
+              : 'radial-gradient(ellipse, rgba(22,30,55,0.55) 0%, rgba(16,22,42,0.2) 45%, transparent 70%)',
+            filter: `blur(${12 + c.layer * 8}px)`,
+            animation: `ln-cloud ${c.dur}s ease-in-out ${c.delay}s infinite, ln-roil ${c.roilDur}s ease-in-out ${c.roilDelay}s infinite`,
             opacity: c.opacity,
           }} />
       ))}
 
-      {/* Cloud underside glow — lit by internal lightning */}
-      <div className="absolute left-0 right-0 top-[8%] h-[20%]"
+      {/* Cloud underside glow — ambient internal lightning */}
+      <div className="absolute left-0 right-0 top-[6%] h-[22%]"
         style={{
-          background: 'linear-gradient(to bottom, rgba(96,165,250,0.12), rgba(80,140,220,0.04), transparent)',
-          filter: 'blur(24px)',
-          animation: 'ln-underglow 6s ease-in-out infinite',
+          background: 'linear-gradient(to bottom, rgba(80,130,220,0.1), rgba(60,110,200,0.03), transparent)',
+          filter: 'blur(28px)',
+          animation: 'ln-underglow 5s ease-in-out infinite',
         }} />
 
-      {/* Lightning bolts via SVG with viewBox so coordinates map to full viewport */}
+      {/* Sheet lightning — cloud-to-cloud flickers with no visible bolt */}
+      {sheetFlashes.map((sf, i) => (
+        <div key={`sf${i}`} className="absolute rounded-full"
+          style={{
+            left: `${sf.x}%`, top: `${sf.y}%`,
+            width: `${sf.w}%`, height: `${sf.h}%`,
+            background: 'radial-gradient(ellipse, rgba(140,180,255,0.35), rgba(100,150,240,0.1) 40%, transparent 65%)',
+            filter: 'blur(25px)',
+            animation: `ln-sheet${sf.flashes} ${sf.cycle}s ease-out ${sf.delay}s infinite`,
+          }} />
+      ))}
+
+      {/* Lightning bolts via SVG */}
       <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
         <defs>
           <filter id="ln-glow">
-            <feGaussianBlur stdDeviation="0.8" result="blur" />
+            <feGaussianBlur stdDeviation="0.6" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
           <filter id="ln-glow-wide">
-            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feGaussianBlur stdDeviation="1.8" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="ln-glow-ultra">
+            <feGaussianBlur stdDeviation="3" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
         {bolts.map((bolt, bi) => {
           const mainD = bolt.segs.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x},${s.y}`).join(' ');
+          const { vals, times } = bolt.pattern;
           const c = bolt.cycle;
-          const strikeAt = Math.round(c * 0.7 * 100) / 100;
-          const flashOn = `${((strikeAt / c) * 100).toFixed(1)}%`;
-          const flashOff = `${(((strikeAt + 0.12) / c) * 100).toFixed(1)}%`;
-          const flash2On = `${(((strikeAt + 0.18) / c) * 100).toFixed(1)}%`;
-          const flash2Off = `${(((strikeAt + 0.25) / c) * 100).toFixed(1)}%`;
-          const opVals = `0;0;0;0;0;0;0;1;0;0.7;0;0`;
-          const opTimes = '0;0.64;0.66;0.68;0.69;0.72;0.74;0.75;0.76;0.78;0.80;1';
+          const endPt = bolt.segs[bolt.segs.length - 1];
           return (
             <g key={`b${bi}`}>
-              {/* Wide outer glow */}
-              <path d={mainD} fill="none" stroke="rgba(96,165,250,0.5)" strokeWidth="3"
-                strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow-wide)"
+              {/* Ultra-wide atmospheric scatter */}
+              <path d={mainD} fill="none" stroke={`rgba(70,120,220,${0.3 * bolt.intensity})`} strokeWidth="6"
+                strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow-ultra)"
                 opacity="0" vectorEffect="non-scaling-stroke">
-                <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+                <animate attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
-              {/* Main bolt */}
-              <path d={mainD} fill="none" stroke="rgba(180,210,255,0.95)" strokeWidth="1.8"
+              {/* Wide outer glow */}
+              <path d={mainD} fill="none" stroke={`rgba(100,160,250,${0.5 * bolt.intensity})`} strokeWidth="3.5"
+                strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow-wide)"
+                opacity="0" vectorEffect="non-scaling-stroke">
+                <animate attributeName="opacity" values={vals} keyTimes={times}
+                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
+              </path>
+              {/* Main channel */}
+              <path d={mainD} fill="none" stroke={`rgba(190,215,255,${0.95 * bolt.intensity})`} strokeWidth="1.6"
                 strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow)"
                 opacity="0" vectorEffect="non-scaling-stroke">
-                <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+                <animate attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
               {/* Hot white core */}
-              <path d={mainD} fill="none" stroke="rgba(240,245,255,0.98)" strokeWidth="0.8"
+              <path d={mainD} fill="none" stroke="rgba(245,248,255,0.98)" strokeWidth="0.6"
                 strokeLinecap="round" strokeLinejoin="round"
                 opacity="0" vectorEffect="non-scaling-stroke">
-                <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+                <animate attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
               {/* Branches */}
               {bolt.branches.map((br, bri) => {
                 const brD = br.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x},${s.y}`).join(' ');
+                const branchDelay = bolt.delay + 0.01 + bri * 0.015;
                 return (
                   <g key={`br${bri}`}>
-                    <path d={brD} fill="none" stroke="rgba(140,185,250,0.7)" strokeWidth="1.2"
+                    <path d={brD} fill="none" stroke={`rgba(120,170,250,${0.55 * bolt.intensity})`} strokeWidth="2"
+                      strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow-wide)"
+                      opacity="0" vectorEffect="non-scaling-stroke">
+                      <animate attributeName="opacity" values={vals} keyTimes={times}
+                        dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
+                    </path>
+                    <path d={brD} fill="none" stroke={`rgba(180,210,255,${0.75 * bolt.intensity})`} strokeWidth="1"
                       strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow)"
                       opacity="0" vectorEffect="non-scaling-stroke">
-                      <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
-                        dur={`${c}s`} begin={`${bolt.delay + 0.02}s`} repeatCount="indefinite" />
+                      <animate attributeName="opacity" values={vals} keyTimes={times}
+                        dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
                     </path>
-                    <path d={brD} fill="none" stroke="rgba(220,235,255,0.85)" strokeWidth="0.5"
+                    <path d={brD} fill="none" stroke="rgba(230,240,255,0.85)" strokeWidth="0.4"
                       strokeLinecap="round" strokeLinejoin="round"
                       opacity="0" vectorEffect="non-scaling-stroke">
-                      <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
-                        dur={`${c}s`} begin={`${bolt.delay + 0.02}s`} repeatCount="indefinite" />
+                      <animate attributeName="opacity" values={vals} keyTimes={times}
+                        dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
                     </path>
                   </g>
                 );
               })}
-              {/* Ground strike glow */}
-              <ellipse cx={bolt.segs[bolt.segs.length - 1].x} cy={bolt.segs[bolt.segs.length - 1].y + 2}
-                rx="8" ry="3" fill="rgba(96,165,250,0.6)" opacity="0">
-                <animate attributeName="opacity" values={opVals} keyTimes={opTimes}
+              {/* Ground strike illumination — wide spread */}
+              <ellipse cx={endPt.x} cy={endPt.y + 3}
+                rx="14" ry="5" fill={`rgba(100,160,250,${0.5 * bolt.intensity})`} filter="url(#ln-glow-wide)" opacity="0">
+                <animate attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </ellipse>
             </g>
@@ -2230,70 +2308,1261 @@ function LightningBg() {
         })}
       </svg>
 
-      {/* Full-screen flash per bolt — sky lights up */}
-      {bolts.map((bolt, bi) => (
-        <div key={`fl${bi}`} className="absolute inset-0"
-          style={{ animation: `ln-skyflash ${bolt.cycle}s ease-out ${bolt.delay}s infinite` }} />
-      ))}
+      {/* Full-screen flash per bolt — whole sky illuminates */}
+      {bolts.map((bolt, bi) => {
+        const flashIntensity = Math.round(bolt.intensity * 18);
+        return (
+          <div key={`fl${bi}`} className="absolute inset-0"
+            style={{ animation: `ln-skyflash-${bi % 4} ${bolt.cycle}s ease-out ${bolt.delay}s infinite` }} />
+        );
+      })}
 
-      {/* Cloud illumination flashes — brighter than ambient */}
-      {bolts.slice(0, 3).map((bolt, bi) => (
+      {/* Cloud illumination — localized glow near each bolt origin */}
+      {bolts.map((bolt, bi) => (
         <div key={`cfl${bi}`} className="absolute rounded-full"
           style={{
-            left: `${bolt.segs[0].x - 15}%`, top: `${bolt.segs[0].y - 5}%`,
-            width: '30%', height: '20%',
-            background: 'radial-gradient(ellipse, rgba(140,185,250,0.4), transparent 60%)',
-            filter: 'blur(20px)',
-            animation: `ln-skyflash ${bolt.cycle}s ease-out ${bolt.delay}s infinite`,
+            left: `${bolt.segs[0].x - 18}%`, top: `${bolt.segs[0].y - 6}%`,
+            width: '36%', height: '22%',
+            background: `radial-gradient(ellipse, rgba(140,185,255,${0.35 * bolt.intensity}), transparent 55%)`,
+            filter: 'blur(22px)',
+            animation: `ln-skyflash-${bi % 4} ${bolt.cycle}s ease-out ${bolt.delay}s infinite`,
           }} />
       ))}
 
-      {/* Driving rain — angled 12deg by wind */}
+      {/* Driving rain — three depth layers with varied angle for wind gusts */}
       {rain.map((r, i) => (
         <div key={`r${i}`} className="absolute"
           style={{
-            left: `${r.x}%`, top: '-10%',
-            width: '1px', height: `${r.len}px`,
-            background: `linear-gradient(to bottom, transparent, rgba(160,200,255,${r.opacity}))`,
-            transform: 'rotate(12deg)',
+            left: `${r.x}%`, top: '-12%',
+            width: `${r.width}px`, height: `${r.len}px`,
+            background: r.layer === 0
+              ? `linear-gradient(to bottom, transparent, rgba(180,210,255,${r.opacity}))`
+              : r.layer === 1
+              ? `linear-gradient(to bottom, transparent, rgba(150,190,240,${r.opacity * 0.75}))`
+              : `linear-gradient(to bottom, transparent, rgba(130,170,230,${r.opacity * 0.5}))`,
+            transform: `rotate(${r.angle}deg)`,
             transformOrigin: 'top left',
             animation: `ln-rain ${r.dur}s linear ${r.delay}s infinite`,
           }} />
       ))}
 
-      {/* Second rain layer offset */}
-      {rain.slice(0, 60).map((r, i) => (
-        <div key={`r2${i}`} className="absolute"
+      {/* Rain splash at ground level */}
+      {splashes.map((sp, i) => (
+        <div key={`sp${i}`} className="absolute"
           style={{
-            left: `${(r.x + 45) % 110 - 5}%`, top: '-10%',
-            width: '1px', height: `${r.len * 0.7}px`,
-            background: `linear-gradient(to bottom, transparent, rgba(140,180,240,${r.opacity * 0.6}))`,
-            transform: 'rotate(12deg)',
-            transformOrigin: 'top left',
-            animation: `ln-rain ${r.dur * 1.15}s linear ${r.delay + 0.15}s infinite`,
+            left: `${sp.x}%`, bottom: '2%',
+            width: `${sp.size}px`, height: `${sp.size * 0.4}px`,
+            borderRadius: '50%',
+            background: 'rgba(160,200,255,0.3)',
+            filter: 'blur(0.5px)',
+            animation: `ln-splash ${sp.dur}s ease-out ${sp.delay}s infinite`,
           }} />
       ))}
 
-      {/* Low fog / mist */}
-      <div className="absolute bottom-0 left-0 right-0 h-[25%]"
+      {/* Low fog / mist — wind-driven */}
+      <div className="absolute bottom-0 left-[-5%] right-[-5%] h-[28%]"
         style={{
-          background: 'linear-gradient(to top, rgba(10,14,28,0.5), rgba(15,20,38,0.2) 50%, transparent)',
-          filter: 'blur(10px)',
-          animation: 'ln-fog 14s ease-in-out infinite',
+          background: 'linear-gradient(to top, rgba(8,12,25,0.55), rgba(12,18,35,0.2) 45%, transparent)',
+          filter: 'blur(12px)',
+          animation: 'ln-fog 12s ease-in-out infinite',
         }} />
-      <div className="absolute bottom-0 left-[-5%] right-[-5%] h-[18%]"
+      <div className="absolute bottom-0 left-[-8%] right-[-8%] h-[20%]"
         style={{
-          background: 'radial-gradient(ellipse at 60% 100%, rgba(20,28,50,0.4), transparent 55%)',
-          filter: 'blur(18px)',
-          animation: 'ln-fog 18s ease-in-out 5s infinite',
+          background: 'radial-gradient(ellipse at 55% 100%, rgba(18,25,48,0.45), transparent 50%)',
+          filter: 'blur(20px)',
+          animation: 'ln-fog 16s ease-in-out 4s infinite',
+        }} />
+      <div className="absolute bottom-0 left-[-3%] right-[-3%] h-[15%]"
+        style={{
+          background: 'radial-gradient(ellipse at 30% 100%, rgba(15,22,42,0.35), transparent 45%)',
+          filter: 'blur(16px)',
+          animation: 'ln-fog 20s ease-in-out 9s infinite',
         }} />
 
       <style>{`
-        @keyframes ln-rain { 0%{top:-10%;opacity:0} 5%{opacity:1} 95%{opacity:0.8} 100%{top:110%;opacity:0} }
-        @keyframes ln-cloud { 0%,100%{transform:translateX(0) scale(1)} 50%{transform:translateX(25px) scale(1.03)} }
-        @keyframes ln-underglow { 0%,100%{opacity:0.5} 50%{opacity:1} }
-        @keyframes ln-fog { 0%,100%{transform:translateX(0);opacity:1} 50%{transform:translateX(15px);opacity:0.65} }
-        @keyframes ln-skyflash { 0%,73%{background:transparent} 75%{background:rgba(140,185,250,0.15)} 76%{background:transparent} 78%{background:rgba(96,165,250,0.2)} 79%{background:transparent} 100%{background:transparent} }
+        @keyframes ln-rain { 0%{top:-12%;opacity:0} 4%{opacity:1} 92%{opacity:0.7} 100%{top:112%;opacity:0} }
+        @keyframes ln-cloud { 0%,100%{transform:translateX(0) scale(1)} 50%{transform:translateX(30px) scale(1.04)} }
+        @keyframes ln-roil { 0%,100%{transform:scaleX(1) scaleY(1)} 30%{transform:scaleX(1.06) scaleY(0.95)} 60%{transform:scaleX(0.96) scaleY(1.04)} }
+        @keyframes ln-underglow { 0%,100%{opacity:0.4} 40%{opacity:0.9} 60%{opacity:0.5} }
+        @keyframes ln-fog { 0%,100%{transform:translateX(0);opacity:1} 50%{transform:translateX(20px);opacity:0.6} }
+        @keyframes ln-splash { 0%{transform:scale(0);opacity:0.8} 50%{transform:scale(1.5);opacity:0.4} 100%{transform:scale(2.5);opacity:0} }
+
+        @keyframes ln-sheet1 { 0%,88%{opacity:0} 89%{opacity:0.8} 90%{opacity:0} 100%{opacity:0} }
+        @keyframes ln-sheet2 { 0%,85%{opacity:0} 86%{opacity:0.6} 87%{opacity:0} 88.5%{opacity:0.9} 89.5%{opacity:0} 100%{opacity:0} }
+        @keyframes ln-sheet3 { 0%,82%{opacity:0} 83%{opacity:0.5} 83.5%{opacity:0} 84.5%{opacity:0.7} 85%{opacity:0.2} 86%{opacity:0.9} 86.5%{opacity:0} 100%{opacity:0} }
+
+        @keyframes ln-skyflash-0 { 0%,73%{background:transparent} 74%{background:rgba(140,185,250,0.12)} 75%{background:rgba(160,200,255,0.18)} 76%{background:transparent} 78%{background:rgba(120,170,250,0.14)} 79%{background:transparent} 100%{background:transparent} }
+        @keyframes ln-skyflash-1 { 0%,72%{background:transparent} 73%{background:rgba(150,190,255,0.16)} 74%{background:transparent} 76%{background:rgba(130,175,250,0.22)} 77.5%{background:rgba(110,160,245,0.08)} 78.5%{background:transparent} 100%{background:transparent} }
+        @keyframes ln-skyflash-2 { 0%,74%{background:transparent} 75%{background:rgba(160,200,255,0.2)} 75.5%{background:rgba(140,185,250,0.06)} 76.5%{background:transparent} 100%{background:transparent} }
+        @keyframes ln-skyflash-3 { 0%,73%{background:transparent} 74%{background:rgba(130,175,250,0.1)} 75%{background:rgba(150,195,255,0.2)} 76%{background:transparent} 78%{background:rgba(140,185,250,0.15)} 79%{background:transparent} 80.5%{background:rgba(120,165,245,0.08)} 81%{background:transparent} 100%{background:transparent} }
+      `}</style>
+    </Shell>
+  );
+}
+
+/* ── Phoenix: Majestic flaming phoenix rising from inferno ── */
+function PhoenixBg() {
+  const embersSmall = useMemo(() => {
+    const rand = seededRand(660);
+    return Array.from({ length: 55 }, () => ({
+      x: rand() * 100,
+      size: 1.5 + rand() * 2.5,
+      dur: 1.5 + rand() * 2,
+      delay: rand() * 10,
+      drift: (rand() - 0.5) * 70,
+    }));
+  }, []);
+  const embersMed = useMemo(() => {
+    const rand = seededRand(661);
+    return Array.from({ length: 40 }, () => ({
+      x: rand() * 100,
+      size: 3 + rand() * 4,
+      dur: 2.5 + rand() * 3,
+      delay: rand() * 12,
+      drift: (rand() - 0.5) * 90,
+      color: rand() > 0.5 ? '#fbbf24' : '#f97316',
+    }));
+  }, []);
+  const embersLarge = useMemo(() => {
+    const rand = seededRand(662);
+    return Array.from({ length: 20 }, () => ({
+      x: rand() * 100,
+      size: 5 + rand() * 5,
+      dur: 3.5 + rand() * 4,
+      delay: rand() * 14,
+      drift: (rand() - 0.5) * 110,
+    }));
+  }, []);
+  const smoke = useMemo(() => {
+    const rand = seededRand(663);
+    return Array.from({ length: 10 }, () => ({
+      x: 5 + rand() * 90,
+      dur: 16 + rand() * 14,
+      delay: rand() * 12,
+      w: 80 + rand() * 160,
+    }));
+  }, []);
+  const vortex = useMemo(() => {
+    const rand = seededRand(664);
+    return Array.from({ length: 28 }, (_, i) => ({
+      angle: (i / 28) * 360,
+      r: 35 + rand() * 40,
+      size: 2 + rand() * 4,
+      dur: 2.5 + rand() * 3,
+      delay: rand() * 5,
+      color: rand() > 0.5 ? '#fbbf24' : rand() > 0.3 ? '#f97316' : '#ef4444',
+    }));
+  }, []);
+  const feathers = useMemo(() => {
+    const rand = seededRand(665);
+    return Array.from({ length: 14 }, () => ({
+      x: 20 + rand() * 60,
+      y: 15 + rand() * 50,
+      size: 8 + rand() * 16,
+      dur: 6 + rand() * 10,
+      delay: rand() * 12,
+      rot: rand() * 360,
+      drift: (rand() - 0.5) * 80,
+      color: rand() < 0.4 ? '#f59e0b' : rand() < 0.7 ? '#ef4444' : '#fb923c',
+    }));
+  }, []);
+  const sparks = useMemo(() => {
+    const rand = seededRand(666);
+    return Array.from({ length: 30 }, () => ({
+      x: 30 + rand() * 40,
+      y: 25 + rand() * 35,
+      dur: 1.2 + rand() * 2.5,
+      delay: rand() * 14,
+      angle: rand() * 360,
+      dist: 50 + rand() * 100,
+      size: 0.8 + rand() * 1.8,
+    }));
+  }, []);
+
+  return (
+    <Shell>
+      {/* Intense fire base — 5 layers of blazing gradient */}
+      <div className="absolute bottom-0 left-0 right-0 h-[65%]"
+        style={{ background: 'linear-gradient(to top, rgba(180,60,10,0.5), rgba(239,68,68,0.3) 35%, rgba(245,158,11,0.12) 65%, transparent)', animation: 'ph-heat 3s ease-in-out infinite' }} />
+      <div className="absolute bottom-0 left-[5%] right-[5%] h-[55%]"
+        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(251,191,36,0.45), rgba(249,115,22,0.25) 45%, transparent 70%)', animation: 'ph-heat 4.5s ease-in-out 1s infinite' }} />
+      <div className="absolute bottom-0 left-[15%] right-[15%] h-[45%]"
+        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(239,68,68,0.35), rgba(180,60,10,0.2) 55%, transparent)', animation: 'ph-heat 3.8s ease-in-out 1.8s infinite' }} />
+      <div className="absolute bottom-0 left-[25%] right-[25%] h-[35%]"
+        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(255,200,60,0.5), transparent 65%)', animation: 'ph-heat 4s ease-in-out 0.5s infinite' }} />
+      <div className="absolute bottom-0 left-[35%] right-[35%] h-[25%]"
+        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(255,240,100,0.55), transparent 70%)', animation: 'ph-heat 2.8s ease-in-out 2s infinite' }} />
+
+      {/* Fire veins rising from below */}
+      {[8, 18, 30, 42, 55, 68, 78, 88].map((x, i) => (
+        <div key={`fv${i}`} className="absolute bottom-0"
+          style={{ left: `${x}%`, width: `${3 + (i % 3) * 2}px`, height: `${20 + (i % 5) * 8}%`,
+            background: `linear-gradient(to top, rgba(${i % 2 === 0 ? '251,191,36' : '249,115,22'},0.7), rgba(239,68,68,0.4) 55%, rgba(180,60,10,0.15) 80%, transparent)`,
+            filter: 'blur(1px)',
+            boxShadow: `0 0 6px rgba(249,115,22,0.5), 0 0 14px rgba(251,191,36,0.2)`,
+            animation: `ph-vein ${2.8 + i * 0.7}s ease-in-out ${i * 0.45}s infinite` }} />
+      ))}
+
+      {/* Heat shimmer */}
+      <div className="absolute bottom-0 left-0 right-0 h-[40%]"
+        style={{ background: 'linear-gradient(to top, rgba(255,180,60,0.18), rgba(255,140,40,0.08) 50%, transparent)', filter: 'blur(3px)', animation: 'ph-shimmer 1.6s ease-in-out infinite' }} />
+
+      {/* Dense smoke columns */}
+      {smoke.map((s, i) => (
+        <div key={`sm${i}`} className="absolute bottom-[2%]"
+          style={{ left: `${s.x}%`, width: `${s.w}px`, height: '70%',
+            background: 'linear-gradient(to top, rgba(60,30,15,0.6), rgba(50,25,12,0.4) 30%, rgba(35,18,10,0.2) 60%, rgba(20,10,5,0.08) 85%, transparent)',
+            filter: 'blur(14px)', animation: `ph-smoke ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
+      ))}
+
+      {/* Central phoenix glow — multi-layer radiance */}
+      <div className="absolute top-[18%] left-[50%] -translate-x-1/2 w-[min(700px,55vw)] h-[min(600px,50vh)] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(245,158,11,0.18) 0%, rgba(239,68,68,0.08) 40%, transparent 65%)', animation: 'ph-core 5s ease-in-out infinite', filter: 'blur(35px)' }} />
+      <div className="absolute top-[22%] left-[50%] -translate-x-1/2 w-[min(450px,38vw)] h-[min(400px,36vh)] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(251,191,36,0.2) 0%, rgba(245,158,11,0.08) 45%, transparent 70%)', animation: 'ph-core 5s ease-in-out 2.5s infinite', filter: 'blur(25px)' }} />
+      <div className="absolute top-[28%] left-[50%] -translate-x-1/2 w-[min(250px,22vw)] h-[min(220px,20vh)] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(254,243,199,0.15) 0%, rgba(251,191,36,0.06) 50%, transparent 70%)', animation: 'ph-core 4s ease-in-out 1s infinite', filter: 'blur(18px)' }} />
+
+      {/* Phoenix SVG — detailed majestic bird with layered flames */}
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="ph-fg" x1="0.5" y1="1" x2="0.5" y2="0">
+            <stop offset="0%" stopColor="#dc2626" stopOpacity="0.7" />
+            <stop offset="30%" stopColor="#f97316" stopOpacity="0.6" />
+            <stop offset="60%" stopColor="#f59e0b" stopOpacity="0.45" />
+            <stop offset="85%" stopColor="#fbbf24" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#fef3c7" stopOpacity="0.1" />
+          </linearGradient>
+          <linearGradient id="ph-wg" x1="0" y1="0.5" x2="1" y2="0.5">
+            <stop offset="0%" stopColor="#ef4444" stopOpacity="0.35" />
+            <stop offset="40%" stopColor="#f97316" stopOpacity="0.25" />
+            <stop offset="70%" stopColor="#f59e0b" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.04" />
+          </linearGradient>
+          <linearGradient id="ph-wgr" x1="1" y1="0.5" x2="0" y2="0.5">
+            <stop offset="0%" stopColor="#ef4444" stopOpacity="0.35" />
+            <stop offset="40%" stopColor="#f97316" stopOpacity="0.25" />
+            <stop offset="70%" stopColor="#f59e0b" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.04" />
+          </linearGradient>
+          <radialGradient id="ph-body" cx="0.5" cy="0.4" r="0.5">
+            <stop offset="0%" stopColor="#fef3c7" stopOpacity="0.3" />
+            <stop offset="40%" stopColor="#fbbf24" stopOpacity="0.22" />
+            <stop offset="70%" stopColor="#f59e0b" stopOpacity="0.14" />
+            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.06" />
+          </radialGradient>
+          <filter id="ph-glow">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="ph-glow-wide">
+            <feGaussianBlur stdDeviation="12" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Outer glow aura around the whole bird */}
+        <g filter="url(#ph-glow-wide)" style={{ animation: 'ph-float 7s ease-in-out infinite' }}>
+          <ellipse cx="500" cy="440" rx="160" ry="200" fill="rgba(245,158,11,0.06)" />
+        </g>
+
+        {/* Main phoenix group */}
+        <g filter="url(#ph-glow)" style={{ animation: 'ph-float 7s ease-in-out infinite' }}>
+
+          {/* Tail — long sweeping fire plumes (7 streams) */}
+          <path d="M500 620 Q475 720 430 850 Q455 790 465 730 Q485 670 500 620Z" fill="url(#ph-fg)" style={{ animation: 'ph-t1 3s ease-in-out infinite' }} />
+          <path d="M500 620 Q525 730 570 860 Q545 790 535 730 Q515 670 500 620Z" fill="url(#ph-fg)" style={{ animation: 'ph-t2 3.4s ease-in-out infinite' }} />
+          <path d="M500 620 Q490 740 500 880 Q510 760 505 700 Q502 660 500 620Z" fill="url(#ph-fg)" style={{ animation: 'ph-t3 3.8s ease-in-out infinite' }} />
+          <path d="M500 620 Q460 740 400 870 Q440 800 460 740 Q480 680 500 620Z" fill="rgba(239,68,68,0.25)" style={{ animation: 'ph-t1 4.2s ease-in-out 0.5s infinite' }} />
+          <path d="M500 620 Q540 740 600 870 Q560 800 540 740 Q520 680 500 620Z" fill="rgba(239,68,68,0.25)" style={{ animation: 'ph-t2 4s ease-in-out 0.8s infinite' }} />
+          <path d="M500 620 Q465 760 380 900 Q430 830 455 760 Q480 690 500 620Z" fill="rgba(180,60,10,0.18)" style={{ animation: 'ph-t1 5s ease-in-out 1.2s infinite' }} />
+          <path d="M500 620 Q535 760 620 900 Q570 830 545 760 Q520 690 500 620Z" fill="rgba(180,60,10,0.18)" style={{ animation: 'ph-t2 4.8s ease-in-out 1s infinite' }} />
+
+          {/* Body — teardrop with layered glow */}
+          <ellipse cx="500" cy="470" rx="40" ry="100" fill="url(#ph-body)" />
+          <ellipse cx="500" cy="460" rx="28" ry="75" fill="rgba(251,191,36,0.22)" />
+          <ellipse cx="500" cy="445" rx="16" ry="45" fill="rgba(254,243,199,0.2)" />
+          <ellipse cx="500" cy="435" rx="8" ry="22" fill="rgba(255,255,220,0.18)" />
+
+          {/* Left wing — primary feathers (sweeping arc with 4 layers) */}
+          <path d="M475 445 Q400 370 270 290 Q320 340 355 375 Q390 410 430 438 Q455 448 475 445Z"
+            fill="url(#ph-wg)" style={{ animation: 'ph-wl 3.8s ease-in-out infinite', transformOrigin: '475px 445px' }} />
+          <path d="M475 460 Q385 400 230 330 Q300 370 345 400 Q390 430 440 455 Q460 462 475 460Z"
+            fill="rgba(249,115,22,0.18)" style={{ animation: 'ph-wl 3.8s ease-in-out 0.2s infinite', transformOrigin: '475px 460px' }} />
+          <path d="M475 475 Q370 430 200 380 Q280 410 335 435 Q395 460 450 473Z"
+            fill="rgba(239,68,68,0.12)" style={{ animation: 'ph-wl 3.8s ease-in-out 0.4s infinite', transformOrigin: '475px 475px' }} />
+          <path d="M478 490 Q390 460 250 430 Q320 450 370 465 Q425 482 465 488Z"
+            fill="rgba(180,60,10,0.08)" style={{ animation: 'ph-wl 3.8s ease-in-out 0.6s infinite', transformOrigin: '478px 490px' }} />
+
+          {/* Right wing — primary feathers (mirrored) */}
+          <path d="M525 445 Q600 370 730 290 Q680 340 645 375 Q610 410 570 438 Q545 448 525 445Z"
+            fill="url(#ph-wgr)" style={{ animation: 'ph-wr 3.8s ease-in-out infinite', transformOrigin: '525px 445px' }} />
+          <path d="M525 460 Q615 400 770 330 Q700 370 655 400 Q610 430 560 455 Q540 462 525 460Z"
+            fill="rgba(249,115,22,0.18)" style={{ animation: 'ph-wr 3.8s ease-in-out 0.2s infinite', transformOrigin: '525px 460px' }} />
+          <path d="M525 475 Q630 430 800 380 Q720 410 665 435 Q605 460 550 473Z"
+            fill="rgba(239,68,68,0.12)" style={{ animation: 'ph-wr 3.8s ease-in-out 0.4s infinite', transformOrigin: '525px 475px' }} />
+          <path d="M522 490 Q610 460 750 430 Q680 450 630 465 Q575 482 535 488Z"
+            fill="rgba(180,60,10,0.08)" style={{ animation: 'ph-wr 3.8s ease-in-out 0.6s infinite', transformOrigin: '522px 490px' }} />
+
+          {/* Wing tip fire — left */}
+          <path d="M270 290 Q250 260 220 220 Q240 255 260 280Z" fill="rgba(251,191,36,0.3)" style={{ animation: 'ph-wtl 2.5s ease-in-out infinite' }} />
+          <path d="M270 290 Q240 275 200 250 Q235 270 265 285Z" fill="rgba(245,158,11,0.2)" style={{ animation: 'ph-wtl 3s ease-in-out 0.4s infinite' }} />
+          <path d="M230 330 Q205 305 170 270 Q195 300 225 325Z" fill="rgba(239,68,68,0.15)" style={{ animation: 'ph-wtl 2.8s ease-in-out 0.8s infinite' }} />
+
+          {/* Wing tip fire — right */}
+          <path d="M730 290 Q750 260 780 220 Q760 255 740 280Z" fill="rgba(251,191,36,0.3)" style={{ animation: 'ph-wtr 2.5s ease-in-out infinite' }} />
+          <path d="M730 290 Q760 275 800 250 Q765 270 735 285Z" fill="rgba(245,158,11,0.2)" style={{ animation: 'ph-wtr 3s ease-in-out 0.4s infinite' }} />
+          <path d="M770 330 Q795 305 830 270 Q805 300 775 325Z" fill="rgba(239,68,68,0.15)" style={{ animation: 'ph-wtr 2.8s ease-in-out 0.8s infinite' }} />
+
+          {/* Neck */}
+          <ellipse cx="500" cy="380" rx="14" ry="35" fill="rgba(245,158,11,0.2)" />
+          <ellipse cx="500" cy="375" rx="9" ry="25" fill="rgba(251,191,36,0.22)" />
+
+          {/* Head */}
+          <ellipse cx="500" cy="350" rx="18" ry="24" fill="rgba(245,158,11,0.22)" />
+          <ellipse cx="500" cy="345" rx="12" ry="17" fill="rgba(251,191,36,0.28)" />
+          <ellipse cx="500" cy="340" rx="7" ry="10" fill="rgba(254,243,199,0.2)" />
+
+          {/* Eyes — twin points of white-hot light */}
+          <circle cx="492" cy="342" r="2.5" fill="rgba(255,255,230,0.5)">
+            <animate attributeName="opacity" values="0.5;0.9;0.5" dur="3s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="508" cy="342" r="2.5" fill="rgba(255,255,230,0.5)">
+            <animate attributeName="opacity" values="0.5;0.9;0.5" dur="3s" begin="0.3s" repeatCount="indefinite" />
+          </circle>
+
+          {/* Beak */}
+          <path d="M500 335 L507 320 L500 326 L493 320Z" fill="rgba(254,243,199,0.35)" />
+
+          {/* Crown flames — 5 tongues */}
+          <path d="M500 330 Q497 305 490 280 Q498 300 500 330Z" fill="rgba(245,158,11,0.25)" style={{ animation: 'ph-crown 2.2s ease-in-out infinite' }} />
+          <path d="M500 330 Q504 302 512 275 Q503 298 500 330Z" fill="rgba(239,68,68,0.2)" style={{ animation: 'ph-crown 2.6s ease-in-out 0.4s infinite' }} />
+          <path d="M500 330 Q494 308 482 288 Q494 305 500 330Z" fill="rgba(251,191,36,0.18)" style={{ animation: 'ph-crown 2.4s ease-in-out 0.8s infinite' }} />
+          <path d="M500 330 Q508 310 520 292 Q508 308 500 330Z" fill="rgba(249,115,22,0.15)" style={{ animation: 'ph-crown 3s ease-in-out 1.2s infinite' }} />
+          <path d="M500 330 Q500 308 500 270 Q502 300 500 330Z" fill="rgba(254,243,199,0.12)" style={{ animation: 'ph-crown 2.8s ease-in-out 0.6s infinite' }} />
+        </g>
+      </svg>
+
+      {/* Fire vortex swirl around phoenix center */}
+      <div className="absolute" style={{ left: '50%', top: '42%', width: '0', height: '0' }}>
+        {vortex.map((v, i) => {
+          const rad = (v.angle * Math.PI) / 180;
+          const px = Math.cos(rad) * v.r;
+          const py = Math.sin(rad) * v.r;
+          return (
+            <div key={`vo${i}`} className="absolute rounded-full"
+              style={{ left: `${px}px`, top: `${py}px`, width: `${v.size}px`, height: `${v.size}px`,
+                background: v.color, opacity: 0,
+                boxShadow: `0 0 ${v.size * 4}px ${v.color}`,
+                animation: `ph-vortex ${v.dur}s ease-in-out ${v.delay}s infinite` }} />
+          );
+        })}
+      </div>
+
+      {/* Floating fire feather shapes */}
+      {feathers.map((f, i) => (
+        <div key={`ff${i}`} className="absolute"
+          style={{
+            left: `${f.x}%`, top: `${f.y}%`,
+            width: `${f.size * 0.35}px`, height: `${f.size}px`,
+            borderRadius: '50% 50% 50% 50% / 20% 20% 80% 80%',
+            background: `linear-gradient(to bottom, ${f.color}, transparent)`,
+            boxShadow: `0 0 ${f.size}px ${f.color}40`,
+            transform: `rotate(${f.rot}deg)`,
+            opacity: 0,
+            animation: `ph-feather ${f.dur}s ease-in-out ${f.delay}s infinite`,
+            ['--ph-fdrift' as string]: `${f.drift}px`,
+          }}
+        />
+      ))}
+
+      {/* Spark bursts radiating from phoenix */}
+      {sparks.map((s, i) => (
+        <div key={`sp${i}`} className="absolute rounded-full"
+          style={{
+            left: `${s.x}%`, top: `${s.y}%`,
+            width: `${s.size}px`, height: `${s.size}px`,
+            background: '#fbbf24',
+            boxShadow: '0 0 8px #f59e0b, 0 0 16px rgba(245,158,11,0.3)',
+            animation: `ph-spark ${s.dur}s ease-out ${s.delay}s infinite`,
+            ['--ph-sx' as string]: `${Math.cos(s.angle * Math.PI / 180) * s.dist}px`,
+            ['--ph-sy' as string]: `${Math.sin(s.angle * Math.PI / 180) * s.dist}px`,
+            opacity: 0,
+          }}
+        />
+      ))}
+
+      {/* Three tiers of rising embers */}
+      {embersSmall.map((e, i) => (
+        <div key={`es${i}`} className="absolute rounded-full"
+          style={{ left: `${e.x}%`, bottom: '0', width: `${e.size}px`, height: `${e.size}px`,
+            background: '#fde68a', opacity: 0,
+            boxShadow: '0 0 8px #fbbf24, 0 0 16px rgba(251,191,36,0.3)',
+            animation: `ph-eS ${e.dur}s ease-out ${e.delay}s infinite`,
+            ['--dr' as string]: `${e.drift}px` }} />
+      ))}
+      {embersMed.map((e, i) => (
+        <div key={`em${i}`} className="absolute rounded-full"
+          style={{ left: `${e.x}%`, bottom: '0', width: `${e.size}px`, height: `${e.size}px`,
+            background: e.color, opacity: 0,
+            boxShadow: `0 0 ${e.size * 3}px ${e.color}, 0 0 ${e.size * 6}px rgba(249,115,22,0.25)`,
+            animation: `ph-eM ${e.dur}s ease-out ${e.delay}s infinite`,
+            ['--dr' as string]: `${e.drift}px` }} />
+      ))}
+      {embersLarge.map((e, i) => (
+        <div key={`el${i}`} className="absolute rounded-full"
+          style={{ left: `${e.x}%`, bottom: '0', width: `${e.size}px`, height: `${e.size}px`,
+            background: '#ef4444', opacity: 0,
+            boxShadow: `0 0 ${e.size * 5}px rgba(239,68,68,0.7), 0 0 ${e.size * 10}px rgba(180,60,10,0.35)`,
+            animation: `ph-eL ${e.dur}s ease-out ${e.delay}s infinite`,
+            ['--dr' as string]: `${e.drift}px` }} />
+      ))}
+
+      {/* Magma pools at base */}
+      {[18, 48, 80].map((x, i) => (
+        <div key={`pool${i}`} className="absolute bottom-0"
+          style={{ left: `${x - 10}%`, width: '20%', height: '8%',
+            background: `radial-gradient(ellipse, rgba(${i % 2 === 0 ? '255,200,60' : '251,191,36'},0.6), rgba(249,115,22,0.35) 40%, rgba(239,68,68,0.2) 70%, transparent)`,
+            borderRadius: '50%', filter: 'blur(2px)',
+            boxShadow: `0 0 25px rgba(251,191,36,0.4), 0 0 50px rgba(249,115,22,0.2)`,
+            animation: `ph-pool ${2.2 + i * 1.1}s ease-in-out ${i * 0.7}s infinite` }} />
+      ))}
+
+      {/* Flickering ambient light on the whole scene */}
+      <div className="absolute inset-0"
+        style={{ animation: 'ph-flicker 0.15s step-end infinite', background: 'rgba(245,158,11,0.02)' }} />
+
+      <style>{`
+        @keyframes ph-heat { 0%,100%{opacity:1} 50%{opacity:0.75} }
+        @keyframes ph-vein { 0%,100%{opacity:1;transform:scaleY(1)} 50%{opacity:0.65;transform:scaleY(0.88)} }
+        @keyframes ph-shimmer { 0%,100%{transform:translateX(0) skewX(0deg)} 33%{transform:translateX(3px) skewX(0.6deg)} 66%{transform:translateX(-3px) skewX(-0.6deg)} }
+        @keyframes ph-smoke { 0%,100%{transform:translateY(0) scaleX(1);opacity:1} 50%{transform:translateY(-45px) scaleX(1.5);opacity:0.45} }
+        @keyframes ph-core { 0%,100%{opacity:0.7;transform:translateX(-50%) scale(1)} 50%{opacity:1;transform:translateX(-50%) scale(1.1)} }
+        @keyframes ph-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
+        @keyframes ph-wl { 0%,100%{transform:rotate(0deg) scaleY(1)} 35%{transform:rotate(-10deg) scaleY(1.04)} 65%{transform:rotate(-4deg) scaleY(0.98)} }
+        @keyframes ph-wr { 0%,100%{transform:rotate(0deg) scaleY(1)} 35%{transform:rotate(10deg) scaleY(1.04)} 65%{transform:rotate(4deg) scaleY(0.98)} }
+        @keyframes ph-t1 { 0%,100%{transform:scaleY(1) skewX(0) translateY(0)} 50%{transform:scaleY(1.18) skewX(-4deg) translateY(5px)} }
+        @keyframes ph-t2 { 0%,100%{transform:scaleY(1) skewX(0) translateY(0)} 50%{transform:scaleY(1.22) skewX(4deg) translateY(5px)} }
+        @keyframes ph-t3 { 0%,100%{transform:scaleY(1) translateY(0)} 50%{transform:scaleY(1.28) translateY(8px)} }
+        @keyframes ph-crown { 0%,100%{transform:scaleY(1);opacity:1} 50%{transform:scaleY(1.4);opacity:0.45} }
+        @keyframes ph-wtl { 0%,100%{transform:scale(1);opacity:0.8} 50%{transform:scale(1.3) translate(-4px,-6px);opacity:0.3} }
+        @keyframes ph-wtr { 0%,100%{transform:scale(1);opacity:0.8} 50%{transform:scale(1.3) translate(4px,-6px);opacity:0.3} }
+        @keyframes ph-vortex { 0%,100%{opacity:0;transform:translate(-50%,-50%) scale(0.2)} 50%{opacity:0.85;transform:translate(-50%,-50%) scale(1.3)} }
+        @keyframes ph-feather { 0%{opacity:0;transform:rotate(var(--ph-frot,0deg)) translateY(0) translateX(0)} 15%{opacity:0.4} 85%{opacity:0.15} 100%{opacity:0;transform:rotate(var(--ph-frot,0deg)) translateY(-200px) translateX(var(--ph-fdrift,0px))} }
+        @keyframes ph-spark { 0%{transform:translate(0,0) scale(1);opacity:0} 10%{opacity:1} 100%{transform:translate(var(--ph-sx,20px),var(--ph-sy,-20px)) scale(0);opacity:0} }
+        @keyframes ph-eS { 0%{opacity:0.9;transform:translateY(0) translateX(0)} 100%{opacity:0;transform:translateY(-300px) translateX(var(--dr))} }
+        @keyframes ph-eM { 0%{opacity:0.75;transform:translateY(0) translateX(0)} 30%{opacity:0.55} 100%{opacity:0;transform:translateY(-400px) translateX(var(--dr))} }
+        @keyframes ph-eL { 0%{opacity:0.6;transform:translateY(0) translateX(0)} 40%{opacity:0.4} 100%{opacity:0;transform:translateY(-500px) translateX(var(--dr))} }
+        @keyframes ph-pool { 0%,100%{transform:scaleX(1) scaleY(1);opacity:1} 50%{transform:scaleX(1.25) scaleY(1.4);opacity:0.65} }
+        @keyframes ph-flicker { 0%{opacity:0.6} 20%{opacity:0.9} 40%{opacity:0.5} 60%{opacity:1} 80%{opacity:0.7} 100%{opacity:0.55} }
+      `}</style>
+    </Shell>
+  );
+}
+
+/* ── Retro Arcade: CRT scanlines, pixel characters, neon glow, arcade cabinets ── */
+function RetroArcadeBg() {
+  const starsBack = useMemo(() => {
+    const rand = seededRand(800);
+    return Array.from({ length: 60 }, () => ({
+      x: rand() * 100, y: rand() * 100,
+      size: 0.5 + rand() * 1,
+      dur: 2 + rand() * 4,
+      delay: rand() * 6,
+    }));
+  }, []);
+  const starsFront = useMemo(() => {
+    const rand = seededRand(799);
+    return Array.from({ length: 40 }, () => ({
+      x: rand() * 100, y: rand() * 100,
+      size: 1 + rand() * 2,
+      dur: 1 + rand() * 2.5,
+      delay: rand() * 4,
+      color: rand() < 0.3 ? '#ff88ff' : rand() < 0.6 ? '#88ffff' : '#ffffff',
+    }));
+  }, []);
+
+  const invaders = useMemo(() => {
+    const rand = seededRand(801);
+    const types: ('crab' | 'squid' | 'octo')[] = ['crab', 'squid', 'octo'];
+    return Array.from({ length: 24 }, (_, i) => ({
+      x: 3 + (i % 8) * 12 + rand() * 3,
+      y: 4 + Math.floor(i / 8) * 9 + rand() * 2,
+      type: types[i % 3],
+      dur: 3.5 + rand() * 3.5,
+      delay: rand() * 5,
+      color: i % 3 === 0 ? '#00ff88' : i % 3 === 1 ? '#ff00ff' : '#00ffff',
+    }));
+  }, []);
+
+  const ghosts = useMemo(() => {
+    const rand = seededRand(802);
+    const colors = ['#ff0000', '#ffb8ff', '#00ffff', '#ffb852'];
+    return Array.from({ length: 4 }, (_, i) => ({
+      x: 5 + rand() * 85,
+      y: 45 + rand() * 40,
+      color: colors[i],
+      dur: 14 + rand() * 12,
+      delay: rand() * 10,
+      dir: rand() > 0.5 ? 1 : -1,
+    }));
+  }, []);
+
+  const coins = useMemo(() => {
+    const rand = seededRand(803);
+    return Array.from({ length: 15 }, () => ({
+      x: rand() * 100,
+      dur: 3.5 + rand() * 4.5,
+      delay: rand() * 18,
+      size: 5 + rand() * 7,
+    }));
+  }, []);
+
+  const cabinets = useMemo(() => {
+    const rand = seededRand(804);
+    return Array.from({ length: 6 }, (_, i) => ({
+      x: 2 + i * 17 + rand() * 5,
+      h: 30 + rand() * 18,
+      w: 8 + rand() * 5,
+      screenColor: ['#00ff88', '#ff00ff', '#00ffff', '#ffff00', '#ff6600', '#88ff00'][i],
+      flicker: 1.5 + rand() * 3,
+    }));
+  }, []);
+
+  const tetris = useMemo(() => {
+    const rand = seededRand(806);
+    const colors = ['#00ffff', '#ffff00', '#ff00ff', '#00ff00', '#ff6600', '#ff0000', '#0088ff'];
+    const shapes: number[][][] = [
+      [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,0],[1,0],[1,1]], [[0,1],[0,1],[1,1]],
+      [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]],
+    ];
+    return Array.from({ length: 12 }, () => {
+      const si = Math.floor(rand() * shapes.length);
+      return {
+        x: rand() * 92,
+        shape: shapes[si],
+        color: colors[Math.floor(rand() * colors.length)],
+        dur: 8 + rand() * 14,
+        delay: rand() * 22,
+        rot: Math.floor(rand() * 4) * 90,
+      };
+    });
+  }, []);
+
+  const lasers = useMemo(() => {
+    const rand = seededRand(807);
+    return Array.from({ length: 10 }, () => ({
+      x: 8 + rand() * 84,
+      dur: 0.5 + rand() * 0.7,
+      delay: rand() * 14,
+      color: rand() < 0.5 ? '#00ff88' : '#ff4444',
+    }));
+  }, []);
+
+  const powerups = useMemo(() => {
+    const rand = seededRand(808);
+    const types = ['cherry', 'star', 'mushroom', 'heart'];
+    const colors = ['#ff0040', '#ffff00', '#ff6600', '#ff4488'];
+    return Array.from({ length: 8 }, (_, i) => ({
+      x: 10 + rand() * 80,
+      y: 20 + rand() * 60,
+      type: types[i % 4],
+      color: colors[i % 4],
+      dur: 5 + rand() * 6,
+      delay: rand() * 16,
+      size: 10 + rand() * 6,
+    }));
+  }, []);
+
+  const explosions = useMemo(() => {
+    const rand = seededRand(809);
+    return Array.from({ length: 6 }, () => ({
+      x: 10 + rand() * 80,
+      y: 10 + rand() * 60,
+      dur: 4 + rand() * 6,
+      delay: rand() * 18,
+      particles: Array.from({ length: 8 }, () => ({
+        angle: rand() * 360,
+        dist: 15 + rand() * 30,
+        size: 1.5 + rand() * 2,
+        color: rand() < 0.33 ? '#ffff00' : rand() < 0.66 ? '#ff6600' : '#ff0000',
+      })),
+    }));
+  }, []);
+
+  const mazeWalls = useMemo(() => {
+    const rand = seededRand(810);
+    const walls: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    for (let i = 0; i < 20; i++) {
+      const x = 5 + rand() * 90;
+      const y = 40 + rand() * 55;
+      const horiz = rand() > 0.5;
+      const len = 5 + rand() * 15;
+      walls.push({
+        x1: x, y1: y,
+        x2: horiz ? x + len : x,
+        y2: horiz ? y : y + len * 0.6,
+      });
+    }
+    return walls;
+  }, []);
+
+  const snake = useMemo(() => {
+    const rand = seededRand(811);
+    const segs: { x: number; y: number }[] = [];
+    let sx = 5 + rand() * 30;
+    let sy = 35 + rand() * 20;
+    for (let i = 0; i < 12; i++) {
+      segs.push({ x: sx, y: sy });
+      if (rand() > 0.5) sx += 1.5; else sy += 1.2;
+    }
+    return { segs, dur: 18 + rand() * 10, delay: rand() * 5 };
+  }, []);
+
+  return (
+    <Shell>
+      {/* Deep space gradient */}
+      <div className="absolute inset-0" style={{
+        background: 'radial-gradient(ellipse at 50% 40%, rgba(20,8,50,0.35) 0%, rgba(4,4,16,0.15) 50%, transparent 100%)',
+      }} />
+
+      {/* Parallax star layers */}
+      {starsBack.map((s, i) => (
+        <div key={`sb${i}`} className="absolute"
+          style={{ left: `${s.x}%`, top: `${s.y}%`,
+            width: `${s.size}px`, height: `${s.size}px`,
+            background: '#888',
+            animation: `rc-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
+          }} />
+      ))}
+      {starsFront.map((s, i) => (
+        <div key={`sf${i}`} className="absolute"
+          style={{ left: `${s.x}%`, top: `${s.y}%`,
+            width: `${s.size}px`, height: `${s.size}px`,
+            background: s.color,
+            boxShadow: `0 0 4px ${s.color}80`,
+            animation: `rc-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
+          }} />
+      ))}
+
+      {/* Pixel grid overlay */}
+      <div className="absolute inset-0" style={{
+        backgroundImage: `
+          linear-gradient(rgba(0,255,100,0.015) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0,255,100,0.015) 1px, transparent 1px)`,
+        backgroundSize: '12px 12px',
+      }} />
+
+      {/* Neon floor reflection at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 h-[12%]" style={{
+        background: 'linear-gradient(to top, rgba(255,0,255,0.06), rgba(0,255,255,0.03) 50%, transparent)',
+        filter: 'blur(8px)',
+      }} />
+      <div className="absolute bottom-0 left-0 right-0 h-[3%]" style={{
+        background: 'linear-gradient(90deg, transparent 5%, rgba(255,0,255,0.08) 20%, rgba(0,255,255,0.06) 40%, rgba(0,255,136,0.07) 60%, rgba(255,255,0,0.05) 80%, transparent 95%)',
+        filter: 'blur(4px)',
+        animation: 'rc-floorpulse 4s ease-in-out infinite',
+      }} />
+
+      {/* SVG layer — invaders, pac-man, pong, maze, snake, spaceship */}
+      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <filter id="rc-neon">
+            <feGaussianBlur stdDeviation="0.25" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="rc-glow-wide">
+            <feGaussianBlur stdDeviation="0.6" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Space Invaders — 3 rows of 8 */}
+        {invaders.map((inv, i) => {
+          const p = 0.7;
+          const pixels: [number, number][] = inv.type === 'crab'
+            ? [[2,0],[5,0],[0,1],[2,1],[3,1],[4,1],[5,1],[7,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[0,3],[1,3],[3,3],[4,3],[6,3],[7,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[1,5],[2,5],[5,5],[6,5],[0,6],[2,6],[5,6],[7,6]]
+            : inv.type === 'squid'
+            ? [[3,0],[0,1],[2,1],[3,1],[4,1],[6,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[1,4],[2,4],[4,4],[5,4],[0,5],[1,5],[5,5],[6,5],[1,6],[5,6]]
+            : [[3,0],[1,1],[3,1],[5,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[0,3],[2,3],[4,3],[6,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[2,5],[4,5],[0,6],[1,6],[5,6],[6,6]];
+          return (
+            <g key={`inv${i}`} filter="url(#rc-neon)"
+              style={{ animation: `rc-invader ${inv.dur}s ease-in-out ${inv.delay}s infinite` }}>
+              {pixels.map(([px, py], pi) => (
+                <rect key={pi} x={inv.x + px * p} y={inv.y + py * p}
+                  width={p} height={p} fill={inv.color} opacity="0.45" />
+              ))}
+            </g>
+          );
+        })}
+
+        {/* Player spaceship at bottom */}
+        <g filter="url(#rc-neon)" style={{ animation: 'rc-ship 10s ease-in-out infinite' }}>
+          {/* Ship body */}
+          {[[3,0],[2,1],[3,1],[4,1],[1,2],[2,2],[3,2],[4,2],[5,2],[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]].map(([px,py], pi) => (
+            <rect key={`sh${pi}`} x={46 + px * 0.6} y={92 + py * 0.6}
+              width="0.6" height="0.6" fill="#00ff88" opacity="0.5" />
+          ))}
+        </g>
+
+        {/* Pac-Man chomping across */}
+        <g style={{ animation: 'rc-pacmove 14s linear infinite' }} filter="url(#rc-neon)">
+          <circle cx="0" cy="68" r="2.2" fill="#ffff00" opacity="0.5" />
+          <path d="M0 68 L2.2 66.5 L2.2 69.5Z" fill="rgba(4,6,16,0.95)"
+            style={{ animation: 'rc-chomp 0.25s step-end infinite' }} />
+        </g>
+        {/* Pac dot trail */}
+        {Array.from({ length: 20 }, (_, i) => (
+          <rect key={`pd${i}`} x={5 + i * 4.8} y="67.6" width="0.8" height="0.8"
+            fill="#ffff00" opacity="0.12" />
+        ))}
+        {/* Power pellets */}
+        {[20, 55, 85].map((x, i) => (
+          <circle key={`pp${i}`} cx={x} cy="68" r="1" fill="#ffff00" opacity="0.2"
+            style={{ animation: `rc-twinkle 1.5s ease-in-out ${i * 0.5}s infinite` }} />
+        ))}
+
+        {/* Pong game — left side */}
+        <rect x="2" y="42" width="0.8" height="6" fill="#ffffff" opacity="0.15"
+          style={{ animation: 'rc-paddle-l 4s ease-in-out infinite' }} />
+        <rect x="97.2" y="44" width="0.8" height="6" fill="#ffffff" opacity="0.15"
+          style={{ animation: 'rc-paddle-r 3.5s ease-in-out infinite' }} />
+        <rect x="49.5" y="44" width="1" height="1" fill="#ffffff" opacity="0.2"
+          style={{ animation: 'rc-pongball 3s linear infinite' }} />
+        {/* Pong center line */}
+        {Array.from({ length: 10 }, (_, i) => (
+          <rect key={`pl${i}`} x="49.8" y={38 + i * 3} width="0.4" height="1.5"
+            fill="#ffffff" opacity="0.05" />
+        ))}
+
+        {/* Maze walls — pac-man style */}
+        {mazeWalls.map((w, i) => (
+          <line key={`mw${i}`} x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2}
+            stroke="#0044ff" strokeWidth="0.4" opacity="0.12"
+            strokeLinecap="round" />
+        ))}
+
+        {/* Snake game */}
+        <g filter="url(#rc-neon)" style={{ animation: `rc-snakemove ${snake.dur}s ease-in-out ${snake.delay}s infinite` }}>
+          {snake.segs.map((seg, i) => (
+            <rect key={`sn${i}`} x={seg.x} y={seg.y} width="1.2" height="1.2"
+              fill={i === 0 ? '#88ff00' : '#44cc00'} opacity={0.3 - i * 0.015}
+              rx="0.1" />
+          ))}
+          {/* Apple */}
+          <circle cx={snake.segs[0].x + 8} cy={snake.segs[0].y} r="0.7"
+            fill="#ff0040" opacity="0.35" />
+        </g>
+      </svg>
+
+      {/* Pac-Man ghosts */}
+      {ghosts.map((g, i) => (
+        <svg key={`gh${i}`} className="absolute" viewBox="0 0 14 16"
+          style={{
+            left: `${g.x}%`, top: `${g.y}%`,
+            width: '24px', height: '28px',
+            filter: `drop-shadow(0 0 8px ${g.color}50)`,
+            animation: `rc-ghost ${g.dur}s ease-in-out ${g.delay}s infinite`,
+            ['--rc-gdir' as string]: `${g.dir * 250}px`,
+            opacity: 0,
+          }}>
+          <path d="M1 14 L1 5 Q1 1 7 1 Q13 1 13 5 L13 14 L11 12 L9 14 L7 12 L5 14 L3 12Z"
+            fill={g.color} opacity="0.4" />
+          <rect x="3" y="5" width="3" height="3" fill="white" opacity="0.55" rx="0.5" />
+          <rect x="8" y="5" width="3" height="3" fill="white" opacity="0.55" rx="0.5" />
+          <rect x={g.dir > 0 ? '5' : '3'} y="6" width="1.5" height="1.5" fill="#111" opacity="0.6" />
+          <rect x={g.dir > 0 ? '10' : '8'} y="6" width="1.5" height="1.5" fill="#111" opacity="0.6" />
+        </svg>
+      ))}
+
+      {/* Falling Tetris pieces */}
+      {tetris.map((t, i) => (
+        <div key={`tet${i}`} className="absolute" style={{
+          left: `${t.x}%`, top: '-5%',
+          transform: `rotate(${t.rot}deg)`,
+          animation: `rc-tetfall ${t.dur}s linear ${t.delay}s infinite`,
+          opacity: 0,
+        }}>
+          {t.shape.map((row, ri) =>
+            row.map((cell, ci) => cell ? (
+              <div key={`${ri}-${ci}`} className="absolute"
+                style={{
+                  left: `${ci * 7}px`, top: `${ri * 7}px`,
+                  width: '6px', height: '6px',
+                  background: t.color,
+                  opacity: 0.18,
+                  border: `1px solid ${t.color}35`,
+                  boxShadow: `0 0 3px ${t.color}25`,
+                }} />
+            ) : null)
+          )}
+        </div>
+      ))}
+
+      {/* Power-ups floating */}
+      {powerups.map((p, i) => (
+        <div key={`pu${i}`} className="absolute" style={{
+          left: `${p.x}%`, top: `${p.y}%`,
+          width: `${p.size}px`, height: `${p.size}px`,
+          opacity: 0,
+          animation: `rc-powerup ${p.dur}s ease-in-out ${p.delay}s infinite`,
+        }}>
+          <svg viewBox="0 0 16 16" width="100%" height="100%">
+            {p.type === 'cherry' && <>
+              <circle cx="6" cy="12" r="3.5" fill="#ff0040" opacity="0.4" />
+              <circle cx="11" cy="10" r="3" fill="#ff0040" opacity="0.35" />
+              <path d="M6 8 Q8 2 11 7" fill="none" stroke="#00cc00" strokeWidth="1" opacity="0.3" />
+            </>}
+            {p.type === 'star' && <path d="M8 1 L10 6 L15 6 L11 9 L13 14 L8 11 L3 14 L5 9 L1 6 L6 6Z"
+              fill="#ffff00" opacity="0.3" />}
+            {p.type === 'mushroom' && <>
+              <ellipse cx="8" cy="7" rx="6" ry="5" fill="#ff0000" opacity="0.35" />
+              <circle cx="5" cy="6" r="1.5" fill="white" opacity="0.25" />
+              <circle cx="11" cy="6" r="1.5" fill="white" opacity="0.25" />
+              <rect x="6" y="11" width="4" height="4" fill="#ffe0a0" opacity="0.3" rx="1" />
+            </>}
+            {p.type === 'heart' && <path d="M8 14 Q2 9 2 5 Q2 2 5 2 Q7 2 8 4 Q9 2 11 2 Q14 2 14 5 Q14 9 8 14Z"
+              fill="#ff4488" opacity="0.35" />}
+          </svg>
+        </div>
+      ))}
+
+      {/* Pixel explosion bursts */}
+      {explosions.map((ex, ei) => (
+        <div key={`ex${ei}`} className="absolute" style={{
+          left: `${ex.x}%`, top: `${ex.y}%`, width: 0, height: 0,
+        }}>
+          {ex.particles.map((p, pi) => (
+            <div key={pi} className="absolute"
+              style={{
+                width: `${p.size}px`, height: `${p.size}px`,
+                background: p.color,
+                boxShadow: `0 0 4px ${p.color}60`,
+                opacity: 0,
+                animation: `rc-explode ${ex.dur}s ease-out ${ex.delay}s infinite`,
+                ['--rc-ex' as string]: `${Math.cos(p.angle * Math.PI / 180) * p.dist}px`,
+                ['--rc-ey' as string]: `${Math.sin(p.angle * Math.PI / 180) * p.dist}px`,
+              }} />
+          ))}
+        </div>
+      ))}
+
+      {/* Arcade cabinet silhouettes */}
+      {cabinets.map((cab, i) => (
+        <div key={`cab${i}`} className="absolute bottom-0"
+          style={{ left: `${cab.x}%`, width: `${cab.w}%`, height: `${cab.h}%` }}>
+          <div className="absolute inset-0" style={{
+            background: 'linear-gradient(to top, rgba(8,8,22,0.85), rgba(12,12,30,0.65) 65%, rgba(16,16,38,0.4) 82%, transparent)',
+            clipPath: 'polygon(8% 100%, 3% 28%, 12% 0%, 88% 0%, 97% 28%, 92% 100%)',
+          }} />
+          <div className="absolute" style={{
+            left: '18%', right: '18%', top: '6%', height: '32%',
+            background: cab.screenColor,
+            opacity: 0.07,
+            boxShadow: `0 0 25px ${cab.screenColor}25, 0 0 50px ${cab.screenColor}10`,
+            animation: `rc-screen ${cab.flicker}s step-end infinite`,
+          }} />
+          <div className="absolute" style={{
+            left: '18%', right: '18%', top: '6%', height: '32%',
+            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 3px)',
+            opacity: 0.5,
+          }} />
+          {/* Marquee glow at top */}
+          <div className="absolute" style={{
+            left: '15%', right: '15%', top: '1%', height: '4%',
+            background: cab.screenColor,
+            opacity: 0.04,
+            filter: 'blur(3px)',
+            animation: `rc-twinkle ${cab.flicker * 1.5}s ease-in-out infinite`,
+          }} />
+          {/* Joystick dot */}
+          <div className="absolute" style={{
+            left: '40%', top: '52%', width: '8%', height: '4%',
+            borderRadius: '50%',
+            background: 'rgba(200,200,200,0.08)',
+          }} />
+          {/* Buttons */}
+          {[55, 63, 71].map((bx, bi) => (
+            <div key={`btn${bi}`} className="absolute" style={{
+              left: `${bx}%`, top: '53%', width: '6%', height: '3%',
+              borderRadius: '50%',
+              background: ['rgba(255,0,0,0.1)', 'rgba(0,100,255,0.08)', 'rgba(255,255,0,0.07)'][bi],
+            }} />
+          ))}
+          <div className="absolute" style={{
+            left: '40%', width: '20%', top: '70%', height: '2.5%',
+            background: 'rgba(80,80,80,0.12)',
+            borderRadius: '2px',
+          }} />
+        </div>
+      ))}
+
+      {/* Laser shots */}
+      {lasers.map((l, i) => (
+        <div key={`ls${i}`} className="absolute"
+          style={{
+            left: `${l.x}%`, bottom: '0', width: '2px', height: '14px',
+            background: `linear-gradient(to top, ${l.color}, ${l.color}88)`,
+            boxShadow: `0 0 6px ${l.color}50, 0 0 14px ${l.color}20`,
+            animation: `rc-laser ${l.dur}s linear ${l.delay}s infinite`,
+            opacity: 0,
+          }} />
+      ))}
+
+      {/* Falling coins with spin */}
+      {coins.map((c, i) => (
+        <div key={`cn${i}`} className="absolute"
+          style={{
+            left: `${c.x}%`, top: '-4%',
+            width: `${c.size}px`, height: `${c.size}px`,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #ffd700, #ffaa00, #ffd700)',
+            border: '1px solid rgba(255,200,0,0.25)',
+            boxShadow: '0 0 10px rgba(255,215,0,0.25), inset 0 0 3px rgba(255,255,200,0.25)',
+            animation: `rc-coin ${c.dur}s ease-in ${c.delay}s infinite`,
+            opacity: 0,
+          }} />
+      ))}
+
+      {/* HUD elements */}
+      <div className="absolute top-[2%] left-[50%] -translate-x-1/2" style={{
+        fontFamily: '"Courier New", monospace', fontSize: '9px', letterSpacing: '4px',
+        color: '#ff0000', opacity: 0.07,
+        textShadow: '0 0 8px #ff000030',
+        animation: 'rc-blink 1.5s step-end infinite',
+      }}>HIGH SCORE</div>
+
+      <div className="absolute top-[5%] left-[50%] -translate-x-1/2" style={{
+        fontFamily: '"Courier New", monospace', fontSize: '7px', letterSpacing: '2px',
+        color: '#ffffff', opacity: 0.05,
+      }}>99999</div>
+
+      {/* Lives indicator — 3 small ships */}
+      <div className="absolute top-[2.5%] left-[5%] flex gap-[4px]">
+        {[0,1,2].map(i => (
+          <div key={`life${i}`} style={{
+            width: '6px', height: '6px',
+            clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+            background: '#00ff88', opacity: 0.08,
+          }} />
+        ))}
+      </div>
+
+      {/* Level indicator */}
+      <div className="absolute top-[2.5%] right-[5%]" style={{
+        fontFamily: '"Courier New", monospace', fontSize: '6px', letterSpacing: '1px',
+        color: '#00ffff', opacity: 0.06,
+      }}>LVL 42</div>
+
+      {/* Health bar */}
+      <div className="absolute top-[8%] left-[5%]" style={{
+        width: '40px', height: '4px',
+        background: 'rgba(255,0,0,0.06)',
+        border: '1px solid rgba(255,255,255,0.04)',
+      }}>
+        <div style={{
+          width: '75%', height: '100%',
+          background: 'linear-gradient(90deg, #ff0000, #ffff00)',
+          opacity: 0.3,
+        }} />
+      </div>
+
+      <div className="absolute bottom-[3%] left-[50%] -translate-x-1/2" style={{
+        fontFamily: '"Courier New", monospace', fontSize: '8px', letterSpacing: '3px',
+        color: '#00ff88', opacity: 0.06,
+        textShadow: '0 0 10px #00ff8830',
+        animation: 'rc-blink 1s step-end infinite',
+      }}>INSERT COIN</div>
+
+      {/* "GAME OVER" — occasional flash */}
+      <div className="absolute top-[45%] left-[50%] -translate-x-1/2" style={{
+        fontFamily: '"Courier New", monospace', fontSize: '14px', letterSpacing: '6px',
+        color: '#ff0000', opacity: 0,
+        textShadow: '0 0 15px #ff000040, 0 0 30px #ff000020',
+        animation: 'rc-gameover 20s step-end infinite',
+      }}>GAME OVER</div>
+
+      {/* CRT scanline overlay */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px)',
+        animation: 'rc-scanroll 6s linear infinite',
+      }} />
+
+      {/* Horizontal CRT interference line */}
+      <div className="absolute left-0 right-0 h-[2px]" style={{
+        background: 'rgba(255,255,255,0.03)',
+        animation: 'rc-hline 4s linear infinite',
+      }} />
+
+      {/* CRT vignette */}
+      <div className="absolute inset-0" style={{
+        background: 'radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(0,0,0,0.3) 100%)',
+      }} />
+
+      {/* Neon border glow — all 4 edges */}
+      <div className="absolute top-0 left-0 bottom-0 w-[2px]" style={{
+        background: 'linear-gradient(to bottom, transparent 8%, rgba(255,0,255,0.12) 25%, rgba(0,255,255,0.1) 50%, rgba(0,255,136,0.08) 75%, transparent 92%)',
+        boxShadow: '2px 0 15px rgba(255,0,255,0.04)',
+      }} />
+      <div className="absolute top-0 right-0 bottom-0 w-[2px]" style={{
+        background: 'linear-gradient(to bottom, transparent 8%, rgba(0,255,255,0.12) 25%, rgba(255,0,255,0.1) 50%, rgba(0,255,136,0.08) 75%, transparent 92%)',
+        boxShadow: '-2px 0 15px rgba(0,255,255,0.04)',
+      }} />
+      <div className="absolute top-0 left-0 right-0 h-[2px]" style={{
+        background: 'linear-gradient(to right, transparent 8%, rgba(255,0,255,0.08) 30%, rgba(0,255,255,0.06) 70%, transparent 92%)',
+        boxShadow: '0 2px 12px rgba(255,0,255,0.03)',
+      }} />
+      <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{
+        background: 'linear-gradient(to right, transparent 8%, rgba(0,255,136,0.1) 30%, rgba(255,0,255,0.07) 70%, transparent 92%)',
+        boxShadow: '0 -2px 12px rgba(0,255,136,0.04)',
+      }} />
+
+      {/* Ambient neon glow clouds */}
+      <div className="absolute top-[15%] left-[12%] w-[min(220px,22vw)] h-[min(220px,22vh)] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(255,0,255,0.045), transparent 60%)', filter: 'blur(35px)', animation: 'rc-glow1 7s ease-in-out infinite' }} />
+      <div className="absolute top-[35%] right-[8%] w-[min(280px,25vw)] h-[min(280px,25vh)] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(0,255,255,0.04), transparent 60%)', filter: 'blur(40px)', animation: 'rc-glow1 9s ease-in-out 2.5s infinite' }} />
+      <div className="absolute bottom-[20%] left-[35%] w-[min(200px,20vw)] h-[min(200px,20vh)] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(0,255,136,0.04), transparent 60%)', filter: 'blur(30px)', animation: 'rc-glow1 6s ease-in-out 4.5s infinite' }} />
+      <div className="absolute top-[60%] left-[60%] w-[min(160px,16vw)] h-[min(160px,16vh)] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(255,255,0,0.025), transparent 60%)', filter: 'blur(25px)', animation: 'rc-glow1 8s ease-in-out 6s infinite' }} />
+
+      {/* CRT flicker */}
+      <div className="absolute inset-0" style={{
+        animation: 'rc-crtflick 5s step-end infinite',
+        background: 'rgba(255,255,255,0.012)',
+        opacity: 0,
+      }} />
+
+      <style>{`
+        @keyframes rc-twinkle { 0%,100%{opacity:0.15} 50%{opacity:0.65} }
+        @keyframes rc-invader { 0%,100%{transform:translateX(0)} 25%{transform:translateX(6px)} 50%{transform:translateX(0)} 75%{transform:translateX(-6px)} }
+        @keyframes rc-ship { 0%,100%{transform:translateX(0)} 25%{transform:translateX(12px)} 75%{transform:translateX(-12px)} }
+        @keyframes rc-pacmove { 0%{transform:translateX(-5%)} 100%{transform:translateX(105%)} }
+        @keyframes rc-chomp { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+        @keyframes rc-ghost { 0%{opacity:0;transform:translateX(0)} 6%{opacity:0.55} 94%{opacity:0.35} 100%{opacity:0;transform:translateX(var(--rc-gdir,120px))} }
+        @keyframes rc-tetfall { 0%{opacity:0;transform:translateY(0)} 3%{opacity:0.22} 97%{opacity:0.1} 100%{opacity:0;transform:translateY(115vh)} }
+        @keyframes rc-laser { 0%{opacity:0;bottom:0} 5%{opacity:0.6} 95%{opacity:0.4} 100%{opacity:0;bottom:100%} }
+        @keyframes rc-coin { 0%{opacity:0;transform:translateY(0) rotateY(0deg)} 6%{opacity:0.3} 92%{opacity:0.15} 100%{opacity:0;transform:translateY(110vh) rotateY(1440deg)} }
+        @keyframes rc-screen { 0%{opacity:0.07} 25%{opacity:0.09} 50%{opacity:0.04} 75%{opacity:0.08} 100%{opacity:0.07} }
+        @keyframes rc-blink { 0%,49%{opacity:inherit} 50%,100%{opacity:0} }
+        @keyframes rc-scanroll { 0%{background-position:0 0} 100%{background-position:0 80px} }
+        @keyframes rc-hline { 0%{top:-2%} 100%{top:102%} }
+        @keyframes rc-glow1 { 0%,100%{opacity:0.65;transform:scale(1)} 50%{opacity:1;transform:scale(1.12)} }
+        @keyframes rc-crtflick { 0%,96%{opacity:0} 96.5%{opacity:1} 97%{opacity:0} 97.5%{opacity:0.6} 98%{opacity:0} }
+        @keyframes rc-powerup { 0%{opacity:0;transform:scale(0.5)} 15%{opacity:0.5;transform:scale(1.1)} 50%{opacity:0.4;transform:scale(1) translateY(-8px)} 85%{opacity:0.3;transform:scale(0.9)} 100%{opacity:0;transform:scale(0.4)} }
+        @keyframes rc-explode { 0%{opacity:0;transform:translate(0,0) scale(1)} 8%{opacity:0.8} 100%{opacity:0;transform:translate(var(--rc-ex,15px),var(--rc-ey,-15px)) scale(0)} }
+        @keyframes rc-paddle-l { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+        @keyframes rc-paddle-r { 0%,100%{transform:translateY(0)} 50%{transform:translateY(3px)} }
+        @keyframes rc-pongball { 0%{transform:translate(0,0)} 25%{transform:translate(20px,-3px)} 50%{transform:translate(0,2px)} 75%{transform:translate(-20px,-2px)} 100%{transform:translate(0,0)} }
+        @keyframes rc-snakemove { 0%,100%{transform:translate(0,0)} 50%{transform:translate(15px,5px)} }
+        @keyframes rc-floorpulse { 0%,100%{opacity:0.7} 50%{opacity:1} }
+        @keyframes rc-gameover { 0%,92%{opacity:0} 93%{opacity:0.06} 93.5%{opacity:0} 94%{opacity:0.05} 94.5%{opacity:0} 95%{opacity:0.07} 96%{opacity:0} }
+      `}</style>
+    </Shell>
+  );
+}
+
+/* ── Starfield: Deep space with dense twinkling stars, nebulae, shooting stars ── */
+function StarfieldBg() {
+  const stars = useMemo(() => {
+    const rand = seededRand(555);
+    return Array.from({ length: 180 }, () => ({
+      x: rand() * 100, y: rand() * 100,
+      size: 0.4 + rand() * 2.8,
+      opacity: 0.15 + rand() * 0.65,
+      dur: 1.5 + rand() * 4,
+      delay: rand() * 8,
+      bright: rand() < 0.18,
+      color: rand() < 0.3 ? '180,200,255' : rand() < 0.5 ? '220,200,255' : '199,210,254',
+    }));
+  }, []);
+
+  const driftStars = useMemo(() => {
+    const rand = seededRand(666);
+    return Array.from({ length: 25 }, () => ({
+      x: rand() * 100, y: rand() * 100,
+      size: 0.8 + rand() * 1.5,
+      opacity: 0.2 + rand() * 0.4,
+      driftX: -20 + rand() * 40,
+      driftY: -15 + rand() * 30,
+      dur: 20 + rand() * 40,
+      delay: rand() * 20,
+    }));
+  }, []);
+
+  const shootingStars = useMemo(() => {
+    const rand = seededRand(777);
+    return Array.from({ length: 8 }, (_, i) => ({
+      x: 5 + rand() * 90, y: 3 + rand() * 50,
+      angle: -20 - rand() * 30,
+      dur: 8 + rand() * 14,
+      delay: i * 5 + rand() * 4,
+      len: 80 + rand() * 140,
+    }));
+  }, []);
+
+  const constellations = useMemo(() => {
+    const rand = seededRand(333);
+    const lines: { x1: number; y1: number; x2: number; y2: number; opacity: number; dur: number; delay: number }[] = [];
+    const pts = Array.from({ length: 18 }, () => ({ x: rand() * 90 + 5, y: rand() * 90 + 5 }));
+    for (let i = 0; i < pts.length - 1; i++) {
+      const dx = pts[i].x - pts[i + 1].x;
+      const dy = pts[i].y - pts[i + 1].y;
+      if (Math.sqrt(dx * dx + dy * dy) < 28) {
+        lines.push({ x1: pts[i].x, y1: pts[i].y, x2: pts[i + 1].x, y2: pts[i + 1].y, opacity: 0.06 + rand() * 0.1, dur: 6 + rand() * 10, delay: rand() * 8 });
+      }
+    }
+    return lines;
+  }, []);
+
+  return (
+    <Shell>
+      <div className="absolute inset-0" style={{
+        background: 'radial-gradient(ellipse at 25% 35%, rgba(99,102,241,0.1) 0%, transparent 50%), radial-gradient(ellipse at 75% 65%, rgba(139,92,246,0.08) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(59,130,246,0.06) 0%, transparent 40%)',
+      }} />
+
+      <div className="absolute w-[min(550px,50vw)] h-[min(450px,45vh)] top-[8%] left-[3%] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(99,102,241,0.12), rgba(139,92,246,0.06) 40%, transparent 65%)', filter: 'blur(50px)', animation: 'sf-nebula1 20s ease-in-out infinite' }} />
+      <div className="absolute w-[min(450px,45vw)] h-[min(400px,40vh)] bottom-[12%] right-[8%] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(167,139,250,0.1), rgba(129,140,248,0.05) 45%, transparent 65%)', filter: 'blur(45px)', animation: 'sf-nebula2 18s ease-in-out 3s infinite' }} />
+      <div className="absolute w-[min(300px,35vw)] h-[min(250px,30vh)] top-[50%] left-[40%] rounded-full"
+        style={{ background: 'radial-gradient(ellipse, rgba(59,130,246,0.08), transparent 60%)', filter: 'blur(40px)', animation: 'sf-nebula3 24s ease-in-out 7s infinite' }} />
+
+      <svg className="absolute inset-0 w-full h-full">
+        {constellations.map((l, i) => (
+          <line key={`cl${i}`} x1={`${l.x1}%`} y1={`${l.y1}%`} x2={`${l.x2}%`} y2={`${l.y2}%`}
+            stroke="rgba(199,210,254,0.08)" strokeWidth="0.5"
+            style={{ animation: `sf-constell ${l.dur}s ease-in-out ${l.delay}s infinite` }} />
+        ))}
+        {stars.map((s, i) => (
+          <circle key={`s${i}`} cx={`${s.x}%`} cy={`${s.y}%`} r={s.size}
+            fill={s.bright ? `rgba(${s.color},0.95)` : `rgba(${s.color},0.8)`}
+            opacity={s.opacity}
+            style={{
+              animation: `sf-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
+              filter: s.bright ? `drop-shadow(0 0 4px rgba(${s.color},0.6))` : undefined,
+            }} />
+        ))}
+        {driftStars.map((d, i) => (
+          <circle key={`d${i}`} cx={`${d.x}%`} cy={`${d.y}%`} r={d.size}
+            fill="rgba(199,210,254,0.7)" opacity={d.opacity}
+            style={{ animation: `sf-drift${i % 3} ${d.dur}s ease-in-out ${d.delay}s infinite` }} />
+        ))}
+      </svg>
+
+      {shootingStars.map((ss, i) => (
+        <div key={`sh${i}`} className="absolute" style={{
+          left: `${ss.x}%`, top: `${ss.y}%`,
+          width: `${ss.len}px`, height: '1.5px',
+          background: 'linear-gradient(90deg, transparent, rgba(199,210,254,0.5) 30%, rgba(255,255,255,0.9) 70%, rgba(199,210,254,0.7) 90%, transparent)',
+          transform: `rotate(${ss.angle}deg)`,
+          animation: `sf-shoot ${ss.dur}s ease-in ${ss.delay}s infinite`,
+          opacity: 0,
+          borderRadius: '1px',
+          boxShadow: '0 0 6px rgba(199,210,254,0.4)',
+        }} />
+      ))}
+
+      <div className="absolute inset-0" style={{
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.25'/%3E%3C/svg%3E")`,
+        opacity: 0.04,
+      }} />
+
+      <style>{`
+        @keyframes sf-twinkle { 0%,100%{opacity:0.1} 25%{opacity:0.7} 50%{opacity:0.05} 75%{opacity:0.5} }
+        @keyframes sf-nebula1 { 0%,100%{transform:scale(1) translate(0,0);opacity:0.6} 33%{transform:scale(1.2) translate(3%,-2%);opacity:1} 66%{transform:scale(0.95) translate(-2%,1%);opacity:0.8} }
+        @keyframes sf-nebula2 { 0%,100%{transform:scale(1) translate(0,0);opacity:0.5} 40%{transform:scale(1.15) translate(-3%,3%);opacity:0.9} 80%{transform:scale(1.05) translate(2%,-1%);opacity:0.7} }
+        @keyframes sf-nebula3 { 0%,100%{transform:scale(0.9) translate(0,0);opacity:0.4} 50%{transform:scale(1.2) translate(5%,-4%);opacity:0.8} }
+        @keyframes sf-constell { 0%,100%{opacity:0.3} 30%{opacity:0.9} 60%{opacity:0.15} }
+        @keyframes sf-shoot { 0%{opacity:0;transform:rotate(var(--sf-a,-30deg)) translateX(-100px)} 1.5%{opacity:0.9} 4%{opacity:0.3} 6%{opacity:0} 100%{opacity:0} }
+        @keyframes sf-drift0 { 0%,100%{transform:translate(0,0);opacity:0.3} 50%{transform:translate(25px,15px);opacity:0.6} }
+        @keyframes sf-drift1 { 0%,100%{transform:translate(0,0);opacity:0.25} 50%{transform:translate(-20px,10px);opacity:0.55} }
+        @keyframes sf-drift2 { 0%,100%{transform:translate(0,0);opacity:0.2} 50%{transform:translate(15px,-20px);opacity:0.5} }
+      `}</style>
+    </Shell>
+  );
+}
+
+/* ── Light: Warm sunlit atmosphere with soft rays and floating motes ── */
+function LightBg() {
+  const motes = useMemo(() => {
+    const rand = seededRand(888);
+    return Array.from({ length: 30 }, () => ({
+      x: rand() * 100, y: rand() * 100,
+      size: 1 + rand() * 3,
+      dur: 8 + rand() * 15,
+      delay: rand() * 12,
+    }));
+  }, []);
+
+  return (
+    <Shell>
+      <div className="absolute inset-0" style={{
+        background: 'radial-gradient(ellipse at 50% 0%, rgba(250,204,21,0.08) 0%, transparent 60%)',
+      }} />
+
+      {Array.from({ length: 7 }).map((_, i) => (
+        <div key={`ray${i}`} className="absolute" style={{
+          top: 0, left: `${20 + i * 10}%`,
+          width: `${3 + (i % 3)}px`, height: '100%',
+          background: `linear-gradient(to bottom, rgba(250,204,21,${0.04 + (i % 3) * 0.015}), transparent 70%)`,
+          transform: `rotate(${-12 + i * 4}deg)`,
+          transformOrigin: 'top center',
+          animation: `lt-ray ${8 + i * 2}s ease-in-out ${i * 1.5}s infinite`,
+        }} />
+      ))}
+
+      <div className="absolute w-[min(400px,40vw)] h-[min(400px,40vh)] -top-[10%] left-[20%] rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.1), transparent 55%)', filter: 'blur(50px)', animation: 'lt-orb1 20s ease-in-out infinite' }} />
+
+      <svg className="absolute inset-0 w-full h-full">
+        {motes.map((m, i) => (
+          <circle key={`m${i}`} cx={`${m.x}%`} cy={`${m.y}%`} r={m.size}
+            fill="rgba(251,191,36,0.3)" opacity="0.3"
+            style={{ animation: `lt-mote ${m.dur}s ease-in-out ${m.delay}s infinite`, filter: 'blur(0.5px)' }} />
+        ))}
+      </svg>
+
+      <style>{`
+        @keyframes lt-ray { 0%,100%{opacity:0.6;transform:rotate(var(--lt-r,0deg)) scaleX(1)} 50%{opacity:1;transform:rotate(var(--lt-r,0deg)) scaleX(1.3)} }
+        @keyframes lt-orb1 { 0%,100%{transform:scale(1);opacity:0.7} 50%{transform:scale(1.2);opacity:1} }
+        @keyframes lt-mote { 0%{opacity:0.1;transform:translateY(0)} 50%{opacity:0.5;transform:translateY(-15px)} 100%{opacity:0.1;transform:translateY(0)} }
+      `}</style>
+    </Shell>
+  );
+}
+
+/* ── Custom: Subtle grid workshop with tool-inspired accents ── */
+function CustomBg() {
+  return (
+    <Shell>
+      <div className="absolute inset-0" style={{
+        background: `
+          linear-gradient(rgba(129,140,248,0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(129,140,248,0.025) 1px, transparent 1px)`,
+        backgroundSize: '40px 40px',
+        maskImage: 'linear-gradient(to bottom, transparent 5%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0.5) 70%, transparent 95%)',
+        WebkitMaskImage: 'linear-gradient(to bottom, transparent 5%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0.5) 70%, transparent 95%)',
+      }} />
+
+      <div className="absolute w-[min(350px,35vw)] h-[min(350px,35vh)] top-[20%] left-[10%] rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(74,222,128,0.06), transparent 55%)', filter: 'blur(40px)', animation: 'cu-glow 18s ease-in-out infinite' }} />
+      <div className="absolute w-[min(300px,30vw)] h-[min(300px,30vh)] bottom-[15%] right-[15%] rounded-full"
+        style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.06), transparent 55%)', filter: 'blur(35px)', animation: 'cu-glow 14s ease-in-out 4s infinite' }} />
+
+      <svg className="absolute inset-0 w-full h-full">
+        {[{x:15,y:25,r:18},{x:82,y:70,r:22},{x:50,y:85,r:15}].map((g, i) => (
+          <circle key={`g${i}`} cx={`${g.x}%`} cy={`${g.y}%`} r={g.r}
+            fill="none" stroke="rgba(129,140,248,0.06)" strokeWidth="1"
+            strokeDasharray="4 6"
+            style={{ animation: `cu-spin ${20 + i * 5}s linear infinite` }} />
+        ))}
+      </svg>
+
+      <style>{`
+        @keyframes cu-glow { 0%,100%{transform:scale(1);opacity:0.6} 50%{transform:scale(1.15);opacity:1} }
+        @keyframes cu-spin { 0%{stroke-dashoffset:0} 100%{stroke-dashoffset:100} }
       `}</style>
     </Shell>
   );

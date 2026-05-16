@@ -39,8 +39,8 @@ export default function CallNotification() {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
     const n = new Notification(`Incoming ${callType} call`, {
       body: `${callWith} is calling you`,
-      icon: '/favicon.svg',
-      tag: 'webrtc-call',
+      icon: '/darkbear/favicon.svg',
+      tag: 'ladon-call',
       requireInteraction: true,
     });
     n.onclick = () => { window.focus(); n.close(); };
