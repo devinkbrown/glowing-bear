@@ -14,6 +14,33 @@ export interface PeerState {
   connectionQuality: 'excellent' | 'good' | 'fair' | 'poor';
 }
 
+export interface VoiceParticipant {
+  nick: string;
+  sample_rate: number;
+  speaking: boolean;
+  rtt_ms: number;
+  loss: number;
+}
+
+export interface VideoParticipant {
+  nick: string;
+  w: number;
+  h: number;
+  fps: number;
+  screen: boolean;
+  seen_iframe: boolean;
+}
+
+export interface MediaStat {
+  nick: string;
+  rtt_ms: number;
+  loss: number;
+  bw_kbps: number;
+  frames_total: number;
+  frames_i: number;
+  keyframe_pending: boolean;
+}
+
 export interface VideoSlice {
   callState: CallState;
   callWith: string;
@@ -24,6 +51,9 @@ export interface VideoSlice {
   localScreenStream: null;
   peers: Map<string, PeerState>;
   audioLevels: Map<string, { level: number; speaking: boolean }>;
+  rosterVoice: VoiceParticipant[];
+  rosterVideo: VideoParticipant[];
+  mediaStats: MediaStat[];
   videoError: string | null;
   minimized: boolean;
   audioMuted: boolean;
@@ -43,7 +73,11 @@ export interface VideoSlice {
   toggleScreenShare: () => void;
   setSpotlight: (nick: string | null) => void;
   handleVideoLine: (fromNick: string, target: string, type: string, payload: string) => void;
+  handleServerMedia: (channel: string, subtype: string, payload: string) => void;
+  requestRoster: (channel: string) => void;
+  requestStats: (channel: string) => void;
   sendLadonMedia: (target: string, type: string, payload?: unknown) => void;
+  sendMediaFrame: (channel: string, subtype: string, payload?: string) => void;
   setVideoSendFn: (fn: (text: string) => void) => void;
   getVideoServerBuffer: () => string | null;
   isVideoActive: () => boolean;
@@ -62,9 +96,16 @@ function encodePayload(payload?: unknown): string {
   return JSON.stringify(payload);
 }
 
+// Old-style MEDIA signaling (DM calls, backward compat with other clients)
 function sendMedia(target: string, type: string, payload?: unknown) {
   if (!sendFn || !target || !type) return;
   sendFn(`/quote MEDIA ${target} ${type.toUpperCase()} :${encodePayload(payload)}`);
+}
+
+// New MEDIAFRAME command (channel voice/video via ophion server pipeline)
+function sendMediaFrameCmd(channel: string, subtype: string, payload = '') {
+  if (!sendFn || !channel || !subtype) return;
+  sendFn(`/quote MEDIAFRAME ${channel} ${subtype}${payload ? ` :${payload}` : ''}`);
 }
 
 function normalizeNick(nick: string): string {
@@ -91,6 +132,9 @@ function resetCallState(): Partial<VideoSlice> {
     callStartTime: null,
     peers: new Map(),
     audioLevels: new Map(),
+    rosterVoice: [],
+    rosterVideo: [],
+    mediaStats: [],
     videoError: null,
     minimized: false,
     audioMuted: false,
@@ -100,6 +144,13 @@ function resetCallState(): Partial<VideoSlice> {
     localStream: null,
     localScreenStream: null,
   };
+}
+
+function qualityFromStats(stat: MediaStat): PeerState['connectionQuality'] {
+  if (stat.loss < 0.02 && stat.rtt_ms < 100) return 'excellent';
+  if (stat.loss < 0.05 && stat.rtt_ms < 200) return 'good';
+  if (stat.loss < 0.10 && stat.rtt_ms < 400) return 'fair';
+  return 'poor';
 }
 
 function parsePayload(payload: string): Record<string, unknown> {
@@ -122,6 +173,9 @@ export const createVideoSlice: StateCreator<CombinedSlice, [], [], VideoSlice> =
   localScreenStream: null,
   peers: new Map(),
   audioLevels: new Map(),
+  rosterVoice: [],
+  rosterVideo: [],
+  mediaStats: [],
   videoError: null,
   minimized: false,
   audioMuted: false,
@@ -170,21 +224,25 @@ export const createVideoSlice: StateCreator<CombinedSlice, [], [], VideoSlice> =
   },
 
   hangup: () => {
-    const { callChannel, callWith } = get();
-    if (callChannel) sendMedia(callChannel, 'LEAVE', { ts: Date.now() });
-    else if (callWith) sendMedia(callWith, 'HANGUP', { ts: Date.now() });
+    const { callChannel, callWith, callType } = get();
+    if (callChannel) {
+      // Channel session: leave via MEDIAFRAME
+      sendMediaFrameCmd(callChannel, callType === 'voice' ? 'VOICE_LEAVE' : 'VIDEO_LEAVE');
+    } else if (callWith) {
+      // DM call: old MEDIA HANGUP signaling
+      sendMedia(callWith, 'HANGUP', { ts: Date.now() });
+    }
     set(resetCallState());
   },
 
   joinRoom: (channel, voiceOnly = false) => {
     const callType = voiceOnly ? 'voice' : 'video';
-    sendMedia(channel, voiceOnly ? 'VOICE_JOIN' : 'VIDEO_JOIN', {
-      action: 'join',
-      mode: callType,
-      transport: 'ladon',
-      client: 'darkbear',
-      ts: Date.now(),
-    });
+    // Use MEDIAFRAME with ophion server pipeline (320x240 15fps for IRC-friendly bandwidth)
+    if (voiceOnly) {
+      sendMediaFrameCmd(channel, 'VOICE_JOIN', '48000 2');
+    } else {
+      sendMediaFrameCmd(channel, 'VIDEO_JOIN', '320 240 40 15');
+    }
     set({
       callState: 'in_call',
       callWith: '',
@@ -192,35 +250,41 @@ export const createVideoSlice: StateCreator<CombinedSlice, [], [], VideoSlice> =
       callType,
       callStartTime: Date.now(),
       peers: new Map(),
+      rosterVoice: [],
+      rosterVideo: [],
+      mediaStats: [],
       videoError: null,
       minimized: false,
     });
+    // Request roster immediately so participants populate
+    sendMediaFrameCmd(channel, 'ROSTER', '');
   },
 
   leaveRoom: (channel) => {
-    sendMedia(channel, 'LEAVE', { ts: Date.now() });
+    const { callType } = get();
+    sendMediaFrameCmd(channel, callType === 'voice' ? 'VOICE_LEAVE' : 'VIDEO_LEAVE');
     set(resetCallState());
   },
 
   toggleAudioMute: () => {
-    const muted = !get().audioMuted;
-    const target = get().callChannel || get().callWith;
-    set({ audioMuted: muted });
-    if (target) sendMedia(target, muted ? 'MUTE' : 'UNMUTE', { audio: muted, ts: Date.now() });
+    set({ audioMuted: !get().audioMuted });
   },
 
   toggleVideoOff: () => {
-    const off = !get().videoOff;
-    const target = get().callChannel || get().callWith;
-    set({ videoOff: off });
-    if (target) sendMedia(target, off ? 'VIDEO_OFF' : 'VIDEO_ON', { video: !off, ts: Date.now() });
+    set({ videoOff: !get().videoOff });
   },
 
   toggleScreenShare: () => {
     const sharing = !get().screenSharing;
-    const target = get().callChannel || get().callWith;
+    const { callChannel, callType } = get();
     set({ screenSharing: sharing, spotlightNick: sharing ? '_screen' : null });
-    if (target) sendMedia(target, sharing ? 'SCREEN_START' : 'SCREEN_STOP', { screen: sharing, ts: Date.now() });
+    if (callChannel && callType === 'video') {
+      if (sharing) {
+        sendMediaFrameCmd(callChannel, 'VIDEO_JOIN', '1280 720 60 15 screen');
+      } else {
+        sendMediaFrameCmd(callChannel, 'VIDEO_JOIN', '320 240 40 15');
+      }
+    }
   },
 
   setSpotlight: (nick) => set({ spotlightNick: nick }),
@@ -231,6 +295,7 @@ export const createVideoSlice: StateCreator<CombinedSlice, [], [], VideoSlice> =
     const mode = data.mode === 'voice' || type.includes('VOICE') ? 'voice' : 'video';
     const isChannel = target.startsWith('#') || target.startsWith('&');
 
+    // DM call signaling (INVITE/ACCEPT/REJECT/HANGUP) — old MEDIA mechanism
     if (type === 'INVITE' || type === 'RING' || type === 'VOICERING') {
       if (get().callState !== 'idle') {
         sendMedia(fromNick, 'BUSY', { reason: 'already-in-call', ts: Date.now() });
@@ -287,7 +352,71 @@ export const createVideoSlice: StateCreator<CombinedSlice, [], [], VideoSlice> =
     if (type === 'SCREEN_STOP' && get().spotlightNick === fromNick) set({ spotlightNick: null });
   },
 
+  handleServerMedia: (channel, subtype, payload) => {
+    const upper = subtype.toUpperCase();
+
+    if (upper === 'ROSTER') {
+      try {
+        const data = JSON.parse(payload) as { voice?: VoiceParticipant[]; video?: VideoParticipant[] };
+        set({
+          rosterVoice: Array.isArray(data.voice) ? data.voice : [],
+          rosterVideo: Array.isArray(data.video) ? data.video : [],
+        });
+        // Sync peers from roster so participant list is accurate
+        const { callChannel } = get();
+        if (callChannel && callChannel.toLowerCase() === channel.toLowerCase()) {
+          const peers = new Map<string, PeerState>();
+          for (const v of (data.voice ?? [])) {
+            peers.set(normalizeNick(v.nick), {
+              ...basePeer(v.nick, channel),
+              speaking: v.speaking,
+              audioLevel: v.speaking ? 0.5 : 0,
+            });
+          }
+          set({ peers });
+        }
+      } catch { /* ignore parse errors */ }
+      return;
+    }
+
+    if (upper === 'STATS') {
+      try {
+        const data = JSON.parse(payload) as { participants?: MediaStat[] };
+        set({ mediaStats: Array.isArray(data.participants) ? data.participants : [] });
+        // Update speaking state in peers from STATS rtt/loss data
+        const peers = new Map(get().peers);
+        let changed = false;
+        for (const stat of (data.participants ?? [])) {
+          const key = normalizeNick(stat.nick);
+          const existing = peers.get(key);
+          if (existing) {
+            peers.set(key, { ...existing, connectionQuality: qualityFromStats(stat) });
+            changed = true;
+          }
+        }
+        if (changed) set({ peers });
+      } catch { /* ignore parse errors */ }
+      return;
+    }
+
+    if (upper === 'VIDEO_KEYREQ') {
+      // Server requesting a keyframe — placeholder for opcodec integration
+      set({ videoError: null });
+      return;
+    }
+  },
+
+  requestRoster: (channel) => {
+    sendMediaFrameCmd(channel, 'ROSTER', '');
+  },
+
+  requestStats: (channel) => {
+    sendMediaFrameCmd(channel, 'STATS', '');
+  },
+
   sendLadonMedia: (target, type, payload) => sendMedia(target, type, payload),
+
+  sendMediaFrame: (channel, subtype, payload) => sendMediaFrameCmd(channel, subtype, payload),
 
   setVideoSendFn: (fn) => {
     sendFn = fn;

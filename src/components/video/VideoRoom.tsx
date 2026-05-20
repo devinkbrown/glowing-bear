@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/stores';
+import type { MediaStat } from '@/stores/video';
 
 function formatDuration(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -19,10 +20,14 @@ export default function VideoRoom() {
   const callType = useStore(s => s.callType);
   const callStartTime = useStore(s => s.callStartTime);
   const peerMap = useStore(s => s.peers);
+  const rosterVoice = useStore(s => s.rosterVoice);
+  const rosterVideo = useStore(s => s.rosterVideo);
+  const mediaStats = useStore(s => s.mediaStats);
   const hangup = useStore(s => s.hangup);
   const toggleAudioMute = useStore(s => s.toggleAudioMute);
   const toggleVideoOff = useStore(s => s.toggleVideoOff);
   const toggleScreenShare = useStore(s => s.toggleScreenShare);
+  const requestRoster = useStore(s => s.requestRoster);
   const audioMuted = useStore(s => s.audioMuted);
   const videoOff = useStore(s => s.videoOff);
   const screenSharing = useStore(s => s.screenSharing);
@@ -37,6 +42,9 @@ export default function VideoRoom() {
     return all.filter(p => p.nick.toLowerCase() === callWith.toLowerCase());
   }, [peerMap, callChannel, callWith]);
 
+  // Participant count: prefer roster data, fall back to peer map
+  const rosterCount = Math.max(rosterVoice.length, rosterVideo.length);
+
   useEffect(() => {
     if (!callStartTime) return;
     const tick = () => setElapsed(formatDuration(Date.now() - callStartTime));
@@ -48,7 +56,7 @@ export default function VideoRoom() {
   if (callState !== 'in_call' && callState !== 'connecting') return null;
 
   const title = callChannel ?? callWith;
-  const participantCount = Math.max(1, peers.length + 1);
+  const participantCount = Math.max(1, rosterCount > 0 ? rosterCount + 1 : peers.length + 1);
 
   if (minimized) {
     return (
@@ -137,21 +145,56 @@ export default function VideoRoom() {
             <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
               <div>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Participants</p>
-                <p className="text-[13px] text-gray-300">{participantCount} in media state</p>
+                <p className="text-[13px] text-gray-300">{participantCount} in session</p>
               </div>
-              <span className="rounded-full bg-emerald-500/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">LADON</span>
+              <div className="flex items-center gap-2">
+                {callChannel && (
+                  <button onClick={() => requestRoster(callChannel)}
+                    title="Refresh roster"
+                    className="w-7 h-7 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/[0.06] transition-colors flex items-center justify-center">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <path d="M14 8a6 6 0 1 1-1.5-4" /><path d="M14 3v4h-4" />
+                    </svg>
+                  </button>
+                )}
+                <span className="rounded-full bg-emerald-500/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">LADON</span>
+              </div>
             </div>
-            <div className="p-4 space-y-2">
-              <Participant name="You" sub={audioMuted ? 'Muted locally' : 'Local client'} active />
-              {peers.map(peer => (
-                <Participant key={`${peer.channel ?? 'dm'}:${peer.nick}`} name={peer.nick}
-                  sub={peer.speaking ? 'Speaking' : peer.channel ? peer.channel : 'Remote participant'}
-                  active={peer.speaking}
-                />
-              ))}
-              {peers.length === 0 && (
+            <div className="p-4 space-y-2 max-h-[360px] overflow-y-auto">
+              <Participant name="You"
+                sub={audioMuted ? 'Muted' : callType === 'voice' ? 'Voice active' : 'Video active'}
+                active />
+              {rosterVoice.map(v => {
+                const stat = mediaStats.find(s => s.nick.toLowerCase() === v.nick.toLowerCase());
+                return (
+                  <Participant key={`voice:${v.nick}`} name={v.nick}
+                    sub={v.speaking ? 'Speaking' : stat ? `${stat.rtt_ms}ms · ${(v.loss * 100).toFixed(0)}% loss` : 'Voice'}
+                    active={v.speaking}
+                    stat={stat}
+                  />
+                );
+              })}
+              {rosterVideo.filter(v => !rosterVoice.some(r => r.nick.toLowerCase() === v.nick.toLowerCase())).map(v => {
+                const stat = mediaStats.find(s => s.nick.toLowerCase() === v.nick.toLowerCase());
+                return (
+                  <Participant key={`video:${v.nick}`} name={v.nick}
+                    sub={`${v.w}×${v.h} ${v.fps}fps${v.screen ? ' screen' : ''}`}
+                    active={false}
+                    stat={stat}
+                  />
+                );
+              })}
+              {rosterVoice.length === 0 && rosterVideo.length === 0 && peers.length > 0 && (
+                peers.map(peer => (
+                  <Participant key={`peer:${peer.nick}`} name={peer.nick}
+                    sub={peer.speaking ? 'Speaking' : 'Remote participant'}
+                    active={peer.speaking}
+                  />
+                ))
+              )}
+              {rosterVoice.length === 0 && rosterVideo.length === 0 && peers.length === 0 && (
                 <p className="px-2 py-6 text-center text-[12px] text-gray-500">
-                  Waiting for LADON participant updates from the server.
+                  {callChannel ? 'Tap ↻ to load participants.' : 'Waiting for session updates.'}
                 </p>
               )}
             </div>
@@ -183,7 +226,14 @@ function StatusCard({ label, value, active }: { label: string; value: string; ac
   );
 }
 
-function Participant({ name, sub, active }: { name: string; sub: string; active?: boolean }) {
+function qualityColor(q: MediaStat['loss'], rtt: number): string {
+  if (q < 0.02 && rtt < 100) return 'bg-emerald-400';
+  if (q < 0.05 && rtt < 200) return 'bg-yellow-400';
+  if (q < 0.10 && rtt < 400) return 'bg-orange-400';
+  return 'bg-red-400';
+}
+
+function Participant({ name, sub, active, stat }: { name: string; sub: string; active?: boolean; stat?: MediaStat }) {
   const initials = name.slice(0, 2).toUpperCase();
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-white/[0.05] bg-white/[0.03] px-3 py-3">
@@ -192,9 +242,18 @@ function Participant({ name, sub, active }: { name: string; sub: string; active?
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-semibold text-gray-100 truncate">{name}</div>
-        <div className="text-[11px] text-gray-500 truncate">{sub}</div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-gray-500 truncate">{sub}</span>
+          {stat && (
+            <span className="shrink-0 text-[10px] text-gray-600 font-mono">{stat.bw_kbps}kbps</span>
+          )}
+        </div>
       </div>
-      {active && <span className="w-2 h-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.8)]" />}
+      {stat && (
+        <span className={`w-2 h-2 rounded-full ${qualityColor(stat.loss, stat.rtt_ms)}`}
+          title={`RTT ${stat.rtt_ms}ms · loss ${(stat.loss * 100).toFixed(1)}%`} />
+      )}
+      {!stat && active && <span className="w-2 h-2 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.8)]" />}
     </div>
   );
 }

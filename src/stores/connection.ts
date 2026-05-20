@@ -363,10 +363,27 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
           if (modeMatch) get().applyModeChange(line.buffer, modeMatch[1]);
         }
 
-        // LADON media signaling can appear in WeeChat as an embedded raw command.
-        // We extract the embedded raw IRC message and parse it.
+        // LADON MEDIA lines — two forms:
+        //
+        // 1. Direct server MEDIA notification (irc_media tag):
+        //    prefix = server/nick, message = "#channel SUBTYPE :payload"
+        //    Handles ROSTER, STATS, VIDEO_KEYREQ from ophion server.
+        //
+        // 2. WeeChat error echo (old MEDIA signaling, DM calls):
+        //    message = 'command "MEDIA" not found: ":nick!u@h MEDIA target TYPE :payload"'
+        if (line.tags.includes('irc_media')) {
+          const plain = stripCodes(line.message);
+          // Try direct server form: "#channel SUBTYPE :payload" or "nick SUBTYPE :payload"
+          const direct = plain.match(/^([#&\w][^\s]*)\s+(\S+)(?:\s+:?(.*))?$/);
+          if (direct) {
+            const [, channel, subtype, payload = ''] = direct;
+            get().handleServerMedia(channel, subtype, payload);
+          }
+          return;
+        }
         {
           const plain = stripCodes(line.message);
+          // WeeChat error echo for peer-sent MEDIA (DM call signaling)
           const errMatch = plain.match(/command "MEDIA" not found: ":((\S+?)!\S+)\s+MEDIA\s+(\S+)\s+(\S+)(?:\s+:?(.*?))?"$/i);
           if (errMatch) {
             const [, , fromNick, target, type, payload = ''] = errMatch;
@@ -512,6 +529,10 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
         if (channel) get().joinRoom(channel, false);
         return;
       }
+      if (cmd === '/clear') {
+        get().clearLines(target);
+        return;
+      }
       if (cmd === '/media') {
         const [, mediaTarget, type, ...rest] = parts;
         if (mediaTarget && type) get().sendLadonMedia(mediaTarget, type, rest.join(' ') || '{}');
@@ -646,7 +667,12 @@ export const createConnectionSlice: StateCreator<CombinedSlice, [], [], Connecti
     const { client } = get();
     if (!client || !target) return;
     get().setLoading(target, true);
-    client.requestHistory(target, count);
+
+    // Request (existing + count) lines from the end so that after dedup
+    // we receive `count` lines older than what we already have.
+    const existing = get().buffers.get(target);
+    const haveCount = existing?.lines.filter(l => !l.id.startsWith('_opt_')).length ?? 0;
+    client.requestHistory(target, haveCount + count);
   },
 
   requestNicklist: (bufferPointer) => {
