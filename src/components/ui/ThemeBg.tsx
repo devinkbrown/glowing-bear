@@ -1,16 +1,13 @@
 'use client';
-
-import { useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ThemeName } from '@/types';
-
-interface Props {
-  theme: ThemeName;
-}
 
 function seededRand(seed: number) {
   let s = seed;
-  return () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; };
+  return () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
 }
+
+interface Props { theme: ThemeName; }
 
 export default function ThemeBg({ theme }: Props) {
   switch (theme) {
@@ -30,3528 +27,3019 @@ export default function ThemeBg({ theme }: Props) {
     case 'lightning': return <LightningBg />;
     case 'phoenix': return <PhoenixBg />;
     case 'retro': return <RetroArcadeBg />;
-    case 'starfield': return <StarfieldBg />;
+    case 'starfield': return <StarfieldSimpleBg />;
     case 'light': return <LightBg />;
     case 'custom': return <CustomBg />;
     default: return null;
   }
 }
 
-const Shell = ({ children }: { children: React.ReactNode }) => (
-  <div className="theme-bg-shell absolute inset-0 pointer-events-none overflow-hidden opacity-75" aria-hidden="true"
-    style={{ contain: 'layout style', willChange: 'transform' }}>
-    <style>{`@media (prefers-reduced-motion: reduce) { .theme-bg-shell * { animation: none !important; } }`}</style>
-    {children}
-  </div>
-);
+const CANVAS_CLS = 'absolute inset-0 w-full h-full pointer-events-none';
+const CANVAS_STYLE: React.CSSProperties = { willChange: 'transform', opacity: 0.75 };
 
-/* ── DarkBear: Living digital mesh — network nodes, data streams, pulse rings ── */
+/* ── DarkBear: network nodes + edges + data streams + hexagons ── */
 function DarkBearBg() {
-  const nodes = useMemo(() => {
-    const rand = seededRand(42);
-    return Array.from({ length: 28 }, (_, i) => ({
-      x: rand() * 90 + 5, y: rand() * 90 + 5,
-      size: rand() < 0.15 ? (4 + rand() * 4) : (1.5 + rand() * 2.5),
-      opacity: 0.15 + rand() * 0.45,
-      dur: 4 + rand() * 8,
-      delay: rand() * 12,
-      hub: i < 6,
-    }));
-  }, []);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
 
-  const edges = useMemo(() => {
-    const rand = seededRand(77);
-    const out: { x1: number; y1: number; x2: number; y2: number; dur: number; delay: number }[] = [];
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const dx = nodes[i].x - nodes[j].x;
-        const dy = nodes[i].y - nodes[j].y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 22 && rand() > 0.35) {
-          out.push({ x1: nodes[i].x, y1: nodes[i].y, x2: nodes[j].x, y2: nodes[j].y, dur: 6 + rand() * 10, delay: rand() * 8 });
+    interface Node { x: number; y: number; r: number; baseOp: number; phase: number; speed: number; hub: boolean; }
+    interface Edge { i: number; j: number; phase: number; speed: number; }
+    interface Stream { fromEdge: number; phase: number; speed: number; }
+    interface Hex { x: number; y: number; size: number; rot: number; phase: number; speed: number; opacity: number; }
+
+    let nodes: Node[] = [];
+    let edges: Edge[] = [];
+    let streams: Stream[] = [];
+    let hexes: Hex[] = [];
+
+    function build(w: number, h: number) {
+      const rand = seededRand(42);
+      nodes = Array.from({ length: 28 }, (_, i) => ({
+        x: (rand() * 90 + 5) / 100 * w,
+        y: (rand() * 90 + 5) / 100 * h,
+        r: rand() < 0.15 ? (4 + rand() * 4) : (1.5 + rand() * 2.5),
+        baseOp: 0.15 + rand() * 0.45,
+        phase: rand() * Math.PI * 2,
+        speed: 0.3 + rand() * 0.6,
+        hub: i < 6,
+      }));
+      const rand2 = seededRand(77);
+      edges = [];
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = (nodes[i].x - nodes[j].x) / w * 100;
+          const dy = (nodes[i].y - nodes[j].y) / h * 100;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 22 && rand2() > 0.35) {
+            edges.push({ i, j, phase: rand2() * Math.PI * 2, speed: 0.4 + rand2() * 0.5 });
+          }
         }
       }
+      streams = edges.slice(0, 8).map((_, k) => ({ fromEdge: k, phase: k * 0.6, speed: 0.3 + (k % 4) * 0.05 }));
+      const rand3 = seededRand(150);
+      hexes = Array.from({ length: 6 }, () => ({
+        x: (rand3() * 90 + 5) / 100 * w,
+        y: (rand3() * 90 + 5) / 100 * h,
+        size: 12 + rand3() * 24,
+        rot: rand3() * Math.PI * 2,
+        phase: rand3() * Math.PI * 2,
+        speed: 0.05 + rand3() * 0.06,
+        opacity: 0.04 + rand3() * 0.06,
+      }));
     }
-    return out;
-  }, [nodes]);
 
-  const streams = useMemo(() => {
-    const rand = seededRand(200);
-    return Array.from({ length: 5 }, () => {
-      const vertical = rand() > 0.5;
-      return {
-        x: rand() * 100, y: rand() * 100,
-        vertical, len: 40 + rand() * 80,
-        dur: 3 + rand() * 5, delay: rand() * 15,
-        opacity: 0.06 + rand() * 0.12,
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function drawHex(x: number, y: number, size: number, rot: number, alpha: number) {
+      cx.save();
+      cx.translate(x, y);
+      cx.rotate(rot);
+      cx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+        const px = Math.cos(a) * size / 2;
+        const py = Math.sin(a) * size / 2;
+        if (i === 0) cx.moveTo(px, py); else cx.lineTo(px, py);
+      }
+      cx.closePath();
+      cx.strokeStyle = `rgba(129,140,248,${0.3 * alpha})`;
+      cx.lineWidth = 1;
+      cx.stroke();
+      cx.restore();
+    }
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // background morph blobs
+      const blob = (cxp: number, cyp: number, rad: number, r: number, g: number, b: number, a: number) => {
+        const grd = cx.createRadialGradient(cxp, cyp, 0, cxp, cyp, rad);
+        grd.addColorStop(0, `rgba(${r},${g},${b},${a})`);
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = grd;
+        cx.beginPath();
+        cx.arc(cxp, cyp, rad, 0, Math.PI * 2);
+        cx.fill();
       };
-    });
-  }, []);
+      blob(w * 0.25 + Math.sin(tt * 0.2) * 30, h * 0.25 + Math.cos(tt * 0.18) * 20, w * 0.3, 99, 102, 241, 0.12);
+      blob(w * 0.85 + Math.cos(tt * 0.22) * 25, h * 0.85 + Math.sin(tt * 0.24) * 20, w * 0.25, 139, 92, 246, 0.10);
+      blob(w * 0.6, h * 0.55, w * 0.2 * (1 + Math.sin(tt * 0.3) * 0.1), 129, 140, 248, 0.08);
 
-  const hexes = useMemo(() => {
-    const rand = seededRand(150);
-    return Array.from({ length: 6 }, () => ({
-      x: rand() * 90 + 5, y: rand() * 90 + 5,
-      size: 12 + rand() * 24,
-      opacity: 0.04 + rand() * 0.06,
-      dur: 15 + rand() * 20,
-      delay: rand() * 10,
-      rot: rand() * 360,
-    }));
-  }, []);
-
-  return (
-    <Shell>
-      {/* Perspective grid floor */}
-      <div className="absolute inset-0" style={{
-        background: `
-          linear-gradient(rgba(129,140,248,0.03) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(129,140,248,0.03) 1px, transparent 1px)`,
-        backgroundSize: '60px 60px',
-        maskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.6) 70%, transparent 100%)',
-        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.6) 70%, transparent 100%)',
-      }} />
-
-      {/* Morphing gradient blobs */}
-      <div className="absolute w-[min(500px,40vw)] h-[min(500px,40vw)] top-[5%] left-[15%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.12), transparent 55%)', animation: 'db-morph-a 25s ease-in-out infinite', filter: 'blur(40px)' }} />
-      <div className="absolute w-[min(400px,35vw)] h-[min(400px,35vw)] bottom-[10%] right-[5%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.1), transparent 55%)', animation: 'db-morph-b 30s ease-in-out infinite', filter: 'blur(35px)' }} />
-      <div className="absolute w-[min(300px,28vw)] h-[min(300px,28vw)] top-[50%] left-[60%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.08), transparent 55%)', animation: 'db-morph-c 22s ease-in-out infinite', filter: 'blur(30px)' }} />
-
-      {/* SVG layer: edges, nodes, data streams */}
-      <svg className="absolute inset-0 w-full h-full">
-        {/* Network edges */}
-        {edges.map((e, i) => (
-          <line key={`e${i}`} x1={`${e.x1}%`} y1={`${e.y1}%`} x2={`${e.x2}%`} y2={`${e.y2}%`}
-            stroke="rgba(129,140,248,0.08)" strokeWidth="0.5"
-            style={{ animation: `db-edge-breathe ${e.dur}s ease-in-out ${e.delay}s infinite` }} />
-        ))}
-
-        {/* Data streams traveling along edges */}
-        {edges.slice(0, 8).map((e, i) => {
-          const id = `stream-path-${i}`;
-          return (
-            <g key={`ds${i}`}>
-              <path id={id} d={`M${e.x1 * 10} ${e.y1 * 10} L${e.x2 * 10} ${e.y2 * 10}`}
-                fill="none" stroke="none" />
-              <circle r="1.5" fill="rgba(129,140,248,0.6)" style={{ filter: 'drop-shadow(0 0 3px rgba(129,140,248,0.4))' }}>
-                <animateMotion dur={`${3 + i * 0.7}s`} repeatCount="indefinite" begin={`${i * 1.2}s`}>
-                  <mpath href={`#${id}`} />
-                </animateMotion>
-              </circle>
-            </g>
-          );
-        })}
-
-        {/* Pulse rings from hub nodes */}
-        {nodes.filter(n => n.hub).map((n, i) => (
-          <circle key={`pulse${i}`} cx={`${n.x}%`} cy={`${n.y}%`} r="0"
-            fill="none" stroke="rgba(129,140,248,0.15)" strokeWidth="0.5">
-            <animate attributeName="r" from="0" to="60" dur={`${6 + i * 2}s`} begin={`${i * 3}s`} repeatCount="indefinite" />
-            <animate attributeName="opacity" from="0.2" to="0" dur={`${6 + i * 2}s`} begin={`${i * 3}s`} repeatCount="indefinite" />
-          </circle>
-        ))}
-      </svg>
-
-      {/* Floating hexagons */}
-      {hexes.map((h, i) => (
-        <div key={`hex${i}`} className="absolute" style={{
-          left: `${h.x}%`, top: `${h.y}%`, width: `${h.size}px`, height: `${h.size}px`,
-          opacity: h.opacity, transform: `rotate(${h.rot}deg)`,
-          animation: `db-hex-drift ${h.dur}s ease-in-out ${h.delay}s infinite`,
-        }}>
-          <svg viewBox="0 0 100 100" className="w-full h-full">
-            <polygon points="50,2 93,25 93,75 50,98 7,75 7,25"
-              fill="none" stroke="rgba(129,140,248,0.3)" strokeWidth="1" />
-          </svg>
-        </div>
-      ))}
-
-      {/* Data stream lines */}
-      {streams.map((s, i) => (
-        <div key={`st${i}`} className="absolute" style={{
-          left: `${s.x}%`, top: `${s.y}%`,
-          width: s.vertical ? '1px' : `${s.len}px`,
-          height: s.vertical ? `${s.len}px` : '1px',
-          background: s.vertical
-            ? `linear-gradient(to bottom, transparent, rgba(129,140,248,${s.opacity}), transparent)`
-            : `linear-gradient(to right, transparent, rgba(129,140,248,${s.opacity}), transparent)`,
-          animation: `db-stream ${s.dur}s ease-in-out ${s.delay}s infinite`,
-        }} />
-      ))}
-
-      {/* Network nodes */}
-      {nodes.map((n, i) => (
-        <div key={`n${i}`} className="absolute rounded-full" style={{
-          left: `${n.x}%`, top: `${n.y}%`,
-          width: `${n.size}px`, height: `${n.size}px`,
-          transform: 'translate(-50%, -50%)',
-          background: n.hub ? 'rgba(167,139,250,0.7)' : 'rgba(129,140,248,0.5)',
-          boxShadow: n.hub
-            ? `0 0 ${n.size * 3}px rgba(129,140,248,0.3), 0 0 ${n.size * 6}px rgba(129,140,248,0.1)`
-            : `0 0 ${n.size * 2}px rgba(129,140,248,0.15)`,
-          opacity: n.opacity,
-          animation: `db-node ${n.dur}s ease-in-out ${n.delay}s infinite`,
-        }} />
-      ))}
-
-      {/* Scan line */}
-      <div className="absolute left-0 right-0 h-[1px]"
-        style={{
-          background: 'linear-gradient(90deg, transparent 10%, rgba(129,140,248,0.06) 30%, rgba(129,140,248,0.1) 50%, rgba(129,140,248,0.06) 70%, transparent 90%)',
-          animation: 'db-scan 12s ease-in-out infinite',
-        }} />
-
-      <style>{`
-        @keyframes db-morph-a { 0%,100%{transform:translate(0,0) scale(1) rotate(0deg)} 33%{transform:translate(-30px,20px) scale(1.15) rotate(3deg)} 66%{transform:translate(25px,-15px) scale(0.9) rotate(-2deg)} }
-        @keyframes db-morph-b { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(20px,-25px) scale(1.1)} 66%{transform:translate(-15px,20px) scale(0.92)} }
-        @keyframes db-morph-c { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(20px,10px) scale(1.2)} }
-        @keyframes db-node { 0%,100%{opacity:inherit;transform:translate(-50%,-50%) scale(1)} 50%{opacity:0.08;transform:translate(-50%,-50%) scale(0.5)} }
-        @keyframes db-edge-breathe { 0%,100%{opacity:1} 50%{opacity:0.2} }
-        @keyframes db-hex-drift { 0%,100%{transform:rotate(var(--r,0deg)) translateY(0)} 50%{transform:rotate(var(--r,0deg)) translateY(-8px) scale(1.05)} }
-        @keyframes db-stream { 0%,100%{opacity:0.5} 50%{opacity:0} }
-        @keyframes db-scan { 0%{top:0%} 50%{top:100%} 100%{top:0%} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* ── Midnight: Dense starfield, constellation lines, breathing void ── */
-function MidnightBg() {
-  const starsNear = useMemo(() => {
-    const rand = seededRand(99);
-    return Array.from({ length: 35 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 1.4 + rand() * 1.8,
-      opacity: 0.35 + rand() * 0.55,
-      dur: 2 + rand() * 3,
-      delay: rand() * 6,
-      blue: rand() > 0.55,
-    }));
-  }, []);
-  const starsMid = useMemo(() => {
-    const rand = seededRand(200);
-    return Array.from({ length: 40 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 0.8 + rand() * 1.1,
-      opacity: 0.25 + rand() * 0.45,
-      dur: 4 + rand() * 5,
-      delay: rand() * 9,
-      blue: rand() > 0.65,
-    }));
-  }, []);
-  const starsFar = useMemo(() => {
-    const rand = seededRand(301);
-    return Array.from({ length: 40 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 0.3 + rand() * 0.7,
-      opacity: 0.15 + rand() * 0.25,
-      dur: 7 + rand() * 8,
-      delay: rand() * 12,
-    }));
-  }, []);
-  const milkyWayStars = useMemo(() => {
-    const rand = seededRand(402);
-    return Array.from({ length: 45 }, () => ({
-      x: 15 + rand() * 70,
-      y: rand() * 85,
-      size: 0.3 + rand() * 0.9,
-      opacity: 0.2 + rand() * 0.3,
-    }));
-  }, []);
-  const shooters = useMemo(() => {
-    const rand = seededRand(503);
-    return [
-      { x: 10 + rand() * 30, y: 5 + rand() * 20, angle: 25 + rand() * 20, dur: 3 + rand() * 2, delay: rand() * 18 },
-      { x: 40 + rand() * 25, y: 3 + rand() * 15, angle: 18 + rand() * 15, dur: 2.5 + rand() * 2, delay: 7 + rand() * 14 },
-      { x: 60 + rand() * 20, y: 8 + rand() * 18, angle: 30 + rand() * 25, dur: 2 + rand() * 3, delay: 14 + rand() * 12 },
-    ];
-  }, []);
-  const nebulae = useMemo(() => {
-    const rand = seededRand(604);
-    return [
-      { x: 20, y: 25, w: 380, h: 220, color: '139,156,248', opacity: 0.35, dur: 14, delay: 0 },
-      { x: 55, y: 55, w: 300, h: 180, color: '160,100,220', opacity: 0.4, dur: 18, delay: 5 },
-      { x: 10, y: 65, w: 260, h: 160, color: '80,120,200', opacity: 0.3, dur: 22, delay: 9 },
-    ].map(n => ({ ...n, extraDelay: rand() * 3 }));
-  }, []);
-  // Constellation: triangle (top-left), cross (center-right), zigzag (bottom-left)
-  const constellationLines = [
-    // triangle
-    { x1: 12, y1: 18, x2: 22, y2: 10, dur: 18, delay: 0 },
-    { x1: 22, y1: 10, x2: 30, y2: 20, dur: 18, delay: 1 },
-    { x1: 30, y1: 20, x2: 12, y2: 18, dur: 18, delay: 2 },
-    // cross
-    { x1: 65, y1: 30, x2: 75, y2: 30, dur: 20, delay: 3 },
-    { x1: 70, y1: 25, x2: 70, y2: 35, dur: 20, delay: 4 },
-    // zigzag
-    { x1: 8, y1: 62, x2: 14, y2: 55, dur: 16, delay: 2 },
-    { x1: 14, y1: 55, x2: 20, y2: 63, dur: 16, delay: 3 },
-    { x1: 20, y1: 63, x2: 26, y2: 56, dur: 16, delay: 4 },
-    { x1: 26, y1: 56, x2: 32, y2: 64, dur: 16, delay: 5 },
-    // extra scatter lines
-    { x1: 48, y1: 15, x2: 56, y2: 22, dur: 22, delay: 6 },
-    { x1: 56, y1: 22, x2: 62, y2: 16, dur: 22, delay: 7 },
-    { x1: 82, y1: 42, x2: 90, y2: 50, dur: 19, delay: 8 },
-  ];
-  return (
-    <Shell>
-      {/* Milky Way diagonal haze */}
-      <div className="absolute inset-0" style={{
-        background: 'linear-gradient(135deg, transparent 15%, rgba(120,140,230,0.25) 30%, rgba(100,120,210,0.35) 50%, rgba(120,140,230,0.25) 70%, transparent 85%)',
-        filter: 'blur(18px)',
-      }} />
-      {/* Milky Way dense cluster stars */}
-      {milkyWayStars.map((s, i) => (
-        <div key={`mw${i}`} className="absolute rounded-full"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
-            background: '#c0caff', opacity: s.opacity,
-            boxShadow: '0 0 4px rgba(192,202,255,0.6)' }} />
-      ))}
-      {/* Far stars */}
-      {starsFar.map((s, i) => (
-        <div key={`sf${i}`} className="absolute rounded-full"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
-            background: '#d0d8ff', opacity: s.opacity,
-            animation: `mn-twinkle-slow ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
-      ))}
-      {/* Mid stars */}
-      {starsMid.map((s, i) => (
-        <div key={`sm${i}`} className="absolute rounded-full"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
-            background: s.blue ? '#9aaeff' : '#e0e4ff', opacity: s.opacity,
-            animation: `mn-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
-      ))}
-      {/* Near bright stars */}
-      {starsNear.map((s, i) => (
-        <div key={`sn${i}`} className="absolute rounded-full"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
-            background: s.blue ? '#8b9cf8' : '#f0f2ff', opacity: s.opacity,
-            boxShadow: s.size > 2 ? `0 0 ${s.size * 4}px rgba(139,156,248,0.6)` : undefined,
-            animation: `mn-twinkle-fast ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
-      ))}
-      {/* Nebula breathing clouds */}
-      {nebulae.map((n, i) => (
-        <div key={`nb${i}`} className="absolute rounded-full"
-          style={{ left: `${n.x}%`, top: `${n.y}%`, width: `${n.w}px`, height: `${n.h}px`,
-            background: `radial-gradient(ellipse, rgba(${n.color},${n.opacity}), transparent 60%)`,
-            filter: 'blur(28px)',
-            animation: `mn-breathe ${n.dur}s ease-in-out ${n.delay + n.extraDelay}s infinite` }} />
-      ))}
-      {/* Crescent moon upper-right */}
-      <div className="absolute" style={{ top: '6%', right: '8%', width: '52px', height: '52px' }}>
-        {/* Outer glow halo */}
-        <div className="absolute rounded-full" style={{
-          top: '-30%', left: '-30%', width: '160%', height: '160%',
-          background: 'radial-gradient(circle, rgba(180,200,255,0.3), transparent 55%)',
-          filter: 'blur(8px)', animation: 'mn-moon-glow 9s ease-in-out infinite',
-        }} />
-        <svg viewBox="0 0 52 52" className="w-full h-full">
-          {/* Full circle */}
-          <circle cx="26" cy="26" r="22" fill="rgba(210,220,255,0.5)" />
-          {/* Inner shadow cutout to make crescent */}
-          <circle cx="34" cy="22" r="19" fill="rgba(8,8,22,0.92)" />
-          {/* Soft inner edge */}
-          <circle cx="26" cy="26" r="22" fill="none" stroke="rgba(180,200,255,0.3)" strokeWidth="1" />
-        </svg>
-      </div>
-      {/* SVG: constellation lines + shooting stars */}
-      <svg className="absolute inset-0 w-full h-full" style={{ overflow: 'visible' }}>
-        {constellationLines.map((l, i) => (
-          <line key={`cl${i}`} x1={`${l.x1}%`} y1={`${l.y1}%`} x2={`${l.x2}%`} y2={`${l.y2}%`}
-            stroke="rgba(139,156,248,0.4)" strokeWidth="1.2"
-            style={{ animation: `mn-line ${l.dur}s ease-in-out ${l.delay}s infinite` }} />
-        ))}
-        {/* Constellation node dots */}
-        {[
-          [12,18],[22,10],[30,20],[65,30],[75,30],[70,25],[70,35],
-          [8,62],[14,55],[20,63],[26,56],[32,64],[48,15],[56,22],[62,16],[82,42],[90,50],
-        ].map(([x,y], i) => (
-          <circle key={`cn${i}`} cx={`${x}%`} cy={`${y}%`} r="1.2"
-            fill="rgba(180,196,255,0.6)"
-            style={{ animation: `mn-twinkle ${8 + i * 1.1}s ease-in-out ${i * 0.7}s infinite` }} />
-        ))}
-        {/* Shooting stars */}
-        {shooters.map((s, i) => (
-          <g key={`sh${i}`} style={{ animation: `mn-shoot ${s.dur}s ease-in ${s.delay}s infinite`, opacity: 0 }}>
-            <line
-              x1={`${s.x}%`} y1={`${s.y}%`}
-              x2={`${s.x + 15}%`} y2={`${s.y + 10}%`}
-              stroke={`url(#shooter-grad-${i})`} strokeWidth="2.5" strokeLinecap="round" />
-            <defs>
-              <linearGradient id={`shooter-grad-${i}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="rgba(255,255,255,0)" />
-                <stop offset="70%" stopColor="rgba(200,215,255,0.9)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,1)" />
-              </linearGradient>
-            </defs>
-          </g>
-        ))}
-      </svg>
-      {/* Horizon warm glow */}
-      <div className="absolute bottom-0 left-0 right-0 h-[18%]"
-        style={{ background: 'linear-gradient(to top, rgba(80,60,120,0.2), transparent)', filter: 'blur(4px)' }} />
-      <style>{`
-        @keyframes mn-twinkle-fast { 0%,100%{opacity:inherit} 35%{opacity:0.1} 65%{opacity:0.1} }
-        @keyframes mn-twinkle      { 0%,100%{opacity:inherit} 40%{opacity:0.15} 60%{opacity:0.15} }
-        @keyframes mn-twinkle-slow { 0%,100%{opacity:inherit} 45%{opacity:0.08} 55%{opacity:0.08} }
-        @keyframes mn-breathe      { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.35);opacity:0.7} }
-        @keyframes mn-line         { 0%,100%{opacity:1} 50%{opacity:0.3} }
-        @keyframes mn-moon-glow    { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.7;transform:scale(1.2)} }
-        @keyframes mn-shoot        { 0%{opacity:0;transform:translateX(0) translateY(0)} 8%{opacity:1} 80%{opacity:0.8} 100%{opacity:0;transform:translateX(120px) translateY(70px)} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* ── Obsidian: Crystal facets, light sweeps, geometric reflections ── */
-function ObsidianBg() {
-  const shards = useMemo(() => {
-    const rand = seededRand(44);
-    return Array.from({ length: 9 }, (_, i) => {
-      const cx = 8 + rand() * 84;
-      const cy = 5 + rand() * 85;
-      const w = 60 + rand() * 180;
-      const h = 40 + rand() * 120;
-      const rot = -30 + rand() * 60;
-      const pts: string[] = [];
-      const n = 4 + Math.floor(rand() * 3);
-      for (let j = 0; j < n; j++) {
-        const a = (j / n) * Math.PI * 2 - Math.PI / 2;
-        const r = 38 + rand() * 12;
-        pts.push(`${50 + Math.cos(a) * r}% ${50 + Math.sin(a) * r}%`);
+      // hexagons
+      for (const hex of hexes) {
+        const off = Math.sin(tt * hex.speed + hex.phase) * 6;
+        drawHex(hex.x, hex.y + off, hex.size, hex.rot, hex.opacity);
       }
-      return { cx, cy, w, h, rot, clip: `polygon(${pts.join(', ')})`,
-        dur: 14 + rand() * 18, delay: rand() * 12, layer: i < 3 ? 0 : i < 6 ? 1 : 2,
-        edgeAngle: rand() * 360 };
-    });
-  }, []);
 
-  const glints = useMemo(() => {
-    const rand = seededRand(144);
-    return Array.from({ length: 14 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 1 + rand() * 2.5,
-      dur: 3 + rand() * 6, delay: rand() * 14,
-    }));
-  }, []);
-
-  const veins = useMemo(() => {
-    const rand = seededRand(244);
-    return Array.from({ length: 5 }, () => {
-      const segs: { x: number; y: number }[] = [];
-      let x = rand() * 100, y = rand() * 100;
-      const n = 4 + Math.floor(rand() * 4);
-      for (let j = 0; j < n; j++) {
-        segs.push({ x, y });
-        x += (rand() - 0.5) * 30;
-        y += 8 + rand() * 15;
-        x = Math.max(2, Math.min(98, x));
-        y = Math.min(98, y);
+      // edges
+      cx.lineWidth = 0.5;
+      for (const e of edges) {
+        const a = nodes[e.i], b = nodes[e.j];
+        const breathe = 0.6 + 0.4 * Math.sin(tt * e.speed + e.phase);
+        cx.strokeStyle = `rgba(129,140,248,${0.08 * breathe})`;
+        cx.beginPath();
+        cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y);
+        cx.stroke();
       }
-      return { segs, dur: 8 + rand() * 10, delay: rand() * 16, opacity: 0.15 + rand() * 0.2 };
-    });
-  }, []);
 
-  const motes = useMemo(() => {
-    const rand = seededRand(344);
-    return Array.from({ length: 18 }, () => ({
-      x: rand() * 100, dur: 12 + rand() * 20, delay: rand() * 16,
-      drift: (rand() - 0.5) * 40, size: 1 + rand() * 2, color: Math.floor(rand() * 3),
-    }));
-  }, []);
-
-  const moteColors = ['rgba(167,139,250,0.6)', 'rgba(200,180,255,0.5)', 'rgba(130,100,230,0.55)'];
-
-  return (
-    <Shell>
-      {/* Deep volcanic glass base gradient */}
-      <div className="absolute inset-0"
-        style={{ background: 'radial-gradient(ellipse at 35% 25%, rgba(30,20,60,0.6) 0%, transparent 50%), radial-gradient(ellipse at 70% 75%, rgba(20,15,50,0.5) 0%, transparent 45%)' }} />
-
-      {/* Glass shard planes — fractured obsidian with iridescent edge catches */}
-      {shards.map((s, i) => (
-        <div key={`sh${i}`} className="absolute"
-          style={{
-            left: `${s.cx - s.w / 6}%`, top: `${s.cy - s.h / 6}%`,
-            width: `${s.w}px`, height: `${s.h}px`,
-            transform: `rotate(${s.rot}deg)`,
-            clipPath: s.clip,
-            background: s.layer === 0
-              ? `linear-gradient(${s.edgeAngle}deg, transparent 30%, rgba(120,90,200,0.08) 48%, rgba(180,160,240,0.12) 52%, transparent 70%)`
-              : s.layer === 1
-              ? `linear-gradient(${s.edgeAngle}deg, transparent 25%, rgba(100,70,190,0.06) 45%, rgba(160,140,230,0.1) 55%, transparent 75%)`
-              : `linear-gradient(${s.edgeAngle}deg, transparent 35%, rgba(90,60,180,0.05) 48%, rgba(140,120,220,0.08) 52%, transparent 65%)`,
-            animation: `ob-shard ${s.dur}s ease-in-out ${s.delay}s infinite`,
-            opacity: 0.7,
-          }} />
-      ))}
-
-      {/* Slow prismatic sweep — single elegant light band crossing the surface */}
-      <div className="absolute" style={{width:'200%', height:'120px', top:'30%', left:'-50%',
-        background: 'linear-gradient(90deg, transparent 20%, rgba(140,110,230,0.06) 40%, rgba(200,180,255,0.14) 48%, rgba(255,255,255,0.08) 50%, rgba(180,160,240,0.12) 52%, rgba(120,90,210,0.06) 60%, transparent 80%)',
-        transform: 'rotate(-8deg)',
-        animation: 'ob-sweep 20s ease-in-out infinite' }} />
-      <div className="absolute" style={{width:'200%', height:'80px', top:'60%', left:'-50%',
-        background: 'linear-gradient(90deg, transparent 25%, rgba(130,100,220,0.05) 42%, rgba(180,160,240,0.1) 49%, rgba(220,210,255,0.06) 51%, rgba(150,120,230,0.08) 58%, transparent 75%)',
-        transform: 'rotate(5deg)',
-        animation: 'ob-sweep 26s ease-in-out 8s infinite' }} />
-
-      {/* Fracture veins — thin lines of trapped light between glass planes */}
-      <svg className="absolute inset-0 w-full h-full">
-        {veins.map((v, i) => {
-          const d = v.segs.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x},${s.y}`).join(' ');
-          return (
-            <g key={`v${i}`}>
-              <path d={d} fill="none" stroke={`rgba(167,139,250,${v.opacity})`} strokeWidth="1.5"
-                strokeLinecap="round" strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-                style={{ animation: `ob-vein ${v.dur}s ease-in-out ${v.delay}s infinite` }} />
-              <path d={d} fill="none" stroke={`rgba(200,180,255,${v.opacity * 0.4})`} strokeWidth="4"
-                strokeLinecap="round" strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-                style={{ animation: `ob-vein ${v.dur}s ease-in-out ${v.delay}s infinite` }} />
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* Glint sparks — tiny points where light catches fracture edges */}
-      {glints.map((g, i) => (
-        <div key={`gl${i}`} className="absolute"
-          style={{
-            left: `${g.x}%`, top: `${g.y}%`,
-            width: `${g.size}px`, height: `${g.size}px`,
-            borderRadius: '50%',
-            background: 'rgba(220,210,255,0.9)',
-            boxShadow: '0 0 6px rgba(167,139,250,0.8), 0 0 12px rgba(167,139,250,0.3)',
-            animation: `ob-glint ${g.dur}s ease-in-out ${g.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Rising volcanic glass motes — slowly ascending dust */}
-      {motes.map((m, i) => (
-        <div key={`m${i}`} className="absolute"
-          style={{
-            left: `${m.x}%`, bottom: '-3%',
-            width: `${m.size}px`, height: `${m.size}px`,
-            borderRadius: '50%',
-            background: moteColors[m.color],
-            ['--ob-drift' as string]: `${m.drift}px`,
-            animation: `ob-mote ${m.dur}s linear ${m.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Deep ambient core glow */}
-      <div className="absolute rounded-full"
-        style={{width:'min(500px,50vw)', height:'min(500px,50vw)',
-          top:'45%', left:'50%',
-          background: 'radial-gradient(circle, rgba(120,90,200,0.15), rgba(80,50,160,0.06) 40%, transparent 65%)',
-          transform: 'translate(-50%, -50%)',
-          animation: 'ob-core 20s ease-in-out infinite' }} />
-
-      <style>{`
-        @keyframes ob-shard  { 0%,100%{opacity:0.5;transform:rotate(var(--r,0deg))} 50%{opacity:0.9;transform:rotate(var(--r,0deg))} }
-        @keyframes ob-sweep  { 0%,100%{transform:rotate(var(--ob-ang,0deg)) translateX(-35%);opacity:0.6} 50%{transform:rotate(var(--ob-ang,0deg)) translateX(35%);opacity:1} }
-        @keyframes ob-vein   { 0%,100%{opacity:0.3} 40%{opacity:1} 60%{opacity:1} }
-        @keyframes ob-glint  { 0%,100%{opacity:0;transform:scale(0.5)} 15%{opacity:1;transform:scale(1.2)} 25%{opacity:0.8;transform:scale(1)} 35%{opacity:0;transform:scale(0.5)} }
-        @keyframes ob-mote   { 0%{opacity:0;transform:translateY(0) translateX(0)} 8%{opacity:0.7} 85%{opacity:0.3} 100%{opacity:0;transform:translateY(-110vh) translateX(var(--ob-drift))} }
-        @keyframes ob-core   { 0%,100%{opacity:0.8;transform:translate(-50%,-50%) scale(1)} 50%{opacity:1;transform:translate(-50%,-50%) scale(1.15)} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* ── Nord: Aurora borealis curtains, frost particles, polar sky ── */
-function NordBg() {
-  const frost = useMemo(() => {
-    const rand = seededRand(22);
-    return Array.from({ length: 30 }, () => ({
-      x: rand() * 100, y: rand() * 70,
-      size: 0.8 + rand() * 2.5,
-      dur: 4 + rand() * 7,
-      delay: rand() * 9,
-      color: Math.floor(rand() * 3),
-    }));
-  }, []);
-  const snowflakes = useMemo(() => {
-    const rand = seededRand(122);
-    return Array.from({ length: 25 }, () => ({
-      x: rand() * 100,
-      size: 2 + rand() * 4,
-      dur: 8 + rand() * 14,
-      delay: rand() * 16,
-      drift: (rand() - 0.5) * 60,
-      opacity: 0.4 + rand() * 0.4,
-    }));
-  }, []);
-  const hexCrystals = useMemo(() => {
-    const rand = seededRand(222);
-    return Array.from({ length: 6 }, () => ({
-      x: 5 + rand() * 90, y: 5 + rand() * 55,
-      size: 18 + rand() * 30,
-      dur: 10 + rand() * 14, delay: rand() * 9,
-      rot: rand() * 60,
-    }));
-  }, []);
-  const auroraColors = ['#88c0d0','#81a1c1','#5e81ac','#a3be8c','#b48ead','#8fbcbb','#8ec07c'];
-  const auroraBands = [
-    { color: '#88c0d0', top: '-6%', h: '52%', delay: '0s', dur: '10s' },
-    { color: '#a3be8c', top: '2%',  h: '42%', delay: '2s', dur: '13s' },
-    { color: '#5e81ac', top: '-4%', h: '58%', delay: '4.5s', dur: '16s' },
-    { color: '#b48ead', top: '3%',  h: '38%', delay: '7s', dur: '12s' },
-    { color: '#ebcb8b', top: '1%',  h: '30%', delay: '9s', dur: '14s' },
-    { color: '#81a1c1', top: '-2%', h: '45%', delay: '3s', dur: '11s' },
-    { color: '#bf616a', top: '5%',  h: '28%', delay: '11s', dur: '15s' },
-  ];
-  return (
-    <Shell>
-      {/* Mountain silhouette */}
-      <svg className="absolute bottom-0 left-0 right-0 w-full" viewBox="0 0 1000 180" preserveAspectRatio="none" style={{ height: '22%' }}>
-        <defs>
-          <linearGradient id="nd-mountain-edge" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#5e81ac" stopOpacity="0.7" />
-            <stop offset="100%" stopColor="#2e3440" stopOpacity="0.3" />
-          </linearGradient>
-        </defs>
-        {/* Back range */}
-        <path d="M0,180 L0,120 L80,60 L160,90 L260,30 L360,80 L440,40 L520,85 L620,25 L720,75 L800,45 L880,80 L960,50 L1000,70 L1000,180 Z"
-          fill="rgba(36,40,59,0.8)" />
-        {/* Blue edge highlight */}
-        <path d="M0,120 L80,60 L160,90 L260,30 L360,80 L440,40 L520,85 L620,25 L720,75 L800,45 L880,80 L960,50 L1000,70"
-          fill="none" stroke="url(#nd-mountain-edge)" strokeWidth="2" />
-        {/* Front range */}
-        <path d="M0,180 L0,145 L60,100 L130,125 L200,85 L300,110 L390,70 L480,105 L560,80 L650,115 L730,88 L820,120 L900,95 L970,115 L1000,100 L1000,180 Z"
-          fill="rgba(28,32,48,0.9)" />
-      </svg>
-      {/* Aurora bands */}
-      {auroraBands.map((band, i) => (
-        <div key={i} className="absolute left-0 right-0"
-          style={{ top: band.top, height: band.h,
-            background: `linear-gradient(180deg, ${band.color}80 0%, ${band.color}50 40%, transparent 100%)`,
-            animation: `nd-wave ${band.dur} ease-in-out ${band.delay} infinite`,
-            filter: 'blur(28px)' }} />
-      ))}
-      {/* Vertical curtain columns */}
-      {Array.from({ length: 12 }, (_, i) => (
-        <div key={`col${i}`} className="absolute top-0"
-          style={{ left: `${2 + i * 8}%`, width: '5%', height: '58%',
-            background: `linear-gradient(180deg, ${auroraColors[i % auroraColors.length]}70, transparent)`,
-            animation: `nd-col ${3.5 + i * 1.1}s ease-in-out ${i * 0.7}s infinite`,
-            filter: 'blur(10px)' }} />
-      ))}
-      {/* Frost particles */}
-      {frost.map((f, i) => (
-        <div key={`fr${i}`} className="absolute rounded-full"
-          style={{ left: `${f.x}%`, top: `${f.y}%`, width: `${f.size}px`, height: `${f.size}px`,
-            background: ['#88c0d0', '#81a1c1', '#8fbcbb'][f.color],
-            opacity: 0.4 + (i % 4) * 0.2,
-            boxShadow: `0 0 4px ${['#88c0d0', '#81a1c1', '#8fbcbb'][f.color]}`,
-            animation: `nd-frost ${f.dur}s ease-in-out ${f.delay}s infinite` }} />
-      ))}
-      {/* Falling snowflakes */}
-      {snowflakes.map((s, i) => (
-        <div key={`snow${i}`} className="absolute rounded-full opacity-0"
-          style={{ left: `${s.x}%`, top: '-3%', width: `${s.size}px`, height: `${s.size}px`,
-            background: 'rgba(236,239,244,0.9)',
-            boxShadow: '0 0 6px rgba(236,239,244,0.8)',
-            animation: `nd-snow ${s.dur}s linear ${s.delay}s infinite`,
-            ['--snow-drift' as string]: `${s.drift}px` }} />
-      ))}
-      {/* Ice crystal hexagons */}
-      <svg className="absolute inset-0 w-full h-full">
-        {hexCrystals.map((h, i) => (
-          <g key={`hx${i}`}
-            style={{ animation: `nd-crystal ${h.dur}s ease-in-out ${h.delay}s infinite`, transformOrigin: `${h.x}% ${h.y}%` }}>
-            <polygon
-              points={`${h.x * 10},${h.y * 10 - h.size} ${h.x * 10 + h.size * 0.866},${h.y * 10 - h.size * 0.5} ${h.x * 10 + h.size * 0.866},${h.y * 10 + h.size * 0.5} ${h.x * 10},${h.y * 10 + h.size} ${h.x * 10 - h.size * 0.866},${h.y * 10 + h.size * 0.5} ${h.x * 10 - h.size * 0.866},${h.y * 10 - h.size * 0.5}`}
-              fill="none" stroke="rgba(136,192,208,0.5)" strokeWidth="1.2"
-              transform={`rotate(${h.rot}, ${h.x * 10}, ${h.y * 10})`}
-              style={{ filter: 'drop-shadow(0 0 3px rgba(136,192,208,0.7))' }} />
-          </g>
-        ))}
-        {/* Northern star with cross-flare */}
-        <g style={{ animation: 'nd-star 5s ease-in-out infinite', transformOrigin: '82% 5%' }}>
-          <circle cx="82%" cy="5%" r="3" fill="rgba(236,239,244,0.9)" />
-          <line x1="82%" y1="1%" x2="82%" y2="9%" stroke="rgba(236,239,244,0.7)" strokeWidth="1.2" />
-          <line x1="78%" y1="5%" x2="86%" y2="5%" stroke="rgba(236,239,244,0.7)" strokeWidth="1.2" />
-          <line x1="79.2%" y1="2.2%" x2="84.8%" y2="7.8%" stroke="rgba(236,239,244,0.5)" strokeWidth="1" />
-          <line x1="84.8%" y1="2.2%" x2="79.2%" y2="7.8%" stroke="rgba(236,239,244,0.5)" strokeWidth="1" />
-        </g>
-      </svg>
-      {/* Subtle grid lines */}
-      <div className="absolute inset-0 opacity-[0.08]"
-        style={{ background: 'repeating-linear-gradient(90deg, transparent, transparent 80px, rgba(136,192,208,0.3) 80px, rgba(136,192,208,0.3) 81px)' }} />
-      <style>{`
-        @keyframes nd-wave    { 0%,100%{transform:scaleY(1) translateY(0);opacity:1} 30%{transform:scaleY(1.8) translateY(-8%);opacity:0.7} 70%{transform:scaleY(0.55) translateY(5%);opacity:1.3} }
-        @keyframes nd-col     { 0%,100%{transform:scaleY(1);opacity:1} 50%{transform:scaleY(2.5);opacity:0.4} }
-        @keyframes nd-frost   { 0%,100%{opacity:inherit;transform:translateY(0)} 50%{opacity:0.15;transform:translateY(-9px)} }
-        @keyframes nd-snow    { 0%{opacity:0;transform:translateY(0) translateX(0)} 8%{opacity:inherit} 90%{opacity:0.4} 100%{opacity:0;transform:translateY(110vh) translateX(var(--snow-drift))} }
-        @keyframes nd-crystal { 0%,100%{opacity:0.8;transform:rotate(0deg)} 50%{opacity:1;transform:rotate(30deg)} }
-        @keyframes nd-star    { 0%,100%{opacity:0.9;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* ── Gruvbox: Heat waves, rising embers, lava cracks ── */
-function GruvboxBg() {
-  const embers = useMemo(() => {
-    const rand = seededRand(73);
-    return Array.from({ length: 40 }, (_, i) => ({
-      x: rand() * 100,
-      size: i < 10 ? (0.6 + rand() * 1.2) : i < 28 ? (1.5 + rand() * 2.5) : (3 + rand() * 4.5),
-      dur: i < 10 ? (1.2 + rand() * 1.8) : i < 28 ? (2.5 + rand() * 4) : (4 + rand() * 6),
-      delay: rand() * 10,
-      drift: (rand() - 0.5) * 80,
-      color: rand() > 0.55 ? '#d79921' : rand() > 0.3 ? '#d65d0e' : '#cc241d',
-    }));
-  }, []);
-  const ash = useMemo(() => {
-    const rand = seededRand(173);
-    return Array.from({ length: 20 }, () => ({
-      x: rand() * 100,
-      size: 1.5 + rand() * 3,
-      dur: 12 + rand() * 18,
-      delay: rand() * 12,
-      drift: (rand() - 0.5) * 40,
-    }));
-  }, []);
-  const lavaPoolPositions = [18, 50, 80];
-  return (
-    <Shell>
-      {/* Heat glow zones */}
-      <div className="absolute bottom-0 left-0 right-0 h-[62%]"
-        style={{ background: 'linear-gradient(to top, rgba(215,153,33,0.5), rgba(214,93,14,0.3) 45%, transparent)', animation: 'gv-glow 4s ease-in-out infinite' }} />
-      <div className="absolute bottom-0 left-[5%] right-[5%] h-[45%]"
-        style={{ background: 'radial-gradient(ellipse at bottom, rgba(214,93,14,0.6), transparent 60%)', animation: 'gv-glow 5.5s ease-in-out 1.2s infinite' }} />
-      <div className="absolute bottom-0 left-[20%] right-[20%] h-[32%]"
-        style={{ background: 'radial-gradient(ellipse at bottom, rgba(204,36,29,0.5), transparent 55%)', animation: 'gv-glow 4.5s ease-in-out 2.4s infinite' }} />
-      <div className="absolute bottom-0 left-[35%] right-[35%] h-[20%]"
-        style={{ background: 'radial-gradient(ellipse at bottom, rgba(255,180,50,0.4), transparent 50%)', animation: 'gv-glow 3.5s ease-in-out 3.6s infinite' }} />
-      {/* Coal bed strip */}
-      <div className="absolute bottom-0 left-0 right-0 h-[3px]"
-        style={{ background: 'linear-gradient(90deg, transparent 5%, rgba(215,153,33,0.8) 20%, rgba(255,200,60,0.9) 50%, rgba(215,153,33,0.8) 80%, transparent 95%)', filter: 'blur(1px)', animation: 'gv-coal 3s ease-in-out infinite' }} />
-      {/* Molten lava pools */}
-      {lavaPoolPositions.map((pos, i) => (
-        <div key={`pool${i}`} className="absolute bottom-0"
-          style={{ left: `${pos - 12}%`, width: '24%', height: '6%',
-            background: `radial-gradient(ellipse at center bottom, rgba(255,${160 - i * 20},30,0.7), rgba(214,93,14,0.4) 50%, transparent 75%)`,
-            filter: 'blur(3px)', animation: `gv-pool ${4 + i * 1.5}s ease-in-out ${i * 1.2}s infinite` }} />
-      ))}
-      {/* Lava crack lines */}
-      {[8, 18, 30, 43, 55, 67, 78, 90].map((x, i) => (
-        <div key={`c${i}`} className="absolute bottom-0"
-          style={{ left: `${x}%`, width: '2px', height: `${12 + i * 5}%`,
-            background: `linear-gradient(to top, rgba(${i % 3 === 0 ? '215,153,33' : i % 3 === 1 ? '214,93,14' : '204,36,29'},${0.7 - i * 0.03}), transparent)`,
-            filter: 'blur(1.5px)',
-            boxShadow: `0 0 8px rgba(215,153,33,0.6)`,
-            animation: `gv-crack ${2.5 + i * 1.1}s ease-in-out ${i * 0.55}s infinite` }} />
-      ))}
-      {/* Heat distortion shimmer */}
-      <div className="absolute bottom-0 left-0 right-0 h-[30%]"
-        style={{ animation: 'gv-shimmer 1.8s ease-in-out infinite', filter: 'blur(2px)',
-          background: 'linear-gradient(to top, rgba(215,100,14,0.15), transparent)' }} />
-      {/* Smoke wisps */}
-      {[12, 28, 46, 62, 80].map((x, i) => (
-        <div key={`sm${i}`} className="absolute"
-          style={{ left: `${x}%`, bottom: '8%', width: `${30 + i * 8}px`, height: '20%',
-            background: `radial-gradient(ellipse at center bottom, rgba(80,60,40,0.3), transparent 65%)`,
-            filter: 'blur(12px)',
-            animation: `gv-smoke ${6 + i * 2}s ease-out ${i * 1.4}s infinite` }} />
-      ))}
-      {/* Embers */}
-      {embers.map((e, i) => (
-        <div key={`em${i}`} className="absolute rounded-full"
-          style={{ left: `${e.x}%`, bottom: '0',
-            width: `${e.size}px`, height: `${e.size}px`,
-            background: e.color, opacity: 0,
-            boxShadow: `0 0 ${e.size * 4}px ${e.color}`,
-            ['--gv-drift' as string]: `${e.drift}px`,
-            animation: `gv-rise ${e.dur}s ease-out ${e.delay}s infinite` }} />
-      ))}
-      {/* Ash particles */}
-      {ash.map((a, i) => (
-        <div key={`ash${i}`} className="absolute rounded-full opacity-0"
-          style={{ left: `${a.x}%`, top: '-2%', width: `${a.size}px`, height: `${a.size}px`,
-            background: `rgba(${120 + i * 3},${100 + i * 2},${80 + i},0.6)`,
-            ['--ash-drift' as string]: `${a.drift}px`,
-            animation: `gv-ash ${a.dur}s linear ${a.delay}s infinite` }} />
-      ))}
-      <style>{`
-        @keyframes gv-glow   { 0%,100%{opacity:1} 50%{opacity:1.3} }
-        @keyframes gv-coal   { 0%,100%{opacity:0.8} 50%{opacity:1} }
-        @keyframes gv-rise   { 0%{opacity:0.8;transform:translateY(0) translateX(0)} 50%{opacity:0.5} 100%{opacity:0;transform:translateY(-320px) translateX(var(--gv-drift))} }
-        @keyframes gv-crack  { 0%,100%{opacity:1} 50%{opacity:0.5} }
-        @keyframes gv-shimmer{ 0%,100%{transform:translateX(0) skewX(0deg)} 33%{transform:translateX(2px) skewX(0.3deg)} 66%{transform:translateX(-2px) skewX(-0.3deg)} }
-        @keyframes gv-pool   { 0%,100%{opacity:0.9;transform:scaleX(1)} 50%{opacity:1;transform:scaleX(1.08)} }
-        @keyframes gv-smoke  { 0%{opacity:0;transform:translateY(0) scaleX(1)} 15%{opacity:0.8} 75%{opacity:0.3} 100%{opacity:0;transform:translateY(-180px) scaleX(2.5)} }
-        @keyframes gv-ash    { 0%{opacity:0;transform:translateY(0) translateX(0)} 10%{opacity:0.6} 90%{opacity:0.3} 100%{opacity:0;transform:translateY(110vh) translateX(var(--ash-drift))} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* ── Rose Pine: Falling petals, fireflies, dreamy fog ── */
-function RosePineBg() {
-  const petalsRound = useMemo(() => {
-    const rand = seededRand(55);
-    return Array.from({ length: 10 }, () => ({
-      x: rand() * 112 - 6, size: 10 + rand() * 12,
-      dur: 8 + rand() * 12, delay: rand() * 16,
-      drift: (rand() - 0.5) * 90,
-      color: rand() > 0.5 ? '#eb6f92' : rand() > 0.3 ? '#c4a7e7' : '#f6c177',
-    }));
-  }, []);
-  const petalsElong = useMemo(() => {
-    const rand = seededRand(155);
-    return Array.from({ length: 8 }, () => ({
-      x: rand() * 112 - 6, size: 7 + rand() * 10,
-      dur: 9 + rand() * 11, delay: rand() * 18,
-      drift: (rand() - 0.5) * 120,
-      color: rand() > 0.5 ? '#eb6f92' : '#c4a7e7',
-    }));
-  }, []);
-  const petalsSmall = useMemo(() => {
-    const rand = seededRand(255);
-    return Array.from({ length: 7 }, () => ({
-      x: rand() * 112 - 6, size: 4 + rand() * 6,
-      dur: 6 + rand() * 10, delay: rand() * 14,
-      drift: (rand() - 0.5) * 70,
-      color: rand() > 0.6 ? '#f6c177' : '#eb6f92',
-    }));
-  }, []);
-  const fireflies = useMemo(() => {
-    const rand = seededRand(56);
-    return Array.from({ length: 12 }, () => ({
-      x: rand() * 100, y: rand() * 95,
-      dur: 5 + rand() * 9,
-      delay: rand() * 12,
-      glowColor: Math.floor(rand() * 3),
-    }));
-  }, []);
-  const windParticles = useMemo(() => {
-    const rand = seededRand(356);
-    return Array.from({ length: 8 }, () => ({
-      y: 5 + rand() * 85, size: 1.5 + rand() * 2.5,
-      dur: 4 + rand() * 6, delay: rand() * 10,
-      opacity: 0.3 + rand() * 0.4,
-    }));
-  }, []);
-  const dewDrops = useMemo(() => {
-    const rand = seededRand(456);
-    return Array.from({ length: 8 }, () => ({
-      x: rand() * 100, y: 55 + rand() * 35,
-      size: 2 + rand() * 3,
-      dur: 3 + rand() * 4, delay: rand() * 8,
-    }));
-  }, []);
-  const glowColors = ['rgba(246,193,119,', 'rgba(235,111,146,', 'rgba(196,167,231,'];
-  return (
-    <Shell>
-      {/* Fog/mist layers */}
-      <div className="absolute w-[min(650px,50vw)] h-[min(400px,30vw)] top-[18%] right-[-12%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(235,111,146,0.25), transparent 50%)', filter: 'blur(30px)', animation: 'rp-drift-a 22s ease-in-out infinite' }} />
-      <div className="absolute w-[min(520px,42vw)] h-[min(350px,28vw)] bottom-[8%] left-[-12%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(196,167,231,0.3), transparent 50%)', filter: 'blur(28px)', animation: 'rp-drift-b 28s ease-in-out infinite' }} />
-      <div className="absolute w-[min(420px,35vw)] h-[min(300px,25vw)] top-[45%] left-[35%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(246,193,119,0.25), transparent 50%)', filter: 'blur(22px)', animation: 'rp-drift-c 34s ease-in-out 6s infinite' }} />
-      <div className="absolute w-[min(380px,30vw)] h-[min(260px,22vw)] top-[5%] left-[20%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(235,111,146,0.2), transparent 50%)', filter: 'blur(20px)', animation: 'rp-drift-a 40s ease-in-out 10s infinite reverse' }} />
-      <div className="absolute w-[min(300px,24vw)] h-[min(200px,16vw)] bottom-[25%] right-[10%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(196,167,231,0.2), transparent 50%)', filter: 'blur(18px)', animation: 'rp-drift-b 30s ease-in-out 4s infinite reverse' }} />
-      {/* Moonbeam diagonal shaft */}
-      <div className="absolute" style={{
-        top: '-10%', left: '-5%', width: '60%', height: '80%',
-        background: 'linear-gradient(135deg, rgba(246,193,119,0.2) 0%, rgba(235,111,146,0.15) 30%, transparent 60%)',
-        filter: 'blur(20px)',
-        animation: 'rp-moonbeam 18s ease-in-out infinite',
-      }} />
-      {/* SVG: branch silhouettes + flower blooms + dew drops */}
-      <svg className="absolute inset-0 w-full h-full">
-        {/* Branch/vine silhouettes */}
-        <path d="M0,40 Q15,20 25,35 Q35,50 50,30 Q60,15 70,25 Q80,35 90,20"
-          fill="none" stroke="rgba(40,30,45,0.7)" strokeWidth="2" />
-        <path d="M0,60 Q10,45 20,55 Q30,65 45,48 Q55,32 65,42"
-          fill="none" stroke="rgba(40,30,45,0.6)" strokeWidth="1.5" />
-        <path d="M100,30 Q88,18 80,28 Q72,38 62,22 Q54,10 44,18"
-          fill="none" stroke="rgba(40,30,45,0.65)" strokeWidth="1.8" />
-        <path d="M0,85 Q12,75 22,82 Q32,89 42,78"
-          fill="none" stroke="rgba(40,30,45,0.5)" strokeWidth="1.3" />
-        {/* Flower bloom clusters */}
-        {[
-          [20, 28], [48, 22], [70, 18], [85, 24], [10, 52], [62, 38],
-        ].map(([cx, cy], i) => (
-          <g key={`bloom${i}`} style={{ animation: `rp-bloom ${3 + i * 0.8}s ease-in-out ${i * 1.2}s infinite`, transformOrigin: `${cx}% ${cy}%` }}>
-            {[0, 90, 180, 270].map((a) => {
-              const rad = a * Math.PI / 180;
-              const r = 3;
-              return (
-                <circle key={a} cx={`${cx + Math.cos(rad) * r}%`} cy={`${cy + Math.sin(rad) * r}%`} r="1.5"
-                  fill={i % 3 === 0 ? 'rgba(235,111,146,0.7)' : i % 3 === 1 ? 'rgba(196,167,231,0.7)' : 'rgba(246,193,119,0.7)'} />
-              );
-            })}
-            <circle cx={`${cx}%`} cy={`${cy}%`} r="1"
-              fill={i % 3 === 0 ? 'rgba(246,193,119,0.8)' : 'rgba(235,111,146,0.8)'} />
-          </g>
-        ))}
-        {/* Dew drops */}
-        {dewDrops.map((d, i) => (
-          <circle key={`dew${i}`} cx={`${d.x}%`} cy={`${d.y}%`} r={d.size}
-            fill="rgba(255,255,255,0.3)"
-            stroke="rgba(246,193,119,0.5)" strokeWidth="0.8"
-            style={{ animation: `rp-dew ${d.dur}s ease-in-out ${d.delay}s infinite` }} />
-        ))}
-      </svg>
-      {/* Round petals */}
-      {petalsRound.map((p, i) => (
-        <div key={`pr${i}`} className="absolute opacity-0"
-          style={{ left: `${p.x}%`, top: '-4%',
-            width: `${p.size}px`, height: `${p.size}px`,
-            background: p.color, borderRadius: '50%',
-            opacity: 0, filter: 'blur(0.5px)',
-            animation: `rp-fall ${p.dur}s ease-in-out ${p.delay}s infinite`,
-            ['--rp-drift' as string]: `${p.drift}px` }} />
-      ))}
-      {/* Elongated petals */}
-      {petalsElong.map((p, i) => (
-        <div key={`pe${i}`} className="absolute opacity-0"
-          style={{ left: `${p.x}%`, top: '-4%',
-            width: `${p.size * 0.45}px`, height: `${p.size}px`,
-            background: p.color, borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%',
-            opacity: 0,
-            animation: `rp-fall ${p.dur}s ease-in-out ${p.delay}s infinite`,
-            ['--rp-drift' as string]: `${p.drift}px` }} />
-      ))}
-      {/* Small petals */}
-      {petalsSmall.map((p, i) => (
-        <div key={`ps${i}`} className="absolute opacity-0"
-          style={{ left: `${p.x}%`, top: '-4%',
-            width: `${p.size}px`, height: `${p.size * 0.7}px`,
-            background: p.color, borderRadius: '50% 0 50% 0',
-            opacity: 0,
-            animation: `rp-fall ${p.dur}s ease-in-out ${p.delay}s infinite`,
-            ['--rp-drift' as string]: `${p.drift}px` }} />
-      ))}
-      {/* Fireflies */}
-      {fireflies.map((f, i) => (
-        <div key={`ff${i}`} className="absolute"
-          style={{ left: `${f.x}%`, top: `${f.y}%`, animation: `rp-fly ${f.dur}s ease-in-out ${f.delay}s infinite`, opacity: 0 }}>
-          {/* Outer halo */}
-          <div className="absolute rounded-full"
-            style={{ top: '-6px', left: '-6px', width: '14px', height: '14px',
-              background: `radial-gradient(circle, ${glowColors[f.glowColor]}0.4), transparent 70%)`,
-              filter: 'blur(4px)' }} />
-          {/* Core dot */}
-          <div className="absolute rounded-full"
-            style={{ width: '3px', height: '3px',
-              background: f.glowColor === 0 ? '#f6c177' : f.glowColor === 1 ? '#eb6f92' : '#c4a7e7',
-              boxShadow: `0 0 8px ${f.glowColor === 0 ? '#f6c177' : f.glowColor === 1 ? '#eb6f92' : '#c4a7e7'}` }} />
-        </div>
-      ))}
-      {/* Wind-blown horizontal particles */}
-      {windParticles.map((w, i) => (
-        <div key={`wp${i}`} className="absolute rounded-full"
-          style={{ left: '-2%', top: `${w.y}%`, width: `${w.size}px`, height: `${w.size}px`,
-            background: i % 3 === 0 ? 'rgba(246,193,119,0.7)' : i % 3 === 1 ? 'rgba(235,111,146,0.7)' : 'rgba(196,167,231,0.7)',
-            opacity: 0, animation: `rp-wind ${w.dur}s linear ${w.delay}s infinite` }} />
-      ))}
-      <style>{`
-        @keyframes rp-fall      { 0%{opacity:0;transform:translateY(0) translateX(0) rotate(0deg)} 8%{opacity:0.6} 88%{opacity:0.4} 100%{opacity:0;transform:translateY(110vh) translateX(var(--rp-drift)) rotate(720deg)} }
-        @keyframes rp-drift-a   { 0%,100%{transform:translate(0,0)} 33%{transform:translate(-28px,18px)} 66%{transform:translate(14px,-12px)} }
-        @keyframes rp-drift-b   { 0%,100%{transform:translate(0,0)} 33%{transform:translate(22px,-16px)} 66%{transform:translate(-18px,12px)} }
-        @keyframes rp-drift-c   { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-16px,20px)} }
-        @keyframes rp-fly       { 0%,100%{opacity:0;transform:translate(0,0)} 15%{opacity:0.8} 50%{opacity:0.6;transform:translate(18px,-14px)} 80%{opacity:0.8} }
-        @keyframes rp-wind      { 0%{opacity:0;left:-2%} 10%{opacity:inherit} 90%{opacity:inherit} 100%{opacity:0;left:102%} }
-        @keyframes rp-bloom     { 0%,100%{opacity:0.7;transform:scale(0.9)} 50%{opacity:1;transform:scale(1.15)} }
-        @keyframes rp-dew       { 0%,100%{opacity:0.7;r:inherit} 50%{opacity:1;r:inherit} }
-        @keyframes rp-moonbeam  { 0%,100%{opacity:0.8} 50%{opacity:1} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* ── Abyss: Deep ocean, bioluminescence, caustic light, bubbles ── */
-function AbyssBg() {
-  const orbs = useMemo(() => {
-    const rand = seededRand(88);
-    return Array.from({ length: 20 }, (_, i) => ({
-      x: rand() * 100, y: rand() * 100,
-      size: i < 7 ? (3 + rand() * 6) : i < 16 ? (6 + rand() * 12) : (14 + rand() * 10),
-      dur: 4 + rand() * 9,
-      delay: rand() * 12,
-      color: rand() > 0.5 ? '#2dd4bf' : rand() > 0.3 ? '#22d3ee' : '#34d399',
-    }));
-  }, []);
-  const bubbles = useMemo(() => {
-    const rand = seededRand(89);
-    return Array.from({ length: 18 }, () => ({
-      x: rand() * 100,
-      size: 2 + rand() * 7,
-      dur: 5 + rand() * 10,
-      delay: rand() * 14,
-      drift: (rand() - 0.5) * 30,
-    }));
-  }, []);
-  const marineSnow = useMemo(() => {
-    const rand = seededRand(189);
-    return Array.from({ length: 24 }, () => ({
-      x: rand() * 100,
-      size: 0.8 + rand() * 2,
-      dur: 14 + rand() * 22,
-      delay: rand() * 18,
-      drift: (rand() - 0.5) * 25,
-    }));
-  }, []);
-  const causticLines = useMemo(() => {
-    const rand = seededRand(289);
-    return Array.from({ length: 10 }, (_, i) => ({
-      top: 2 + i * 9 + rand() * 4,
-      dur: 3.5 + rand() * 4,
-      delay: rand() * 5,
-      opacity: 0.25 + rand() * 0.3,
-    }));
-  }, []);
-  // Jellyfish: 3 instances
-  const jellies = useMemo(() => {
-    const rand = seededRand(389);
-    return [
-      { x: 15 + rand() * 10, y: 30 + rand() * 20, size: 28 + rand() * 16, dur: 7 + rand() * 5, delay: 0 },
-      { x: 55 + rand() * 10, y: 20 + rand() * 25, size: 22 + rand() * 14, dur: 8 + rand() * 5, delay: 3 },
-      { x: 78 + rand() * 10, y: 40 + rand() * 20, size: 18 + rand() * 12, dur: 6 + rand() * 5, delay: 5 },
-    ];
-  }, []);
-  // Sonar pings
-  const sonars = [
-    { x: 30, y: 70, dur: 8, delay: 0 },
-    { x: 72, y: 80, dur: 11, delay: 4 },
-  ];
-  return (
-    <Shell>
-      {/* Depth gradient */}
-      <div className="absolute inset-0"
-        style={{ background: 'linear-gradient(180deg, rgba(45,212,191,0.15) 0%, rgba(34,211,238,0.25) 35%, rgba(20,150,140,0.35) 65%, rgba(10,80,80,0.45) 100%)' }} />
-      {/* Surface caustic ripples */}
-      <div className="absolute top-0 left-0 right-0 h-[12%]"
-        style={{ background: 'repeating-linear-gradient(80deg, transparent, transparent 18px, rgba(45,212,191,0.2) 18px, rgba(45,212,191,0.2) 19px), repeating-linear-gradient(-80deg, transparent, transparent 22px, rgba(34,211,238,0.15) 22px, rgba(34,211,238,0.15) 23px)',
-          filter: 'blur(1px)', animation: 'ab-surface 4s ease-in-out infinite' }} />
-      {/* Caustic light lines */}
-      {causticLines.map((c, i) => (
-        <div key={`cl${i}`} className="absolute left-[-5%] right-[-5%]"
-          style={{ top: `${c.top}%`, height: '2px',
-            background: `linear-gradient(90deg, transparent 3%, rgba(45,212,191,${c.opacity * 0.6}) 15%, rgba(45,212,191,${c.opacity}) 40%, rgba(34,211,238,${c.opacity * 1.2}) 50%, rgba(45,212,191,${c.opacity}) 60%, rgba(45,212,191,${c.opacity * 0.6}) 85%, transparent 97%)`,
-            filter: 'blur(1.5px)',
-            animation: `ab-caustic ${c.dur}s ease-in-out ${c.delay}s infinite` }} />
-      ))}
-      {/* Bioluminescent orbs */}
-      {orbs.map((o, i) => (
-        <div key={`o${i}`} className="absolute" style={{ left: `${o.x}%`, top: `${o.y}%`, opacity: 0, animation: `ab-glow ${o.dur}s ease-in-out ${o.delay}s infinite` }}>
-          {/* Outer diffuse */}
-          <div className="absolute rounded-full"
-            style={{ top: `-${o.size * 0.8}px`, left: `-${o.size * 0.8}px`,
-              width: `${o.size * 3.6}px`, height: `${o.size * 3.6}px`,
-              background: `radial-gradient(circle, ${o.color}60, transparent 60%)`,
-              filter: 'blur(4px)' }} />
-          {/* Inner bright core */}
-          <div className="absolute rounded-full"
-            style={{ width: `${o.size}px`, height: `${o.size}px`,
-              background: o.color,
-              boxShadow: `0 0 ${o.size * 3}px ${o.color}, 0 0 ${o.size * 6}px ${o.color}80` }} />
-        </div>
-      ))}
-      {/* Rising bubbles */}
-      {bubbles.map((b, i) => (
-        <div key={`b${i}`} className="absolute rounded-full opacity-0"
-          style={{ left: `${b.x}%`, bottom: '-4%',
-            width: `${b.size}px`, height: `${b.size}px`,
-            border: `1px solid rgba(45,212,191,${0.4 + (i % 3) * 0.2})`,
-            background: `radial-gradient(circle at 30% 30%, rgba(45,212,191,0.3), transparent 60%)`,
-            ['--ab-drift' as string]: `${b.drift}px`,
-            animation: `ab-bubble ${b.dur}s ease-out ${b.delay}s infinite` }} />
-      ))}
-      {/* Marine snow */}
-      {marineSnow.map((m, i) => (
-        <div key={`ms${i}`} className="absolute rounded-full opacity-0"
-          style={{ left: `${m.x}%`, top: '-2%',
-            width: `${m.size}px`, height: `${m.size}px`,
-            background: `rgba(200,240,240,${0.5 + (i % 4) * 0.2})`,
-            ['--ab-snow-drift' as string]: `${m.drift}px`,
-            animation: `ab-snow ${m.dur}s linear ${m.delay}s infinite` }} />
-      ))}
-      {/* Jellyfish */}
-      {jellies.map((j, i) => (
-        <div key={`jf${i}`} className="absolute"
-          style={{ left: `${j.x}%`, top: `${j.y}%`, width: `${j.size * 2}px`, height: `${j.size * 2.5}px`,
-            animation: `ab-jelly ${j.dur}s ease-in-out ${j.delay}s infinite`, opacity: 0.6 }}>
-          <svg viewBox="0 0 60 80" className="w-full h-full">
-            <defs>
-              <radialGradient id={`jf-grad-${i}`} cx="50%" cy="40%">
-                <stop offset="0%" stopColor="#2dd4bf" stopOpacity="0.8" />
-                <stop offset="60%" stopColor="#22d3ee" stopOpacity="0.5" />
-                <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0" />
-              </radialGradient>
-            </defs>
-            {/* Dome */}
-            <ellipse cx="30" cy="28" rx="24" ry="20" fill={`url(#jf-grad-${i})`} stroke="rgba(45,212,191,0.8)" strokeWidth="1.2" />
-            {/* Inner highlight */}
-            <ellipse cx="30" cy="26" rx="16" ry="12" fill="rgba(45,212,191,0.3)" />
-            {/* Tentacles */}
-            <path d="M18,46 Q14,56 17,66 Q19,72 16,78" fill="none" stroke="rgba(45,212,191,0.6)" strokeWidth="1.5">
-              <animate attributeName="d" values="M18,46 Q14,56 17,66 Q19,72 16,78;M18,46 Q22,56 19,66 Q17,72 20,78;M18,46 Q14,56 17,66 Q19,72 16,78" dur="3s" repeatCount="indefinite" />
-            </path>
-            <path d="M24,47 Q22,57 25,67 Q27,73 24,78" fill="none" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5">
-              <animate attributeName="d" values="M24,47 Q22,57 25,67 Q27,73 24,78;M24,47 Q26,57 23,67 Q21,73 26,78;M24,47 Q22,57 25,67 Q27,73 24,78" dur="3.5s" repeatCount="indefinite" />
-            </path>
-            <path d="M36,47 Q38,57 35,67 Q33,73 36,78" fill="none" stroke="rgba(45,212,191,0.5)" strokeWidth="1.5">
-              <animate attributeName="d" values="M36,47 Q38,57 35,67 Q33,73 36,78;M36,47 Q34,57 37,67 Q39,73 34,78;M36,47 Q38,57 35,67 Q33,73 36,78" dur="2.8s" repeatCount="indefinite" />
-            </path>
-            <path d="M42,46 Q46,56 43,66 Q41,72 44,78" fill="none" stroke="rgba(45,212,191,0.6)" strokeWidth="1.5">
-              <animate attributeName="d" values="M42,46 Q46,56 43,66 Q41,72 44,78;M42,46 Q38,56 41,66 Q43,72 40,78;M42,46 Q46,56 43,66 Q41,72 44,78" dur="3.2s" repeatCount="indefinite" />
-            </path>
-          </svg>
-        </div>
-      ))}
-      {/* SVG: kelp/seaweed + sonar pings */}
-      <svg className="absolute inset-0 w-full h-full">
-        {/* Kelp silhouettes */}
-        {[5, 18, 35, 62, 82].map((kx, i) => (
-          <g key={`kelp${i}`} style={{ animation: `ab-sway ${4 + i * 0.8}s ease-in-out ${i * 0.6}s infinite`, transformOrigin: `${kx}% 100%` }}>
-            <path d={`M${kx * 10},1000 Q${kx * 10 - 15},${950 - i * 30} ${kx * 10 + 10},${900 - i * 25} Q${kx * 10 - 8},${850 - i * 20} ${kx * 10 + 5},${800 - i * 35}`}
-              fill="none" stroke={`rgba(20,120,100,${0.6 + i * 0.1})`} strokeWidth={3 + (i % 2)} />
-          </g>
-        ))}
-        {/* Sonar pings */}
-        {sonars.map((s, i) => (
-          <g key={`sonar${i}`}>
-            <circle cx={`${s.x}%`} cy={`${s.y}%`} r="0"
-              fill="none" stroke="rgba(45,212,191,0.5)" strokeWidth="2">
-              <animate attributeName="r" from="0" to="80" dur={`${s.dur}s`} begin={`${s.delay}s`} repeatCount="indefinite" />
-              <animate attributeName="opacity" from="0.8" to="0" dur={`${s.dur}s`} begin={`${s.delay}s`} repeatCount="indefinite" />
-            </circle>
-            <circle cx={`${s.x}%`} cy={`${s.y}%`} r="0"
-              fill="none" stroke="rgba(34,211,238,0.4)" strokeWidth="1.5">
-              <animate attributeName="r" from="0" to="80" dur={`${s.dur}s`} begin={`${s.delay + s.dur * 0.33}s`} repeatCount="indefinite" />
-              <animate attributeName="opacity" from="0.6" to="0" dur={`${s.dur}s`} begin={`${s.delay + s.dur * 0.33}s`} repeatCount="indefinite" />
-            </circle>
-          </g>
-        ))}
-      </svg>
-      <style>{`
-        @keyframes ab-surface  { 0%,100%{transform:translateX(0)} 50%{transform:translateX(6px)} }
-        @keyframes ab-caustic  { 0%,100%{transform:translateX(0) scaleX(1);opacity:0.9} 50%{transform:translateX(4%) scaleX(1.08);opacity:1} }
-        @keyframes ab-glow     { 0%,100%{opacity:0} 20%{opacity:0.7} 80%{opacity:0.7} }
-        @keyframes ab-bubble   { 0%{opacity:0;transform:translateY(0)} 8%{opacity:0.7} 90%{opacity:0.3} 100%{opacity:0;transform:translateY(-110vh) translateX(var(--ab-drift))} }
-        @keyframes ab-snow     { 0%{opacity:0;transform:translateY(0) translateX(0)} 10%{opacity:0.8} 90%{opacity:0.4} 100%{opacity:0;transform:translateY(110vh) translateX(var(--ab-snow-drift))} }
-        @keyframes ab-jelly    { 0%,100%{transform:translateY(0);opacity:0.6} 50%{transform:translateY(-18px);opacity:0.8} }
-        @keyframes ab-sway     { 0%,100%{transform:skewX(0deg)} 50%{transform:skewX(4deg)} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* -- Ember: Volcanic fire, lava rivers, magma pools, cinder vortex -- */
-function EmberBg() {
-  const sparksSmall = useMemo(() => {
-    const rand = seededRand(661);
-    return Array.from({ length: 28 }, () => ({
-      x: rand() * 100,
-      size: 2 + rand() * 3,
-      dur: 1.2 + rand() * 1.8,
-      delay: rand() * 9,
-      drift: (rand() - 0.5) * 80,
-    }));
-  }, []);
-  const sparksMed = useMemo(() => {
-    const rand = seededRand(662);
-    return Array.from({ length: 20 }, () => ({
-      x: rand() * 100,
-      size: 4 + rand() * 4,
-      dur: 2 + rand() * 2.5,
-      delay: rand() * 10,
-      drift: (rand() - 0.5) * 100,
-      color: rand() > 0.5 ? '#fbbf24' : '#f97316',
-    }));
-  }, []);
-  const sparksLarge = useMemo(() => {
-    const rand = seededRand(663);
-    return Array.from({ length: 14 }, () => ({
-      x: rand() * 100,
-      size: 6 + rand() * 4,
-      dur: 3 + rand() * 4,
-      delay: rand() * 12,
-      drift: (rand() - 0.5) * 120,
-    }));
-  }, []);
-  const debris = useMemo(() => {
-    const rand = seededRand(664);
-    return Array.from({ length: 15 }, () => ({
-      x: rand() * 100,
-      size: 4 + rand() * 6,
-      dur: 4 + rand() * 5,
-      delay: rand() * 14,
-      rot: rand() * 360,
-    }));
-  }, []);
-  const vortex = useMemo(() => {
-    const rand = seededRand(665);
-    return Array.from({ length: 24 }, (_, i) => ({
-      angle: (i / 24) * 360,
-      r: 40 + rand() * 35,
-      size: 3 + rand() * 5,
-      dur: 3 + rand() * 3,
-      delay: rand() * 4,
-      color: rand() > 0.5 ? '#fbbf24' : rand() > 0.3 ? '#f97316' : '#ef4444',
-    }));
-  }, []);
-  const smoke = useMemo(() => {
-    const rand = seededRand(666);
-    return Array.from({ length: 8 }, () => ({
-      x: 10 + rand() * 80,
-      dur: 18 + rand() * 12,
-      delay: rand() * 10,
-      w: 100 + rand() * 120,
-    }));
-  }, []);
-  return (
-    <Shell>
-      {/* Intense volcanic glow layers */}
-      <div className="absolute bottom-0 left-0 right-0 h-[70%]"
-        style={{ background: 'linear-gradient(to top, rgba(249,115,22,0.65), rgba(239,68,68,0.4) 40%, rgba(251,191,36,0.15) 70%, transparent)', animation: 'em-heat 3.5s ease-in-out infinite' }} />
-      <div className="absolute bottom-0 left-[5%] right-[5%] h-[60%]"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(251,191,36,0.55), rgba(249,115,22,0.3) 50%, transparent 70%)', animation: 'em-heat 5s ease-in-out 1s infinite' }} />
-      <div className="absolute bottom-0 left-[15%] right-[15%] h-[50%]"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(239,68,68,0.45), rgba(220,38,127,0.25) 60%, transparent)', animation: 'em-heat 4s ease-in-out 2s infinite' }} />
-      <div className="absolute bottom-0 left-[25%] right-[25%] h-[40%]"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(255,220,80,0.6), transparent 65%)', animation: 'em-heat 4.5s ease-in-out 0.5s infinite' }} />
-      <div className="absolute bottom-0 left-[35%] right-[35%] h-[30%]"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(255,255,120,0.7), transparent 70%)', animation: 'em-heat 3s ease-in-out 1.8s infinite' }} />
-      {/* Bright lava vein rivers */}
-      {[6, 14, 22, 33, 44, 54, 63, 72, 82, 91].map((x, i) => (
-        <div key={`v${i}`} className="absolute bottom-0"
-          style={{ left: `${x}%`, width: `${4 + (i % 3) * 2}px`, height: `${25 + (i % 5) * 10}%`,
-            background: `linear-gradient(to top, rgba(${i % 2 === 0 ? '251,191,36' : '249,115,22'},0.9), rgba(239,68,68,0.6) 60%, rgba(220,38,127,0.3) 80%, transparent)`,
-            filter: 'blur(1px)',
-            boxShadow: `0 0 8px rgba(249,115,22,0.6), 0 0 16px rgba(251,191,36,0.3)`,
-            animation: `em-vein ${3 + i * 0.9}s ease-in-out ${i * 0.55}s infinite` }} />
-      ))}
-      {/* Flowing lava streams */}
-      {[78, 83, 87, 91, 95].map((y, i) => (
-        <div key={`h${i}`} className="absolute left-0 right-0"
-          style={{ bottom: `${100 - y}%`, height: `${3 + i * 2}px`,
-            background: `linear-gradient(90deg, transparent 5%, rgba(249,115,22,0.5) 20%, rgba(251,191,36,0.8) 50%, rgba(249,115,22,0.5) 80%, transparent 95%)`,
-            animation: `em-flow ${5 + i * 1.8}s ease-in-out ${i * 1.5}s infinite` }} />
-      ))}
-      {/* Glowing magma pools */}
-      {[20, 50, 78].map((x, i) => (
-        <div key={`pool${i}`} className="absolute bottom-0"
-          style={{ left: `${x - 12}%`, width: '24%', height: '10%',
-            background: `radial-gradient(ellipse, rgba(${i % 2 === 0 ? '255,220,80' : '251,191,36'},0.8), rgba(249,115,22,0.5) 40%, rgba(239,68,68,0.3) 70%, transparent)`,
-            borderRadius: '50%', filter: 'blur(2px)',
-            boxShadow: `0 0 30px rgba(251,191,36,0.6), 0 0 60px rgba(249,115,22,0.3)`,
-            animation: `em-pool ${2.5 + i * 1.2}s ease-in-out ${i * 0.8}s infinite` }} />
-      ))}
-      {/* Visible heat shimmer */}
-      <div className="absolute bottom-0 left-0 right-0 h-[45%]"
-        style={{ background: 'linear-gradient(to top, rgba(255,200,100,0.25), rgba(255,160,50,0.15) 50%, transparent)', filter: 'blur(3px)', animation: 'em-shimmer 1.8s ease-in-out infinite' }} />
-      {/* Dense smoke columns */}
-      {smoke.map((s, i) => (
-        <div key={`sm${i}`} className="absolute bottom-[3%]"
-          style={{ left: `${s.x}%`, width: `${s.w}px`, height: '75%',
-            background: 'linear-gradient(to top, rgba(80,50,50,0.7), rgba(60,40,40,0.5) 30%, rgba(40,30,30,0.3) 60%, rgba(20,15,15,0.15) 80%, transparent)',
-            filter: 'blur(12px)', animation: `em-smoke ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
-      ))}
-      {/* Flying rock debris */}
-      {debris.map((d, i) => (
-        <div key={`db${i}`} className="absolute"
-          style={{ left: `${d.x}%`, bottom: '0', width: `${d.size}px`, height: `${d.size * 0.8}px`,
-            background: 'rgba(80,40,15,0.8)', borderRadius: '3px', opacity: 0,
-            transform: `rotate(${d.rot}deg)`,
-            boxShadow: '0 0 4px rgba(80,40,15,0.4)',
-            animation: `em-debris ${d.dur}s ease-out ${d.delay}s infinite` }} />
-      ))}
-      {/* Ember vortex swirl */}
-      <div className="absolute" style={{ left: '50%', bottom: '18%', width: '0', height: '0' }}>
-        {vortex.map((v, i) => {
-          const rad = (v.angle * Math.PI) / 180;
-          const px = Math.cos(rad) * v.r;
-          const py = Math.sin(rad) * v.r;
-          return (
-            <div key={`vo${i}`} className="absolute rounded-full"
-              style={{ left: `${px}px`, top: `${py}px`, width: `${v.size}px`, height: `${v.size}px`,
-                background: v.color, opacity: 0,
-                boxShadow: `0 0 ${v.size * 5}px ${v.color}`,
-                animation: `em-vortex ${v.dur}s ease-in-out ${v.delay}s infinite` }} />
-          );
-        })}
-      </div>
-      {/* Bright rising sparks */}
-      {sparksSmall.map((s, i) => (
-        <div key={`ss${i}`} className="absolute rounded-full"
-          style={{ left: `${s.x}%`, bottom: '0', width: `${s.size}px`, height: `${s.size}px`,
-            background: '#fde68a', opacity: 0,
-            boxShadow: '0 0 10px #fbbf24, 0 0 20px rgba(251,191,36,0.4)',
-            animation: `em-sparkS ${s.dur}s ease-out ${s.delay}s infinite`,
-            ['--dr' as string]: `${s.drift}px` }} />
-      ))}
-      {/* Medium ember particles */}
-      {sparksMed.map((s, i) => (
-        <div key={`smk${i}`} className="absolute rounded-full"
-          style={{ left: `${s.x}%`, bottom: '0', width: `${s.size}px`, height: `${s.size}px`,
-            background: s.color, opacity: 0,
-            boxShadow: `0 0 ${s.size * 4}px ${s.color}, 0 0 ${s.size * 8}px rgba(249,115,22,0.3)`,
-            animation: `em-sparkM ${s.dur}s ease-out ${s.delay}s infinite`,
-            ['--dr' as string]: `${s.drift}px` }} />
-      ))}
-      {/* Large glowing cinders */}
-      {sparksLarge.map((s, i) => (
-        <div key={`sl${i}`} className="absolute rounded-full"
-          style={{ left: `${s.x}%`, bottom: '0', width: `${s.size}px`, height: `${s.size}px`,
-            background: '#ef4444', opacity: 0,
-            boxShadow: `0 0 ${s.size * 6}px rgba(239,68,68,0.8), 0 0 ${s.size * 12}px rgba(220,38,127,0.4)`,
-            animation: `em-sparkL ${s.dur}s ease-out ${s.delay}s infinite`,
-            ['--dr' as string]: `${s.drift}px` }} />
-      ))}
-      <style>{`
-        @keyframes em-heat { 0%,100%{opacity:1} 50%{opacity:1.4} }
-        @keyframes em-vein { 0%,100%{opacity:1;transform:scaleY(1)} 50%{opacity:0.7;transform:scaleY(0.9)} }
-        @keyframes em-flow { 0%,100%{transform:translateX(-8%) scaleX(1)} 50%{transform:translateX(8%) scaleX(1.15)} }
-        @keyframes em-pool { 0%,100%{transform:scaleX(1) scaleY(1);opacity:1} 50%{transform:scaleX(1.3) scaleY(1.5);opacity:0.7} }
-        @keyframes em-shimmer { 0%,100%{transform:translateX(0) skewX(0deg)} 33%{transform:translateX(4px) skewX(0.8deg)} 66%{transform:translateX(-4px) skewX(-0.8deg)} }
-        @keyframes em-smoke { 0%,100%{transform:translateY(0) scaleX(1);opacity:1} 50%{transform:translateY(-50px) scaleX(1.6);opacity:0.5} }
-        @keyframes em-debris { 0%{opacity:0.8;transform:translateY(0) rotate(0deg)} 15%{opacity:0.7} 100%{opacity:0;transform:translateY(-400px) translateX(60px) rotate(900deg)} }
-        @keyframes em-vortex { 0%,100%{opacity:0;transform:translate(-50%,-50%) scale(0.2)} 50%{opacity:0.9;transform:translate(-50%,-50%) scale(1.3)} }
-        @keyframes em-sparkS { 0%{opacity:0.9;transform:translateY(0) translateX(0)} 100%{opacity:0;transform:translateY(-280px) translateX(var(--dr))} }
-        @keyframes em-sparkM { 0%{opacity:0.8;transform:translateY(0) translateX(0)} 30%{opacity:0.6} 100%{opacity:0;transform:translateY(-380px) translateX(var(--dr))} }
-        @keyframes em-sparkL { 0%{opacity:0.7;transform:translateY(0) translateX(0)} 40%{opacity:0.5} 100%{opacity:0;transform:translateY(-480px) translateX(var(--dr))} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* -- Aurora: Mountain silhouette, star field, rich curtains, electric crackle -- */
-function AuroraBg() {
-  const stars = useMemo(() => {
-    const rand = seededRand(771);
-    return Array.from({ length: 60 }, () => ({
-      x: rand() * 100, y: rand() * 70,
-      size: 0.8 + rand() * 2,
-      opacity: 0.3 + rand() * 0.7,
-      dur: 2 + rand() * 5,
-      delay: rand() * 10,
-    }));
-  }, []);
-  const particles = useMemo(() => {
-    const rand = seededRand(772);
-    return Array.from({ length: 20 }, () => ({
-      x: rand() * 100, y: rand() * 60,
-      size: 2 + rand() * 4,
-      dur: 3 + rand() * 6,
-      delay: rand() * 10,
-      color: rand() > 0.4 ? '#a78bfa' : rand() > 0.2 ? '#34d399' : '#22d3ee',
-    }));
-  }, []);
-  const crackles = useMemo(() => {
-    const rand = seededRand(773);
-    return Array.from({ length: 6 }, () => ({
-      x1: 10 + rand() * 80, y1: 5 + rand() * 30,
-      x2: 10 + rand() * 80, y2: 10 + rand() * 40,
-      dur: 8 + rand() * 8,
-      delay: rand() * 12,
-    }));
-  }, []);
-  const cols = useMemo(() => {
-    const rand = seededRand(774);
-    const palette = ['#a78bfa', '#34d399', '#22d3ee', '#c084fc', '#818cf8', '#6ee7b7', '#e879f9', '#06b6d4', '#8b5cf6', '#10b981', '#7c3aed', '#0ea5e9', '#a855f7', '#14b8a6'];
-    return Array.from({ length: 20 }, (_, i) => ({
-      left: i * 5,
-      color: palette[i % palette.length],
-      dur: 4 + rand() * 5,
-      delay: rand() * 4,
-      h: 50 + rand() * 30,
-    }));
-  }, []);
-  return (
-    <Shell>
-      {/* Deep space background */}
-      <div className="absolute top-0 left-0 right-0 h-[50%]"
-        style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(100,60,180,0.25), rgba(50,30,100,0.15) 50%, transparent 80%)', filter: 'blur(6px)' }} />
-      {/* Bright star field */}
-      {stars.map((s, i) => (
-        <div key={`st${i}`} className="absolute rounded-full"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
-            background: i % 4 === 0 ? '#c4b5fd' : i % 3 === 0 ? '#a78bfa' : '#e2e8f0',
-            opacity: s.opacity,
-            boxShadow: `0 0 4px ${i % 4 === 0 ? '#c4b5fd' : '#e2e8f0'}`,
-            animation: `au-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
-      ))}
-      {/* Aurora curtain bands */}
-      {[
-        { c1: '#a78bfa', c2: '#34d399', top: '-10%', h: '70%', dur: '9s', delay: '0s', blur: 25 },
-        { c1: '#06b6d4', c2: '#a78bfa', top: '-5%',  h: '60%', dur: '13s', delay: '2s', blur: 30 },
-        { c1: '#818cf8', c2: '#6366f1', top: '-8%',  h: '75%', dur: '17s', delay: '5s', blur: 20 },
-        { c1: '#e879f9', c2: '#22d3ee', top: '0%',   h: '55%', dur: '11s', delay: '4s', blur: 35 },
-        { c1: '#6366f1', c2: '#34d399', top: '-4%',  h: '65%', dur: '15s', delay: '7s', blur: 28 },
-        { c1: '#34d399', c2: '#c084fc', top: '2%',   h: '50%', dur: '10s', delay: '3s', blur: 32 },
-        { c1: '#7c3aed', c2: '#06b6d4', top: '-6%',  h: '68%', dur: '14s', delay: '6s', blur: 25 },
-        { c1: '#22d3ee', c2: '#e879f9', top: '1%',   h: '58%', dur: '12s', delay: '8s', blur: 30 },
-      ].map((c, i) => (
-        <div key={i} className="absolute left-0 right-0"
-          style={{ top: c.top, height: c.h,
-            background: `linear-gradient(180deg, ${c.c1}80 0%, ${c.c1}60 20%, ${c.c2}50 40%, ${c.c2}30 60%, transparent 100%)`,
-            animation: `au-curtain ${c.dur} ease-in-out ${c.delay} infinite`,
-            filter: `blur(${c.blur}px)` }} />
-      ))}
-      {/* Vertical light pillars */}
-      {cols.map((col, i) => (
-        <div key={`col${i}`} className="absolute top-0"
-          style={{ left: `${col.left}%`, width: '6%', height: `${col.h}%`,
-            background: `linear-gradient(180deg, ${col.color}60, ${col.color}40 30%, ${col.color}20 60%, transparent)`,
-            animation: `au-col ${col.dur}s ease-in-out ${col.delay}s infinite`,
-            filter: 'blur(8px)' }} />
-      ))}
-      {/* Aurora reflection on ground */}
-      <div className="absolute left-0 right-0" style={{ bottom: '0%', height: '25%' }}>
-        <div className="absolute inset-0"
-          style={{ background: 'linear-gradient(to bottom, rgba(167,139,250,0.3), rgba(52,211,153,0.2) 30%, rgba(34,211,238,0.15) 60%, transparent)',
-            filter: 'blur(4px)', animation: 'au-reflect 12s ease-in-out infinite' }} />
-      </div>
-      {/* Floating aurora particles */}
-      {particles.map((p, i) => (
-        <div key={`p${i}`} className="absolute rounded-full"
-          style={{ left: `${p.x}%`, top: `${p.y}%`, width: `${p.size}px`, height: `${p.size}px`,
-            background: p.color, opacity: 0,
-            boxShadow: `0 0 ${p.size * 8}px ${p.color}`,
-            animation: `au-spark ${p.dur}s ease-in-out ${p.delay}s infinite` }} />
-      ))}
-      {/* Electric aurora crackles */}
-      <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }}>
-        {crackles.map((cr, i) => (
-          <line key={`cr${i}`} x1={`${cr.x1}%`} y1={`${cr.y1}%`} x2={`${cr.x2}%`} y2={`${cr.y2}%`}
-            stroke="rgba(220,200,255,0.8)" strokeWidth="1.5" strokeLinecap="round"
-            style={{ filter: 'drop-shadow(0 0 3px rgba(220,200,255,0.6))', animation: `au-crackle ${cr.dur}s ease-in-out ${cr.delay}s infinite` }} />
-        ))}
-        {/* Mountain range silhouettes */}
-        <path d="M0,100 L0,88 L6,80 L11,85 L18,68 L24,75 L32,55 L40,70 L48,48 L55,62 L62,40 L68,58 L76,44 L82,60 L90,50 L95,65 L100,58 L100,100 Z"
-          fill="rgba(15,15,25,0.8)" />
-        <path d="M0,100 L0,92 L8,86 L14,90 L22,80 L30,88 L38,76 L46,82 L54,72 L60,78 L68,68 L74,75 L82,64 L88,70 L94,62 L100,68 L100,100 Z"
-          fill="rgba(8,8,18,0.9)" />
-        <path d="M0,100 L0,95 L12,90 L18,93 L26,85 L34,91 L42,82 L50,88 L58,78 L66,84 L74,74 L80,80 L88,70 L94,76 L100,72 L100,100 Z"
-          fill="rgba(5,5,12,0.95)" />
-      </svg>
-      <style>{`
-        @keyframes au-twinkle { 0%,100%{opacity:inherit} 50%{opacity:0.2} }
-        @keyframes au-curtain { 0%,100%{transform:scaleY(1) translateY(0);opacity:1} 30%{transform:scaleY(1.4) translateY(-8%);opacity:0.7} 70%{transform:scaleY(0.8) translateY(6%);opacity:1} }
-        @keyframes au-col { 0%,100%{transform:scaleY(1) skewX(0deg);opacity:1} 50%{transform:scaleY(2.2) skewX(4deg);opacity:0.6} }
-        @keyframes au-spark { 0%,100%{opacity:0} 25%{opacity:0.8;transform:translateY(-15px)} 75%{opacity:0.7;transform:translateY(10px)} }
-        @keyframes au-crackle { 0%,100%{opacity:0} 48%{opacity:0} 49%{opacity:0.9} 50%{opacity:0} 50.5%{opacity:0.7} 51%{opacity:0} }
-        @keyframes au-reflect { 0%,100%{opacity:1;transform:scaleX(1)} 50%{opacity:0.6;transform:scaleX(1.1)} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* -- Catppuccin: Lava lamp blobs, orbs, sparkles, confetti, candy dots -- */
-function CatppuccinBg() {
-  const orbs = useMemo(() => {
-    const rand = seededRand(331);
-    const palette = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1', '#fab387', '#f38ba8', '#94e2d5', '#b4befe'];
-    return Array.from({ length: 22 }, (_, i) => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 80 + rand() * 350,
-      dur: 12 + rand() * 22,
-      delay: rand() * 14,
-      color: palette[i % palette.length],
-    }));
-  }, []);
-  const blobs = useMemo(() => {
-    const rand = seededRand(332);
-    const palette = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1', '#fab387'];
-    return Array.from({ length: 7 }, (_, i) => ({
-      x: 5 + rand() * 85, y: 5 + rand() * 85,
-      w: 150 + rand() * 200, h: 130 + rand() * 180,
-      dur: 18 + rand() * 14,
-      delay: rand() * 10,
-      color: palette[i % palette.length],
-    }));
-  }, []);
-  const sparkles = useMemo(() => {
-    const rand = seededRand(333);
-    return Array.from({ length: 20 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      dur: 3 + rand() * 5,
-      delay: rand() * 9,
-      colorIdx: Math.floor(rand() * 4),
-    }));
-  }, []);
-  const confetti = useMemo(() => {
-    const rand = seededRand(334);
-    const palette = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1', '#fab387', '#f38ba8'];
-    return Array.from({ length: 14 }, () => ({
-      x: rand() * 100,
-      size: 6 + rand() * 8,
-      dur: 10 + rand() * 14,
-      delay: rand() * 15,
-      color: palette[Math.floor(rand() * palette.length)],
-      shape: rand() > 0.6 ? 'circle' : rand() > 0.3 ? 'triangle' : 'diamond',
-    }));
-  }, []);
-  const candy = useMemo(() => {
-    const rand = seededRand(335);
-    const palette = ['#cba6f7', '#f38ba8', '#89b4fa', '#a6e3a1', '#fab387', '#f5c2e7'];
-    return Array.from({ length: 30 }, (_, i) => ({
-      x: rand() * 100, y: rand() * 100,
-      dur: 2 + rand() * 3,
-      delay: (i / 30) * 8 + rand() * 2,
-      color: palette[i % palette.length],
-    }));
-  }, []);
-  const meshGrads = useMemo(() => {
-    const rand = seededRand(336);
-    return Array.from({ length: 5 }, () => ({
-      x: 5 + rand() * 80, y: 5 + rand() * 80,
-      size: 400 + rand() * 400,
-      color: ['#cba6f7', '#89b4fa', '#a6e3a1', '#f5c2e7', '#fab387'][Math.floor(rand() * 5)],
-      dur: 20 + rand() * 15,
-      delay: rand() * 10,
-    }));
-  }, []);
-  const sparkColors = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1'];
-  return (
-    <Shell>
-      {/* Large gradient mesh background */}
-      {meshGrads.map((m, i) => (
-        <div key={`mg${i}`} className="absolute rounded-full"
-          style={{ left: `${m.x}%`, top: `${m.y}%`, width: `${m.size}px`, height: `${m.size}px`,
-            background: `radial-gradient(circle, ${m.color}40, ${m.color}20 40%, transparent 70%)`,
-            filter: 'blur(50px)', animation: `cp-mesh ${m.dur}s ease-in-out ${m.delay}s infinite` }} />
-      ))}
-      {/* Colorful gradient orbs */}
-      {orbs.map((b, i) => (
-        <div key={`orb${i}`} className="absolute rounded-full"
-          style={{ left: `${b.x}%`, top: `${b.y}%`, width: `${b.size}px`, height: `${b.size}px`,
-            background: `radial-gradient(circle, ${b.color}50, ${b.color}30 40%, transparent 65%)`,
-            animation: `cp-float ${b.dur}s ease-in-out ${b.delay}s infinite`,
-            filter: 'blur(4px)' }} />
-      ))}
-      {/* Lava lamp blobs */}
-      {blobs.map((bl, i) => (
-        <div key={`blob${i}`} className="absolute"
-          style={{ left: `${bl.x}%`, top: `${bl.y}%`, width: `${bl.w}px`, height: `${bl.h}px`,
-            background: `radial-gradient(ellipse, ${bl.color}60, ${bl.color}40 50%, ${bl.color}20 70%, transparent 85%)`,
-            animation: `cp-blob${i + 1} ${bl.dur}s ease-in-out ${bl.delay}s infinite`,
-            filter: 'blur(15px)' }} />
-      ))}
-      {/* Bright rainbow wave band */}
-      <div className="absolute left-0 right-0 h-[6px]"
-        style={{ top: '45%',
-          background: 'linear-gradient(90deg, #cba6f7, #f5c2e7, #fab387, #a6e3a1, #89b4fa, #b4befe, #f38ba8, #94e2d5, #cba6f7)',
-          backgroundSize: '200% 100%',
-          opacity: 0.4, filter: 'blur(2px)', animation: 'cp-rainbow 25s linear infinite' }} />
-      <div className="absolute left-0 right-0 h-[3px]"
-        style={{ top: '55%',
-          background: 'linear-gradient(90deg, #89b4fa, #a6e3a1, #cba6f7, #f5c2e7, #fab387, #f38ba8, #89b4fa)',
-          backgroundSize: '250% 100%',
-          opacity: 0.3, filter: 'blur(1px)', animation: 'cp-rainbow 18s linear infinite reverse' }} />
-      {/* Bright sparkle crosses */}
-      {sparkles.map((s, i) => (
-        <div key={`sp${i}`} className="absolute"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: '12px', height: '12px', opacity: 0,
-            animation: `cp-sparkle ${s.dur}s ease-in-out ${s.delay}s infinite` }}>
-          <div className="absolute left-[4px] top-0 w-[4px] h-[12px] rounded-full"
-            style={{ background: sparkColors[s.colorIdx], boxShadow: `0 0 6px ${sparkColors[s.colorIdx]}` }} />
-          <div className="absolute left-0 top-[4px] w-[12px] h-[4px] rounded-full"
-            style={{ background: sparkColors[s.colorIdx], boxShadow: `0 0 6px ${sparkColors[s.colorIdx]}` }} />
-        </div>
-      ))}
-      {/* Colorful confetti geometric shapes */}
-      {confetti.map((c, i) => (
-        <div key={`cf${i}`} className="absolute opacity-0"
-          style={{ left: `${c.x}%`, top: '-6%', width: `${c.size}px`, height: `${c.size}px`,
-            background: c.color,
-            borderRadius: c.shape === 'circle' ? '50%' : '0',
-            clipPath: c.shape === 'triangle' ? 'polygon(50% 0%,100% 100%,0% 100%)' : c.shape === 'diamond' ? 'polygon(50% 0%,100% 50%,50% 100%,0% 50%)' : 'none',
-            boxShadow: `0 0 8px ${c.color}`,
-            animation: `cp-confetti ${c.dur}s ease-in-out ${c.delay}s infinite` }} />
-      ))}
-      {/* Bright candy dots */}
-      {candy.map((cd, i) => (
-        <div key={`cd${i}`} className="absolute rounded-full"
-          style={{ left: `${cd.x}%`, top: `${cd.y}%`, width: '6px', height: '6px',
-            background: cd.color, opacity: 0,
-            boxShadow: `0 0 12px ${cd.color}`,
-            animation: `cp-candy ${cd.dur}s ease-in-out ${cd.delay}s infinite` }} />
-      ))}
-      <style>{`
-        @keyframes cp-mesh { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-50px,35px) scale(1.2)} 66%{transform:translate(40px,-30px) scale(0.85)} }
-        @keyframes cp-float { 0%,100%{transform:translate(0,0) scale(1)} 25%{transform:translate(35px,-28px) scale(1.15)} 50%{transform:translate(-15px,32px) scale(0.9)} 75%{transform:translate(-28px,-15px) scale(1.1)} }
-        @keyframes cp-blob1 { 0%,100%{transform:translate(0,0) scale(1);border-radius:60% 40% 55% 45%/50% 60% 40% 50%} 50%{transform:translate(-35px,-25px) scale(1.3);border-radius:40% 60% 45% 55%/60% 40% 60% 40%} }
-        @keyframes cp-blob2 { 0%,100%{transform:translate(0,0) scale(1);border-radius:50% 50% 60% 40%/45% 55% 45% 55%} 50%{transform:translate(40px,20px) scale(0.85);border-radius:65% 35% 40% 60%/55% 45% 55% 45%} }
-        @keyframes cp-blob3 { 0%,100%{transform:translate(0,0) scale(1);border-radius:55% 45% 50% 50%/60% 40% 60% 40%} 50%{transform:translate(-20px,35px) scale(1.25);border-radius:40% 60% 55% 45%/45% 55% 45% 55%} }
-        @keyframes cp-blob4 { 0%,100%{transform:translate(0,0) scale(1);border-radius:45% 55% 40% 60%/50% 50% 60% 40%} 50%{transform:translate(25px,-25px) scale(1.15);border-radius:60% 40% 55% 45%/40% 60% 40% 60%} }
-        @keyframes cp-blob5 { 0%,100%{transform:translate(0,0) scale(1);border-radius:50% 50% 55% 45%/45% 55% 50% 50%} 50%{transform:translate(-25px,-20px) scale(0.9);border-radius:45% 55% 40% 60%/55% 45% 60% 40%} }
-        @keyframes cp-blob6 { 0%,100%{transform:translate(0,0) scale(1);border-radius:65% 35% 45% 55%/55% 45% 65% 35%} 50%{transform:translate(30px,25px) scale(1.2);border-radius:35% 65% 55% 45%/45% 55% 35% 65%} }
-        @keyframes cp-blob7 { 0%,100%{transform:translate(0,0) scale(1);border-radius:40% 60% 50% 50%/50% 50% 40% 60%} 50%{transform:translate(-30px,15px) scale(1.1);border-radius:60% 40% 50% 50%/50% 50% 60% 40%} }
-        @keyframes cp-rainbow { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
-        @keyframes cp-sparkle { 0%,100%{opacity:0;transform:scale(0.3) rotate(0deg)} 50%{opacity:0.9;transform:scale(1.5) rotate(180deg)} }
-        @keyframes cp-confetti { 0%{opacity:0;transform:translateY(0) rotate(0deg)} 10%{opacity:0.7} 90%{opacity:0.4} 100%{opacity:0;transform:translateY(110vh) rotate(1080deg)} }
-        @keyframes cp-candy { 0%,100%{opacity:0;transform:scale(0.4)} 50%{opacity:0.9;transform:scale(1.8)} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* -- Tokyo Night: Dense cityscape, rain, puddles, fog, clouds, neon, lightning -- */
-function TokyoNightBg() {
-  const buildings = useMemo(() => {
-    const rand = seededRand(779);
-    return Array.from({ length: 20 }, (_, i) => ({
-      x: i * 5 + rand() * 3,
-      w: 2.5 + rand() * 5,
-      h: 15 + rand() * 50,
-      windows: Math.floor(4 + rand() * 10),
-      spire: rand() > 0.5,
-      spireH: 6 + rand() * 15,
-    }));
-  }, []);
-  const rain = useMemo(() => {
-    const rand = seededRand(780);
-    return Array.from({ length: 40 }, () => ({
-      x: rand() * 110,
-      dur: 0.4 + rand() * 0.8,
-      delay: rand() * 3,
-      h: 18 + rand() * 35,
-      angle: 8 + rand() * 15,
-    }));
-  }, []);
-  const puddles = useMemo(() => {
-    const rand = seededRand(781);
-    return Array.from({ length: 15 }, () => ({
-      x: rand() * 85, w: 40 + rand() * 80,
-      dur: 2 + rand() * 2, delay: rand() * 4,
-      color: ['#7aa2f7', '#bb9af7', '#ff9e64', '#9ece6a'][Math.floor(rand() * 4)],
-    }));
-  }, []);
-  const cars = useMemo(() => {
-    const rand = seededRand(782);
-    return Array.from({ length: 10 }, (_, i) => ({
-      dir: i < 5 ? 'ltr' : 'rtl',
-      speed: 4 + rand() * 8,
-      delay: rand() * 15,
-      color: ['#ff9e64', '#7aa2f7', '#9ece6a', '#e0af68', '#bb9af7', '#7dcfff', '#f7768e', '#73daca', '#2ac3de', '#e0af68'][i],
-      y: 0.1 + rand() * 1.2,
-    }));
-  }, []);
-  const clouds = useMemo(() => {
-    const rand = seededRand(783);
-    return Array.from({ length: 5 }, () => ({
-      y: 2 + rand() * 15, w: 100 + rand() * 150, h: 40 + rand() * 50,
-      dur: 35 + rand() * 25, delay: rand() * 20,
-    }));
-  }, []);
-  const neons = useMemo(() => {
-    const rand = seededRand(784);
-    return [
-      { x: 15, y: 25, color: '#ff9e64', dur: 3, delay: 0 },
-      { x: 35, y: 20, color: '#bb9af7', dur: 4, delay: 1.5 },
-      { x: 55, y: 30, color: '#7dcfff', dur: 2.5, delay: 0.8 },
-      { x: 75, y: 22, color: '#9ece6a', dur: 5, delay: 2.5 },
-      { x: 25, y: 35, color: '#f7768e', dur: 3.5, delay: 3 },
-      { x: 65, y: 18, color: '#e0af68', dur: 4.5, delay: 1 },
-    ].map(n => ({ ...n, w: 100 + rand() * 120, h: 30 + rand() * 25 }));
-  }, []);
-  return (
-    <Shell>
-      {/* Dark cyberpunk sky */}
-      <div className="absolute top-0 left-0 right-0 h-[70%]"
-        style={{ background: 'linear-gradient(180deg, rgba(25,15,45,0.8), rgba(122,162,247,0.25) 60%, rgba(187,154,247,0.15) 80%, transparent)' }} />
-      {/* City glow horizon */}
-      <div className="absolute left-0 right-0" style={{ bottom: '25%', height: '20%' }}>
-        <div style={{ position: 'absolute', inset: 0,
-          background: 'linear-gradient(180deg, transparent, rgba(122,162,247,0.3) 30%, rgba(187,154,247,0.2) 60%, rgba(255,158,100,0.1) 80%, transparent)',
-          filter: 'blur(6px)' }} />
-      </div>
-      {/* Dense moving clouds */}
-      {clouds.map((cl, i) => (
-        <div key={`cl${i}`} className="absolute"
-          style={{ top: `${cl.y}%`, left: '-20%', width: `${cl.w}px`, height: `${cl.h}px`,
-            background: 'radial-gradient(ellipse, rgba(60,55,90,0.6), rgba(40,35,70,0.3) 60%, transparent)',
-            filter: 'blur(12px)', borderRadius: '50%',
-            animation: `tn-cloud ${cl.dur}s linear ${cl.delay}s infinite` }} />
-      ))}
-      {/* Atmospheric fog layers */}
-      <div className="absolute left-0 right-0" style={{ bottom: '30%', height: '20%',
-        background: 'linear-gradient(180deg, transparent, rgba(80,70,120,0.4) 40%, rgba(60,50,100,0.3) 70%, transparent)',
-        filter: 'blur(10px)' }} />
-      <div className="absolute left-0 right-0" style={{ bottom: '20%', height: '15%',
-        background: 'linear-gradient(180deg, transparent, rgba(100,90,140,0.3) 50%, transparent)',
-        filter: 'blur(8px)' }} />
-      {/* Neon sign glows */}
-      {neons.map((n, i) => (
-        <div key={`nn${i}`} className="absolute rounded-full"
-          style={{ left: `${n.x}%`, top: `${n.y}%`, width: `${n.w}px`, height: `${n.h}px`,
-            background: `radial-gradient(ellipse, ${n.color}60, ${n.color}30 50%, transparent 80%)`,
-            filter: 'blur(8px)',
-            boxShadow: `0 0 20px ${n.color}80, 0 0 40px ${n.color}40`,
-            animation: `tn-neon${i + 1} ${n.dur}s ease-in-out ${n.delay}s infinite` }} />
-      ))}
-      {/* Dark street ground */}
-      <div className="absolute bottom-0 left-0 right-0 h-[15%]"
-        style={{ background: 'linear-gradient(180deg, rgba(25,25,40,0.9), rgba(15,15,25,0.95))' }} />
-      {/* Building silhouettes */}
-      {buildings.map((b, i) => (
-        <div key={`bld${i}`} className="absolute bottom-[15%]"
-          style={{ left: `${b.x}%`, width: `${b.w}%`, height: `${b.h}%`,
-            background: 'rgba(20,20,35,0.95)',
-            borderTop: '2px solid rgba(80,90,140,0.6)',
-            boxShadow: 'inset 0 1px 0 rgba(80,90,140,0.3)' }}>
-          {b.spire && (
-            <div style={{ position: 'absolute', left: '45%', top: `-${b.spireH}px`, width: '3px', height: `${b.spireH}px`,
-              background: 'rgba(122,162,247,0.6)',
-              boxShadow: '0 0 6px rgba(122,162,247,0.8)' }} />
-          )}
-          {Array.from({ length: b.windows }).map((_, wi) => (
-            <div key={`w${wi}`} className="absolute"
-              style={{ left: '12%', right: '12%', height: '5px',
-                top: `${6 + wi * (85 / b.windows)}%`,
-                background: ['#7aa2f7', '#ff9e64', '#9ece6a', '#bb9af7', '#7dcfff', '#e0af68', '#f7768e'][wi % 7],
-                opacity: 0, borderRadius: '2px',
-                boxShadow: `0 0 8px ${['#7aa2f7', '#ff9e64', '#9ece6a', '#bb9af7', '#7dcfff', '#e0af68', '#f7768e'][wi % 7]}`,
-                animation: `tn-blink ${1.5 + (wi + i) * 0.3}s ease-in-out ${i * 0.15 + wi * 0.25}s infinite` }} />
-          ))}
-        </div>
-      ))}
-      {/* Bright street reflections */}
-      <div className="absolute bottom-[15%] left-0 right-0 h-[2px]"
-        style={{ background: 'linear-gradient(90deg, rgba(122,162,247,0.4), rgba(187,154,247,0.3), rgba(255,158,100,0.2))', filter: 'blur(1px)' }} />
-      {/* Colorful puddle reflections */}
-      {puddles.map((p, i) => (
-        <div key={`pd${i}`} className="absolute bottom-[15%]"
-          style={{ left: `${p.x}%`, width: `${p.w}px`, height: '8px',
-            background: `linear-gradient(90deg, transparent, ${p.color}50 30%, ${p.color}70 50%, ${p.color}50 70%, transparent)`,
-            filter: 'blur(2px)', borderRadius: '50%',
-            animation: `tn-puddle ${p.dur}s ease-in-out ${p.delay}s infinite` }} />
-      ))}
-      {/* Heavy rain */}
-      {rain.map((r, i) => (
-        <div key={`r${i}`} className="absolute opacity-0"
-          style={{ left: `${r.x}%`, top: '-8%', width: '2px', height: `${r.h}px`,
-            background: 'linear-gradient(180deg, transparent, rgba(122,162,247,0.6), rgba(122,162,247,0.4))',
-            transform: `rotate(${r.angle}deg)`,
-            animation: `tn-rain ${r.dur}s linear ${r.delay}s infinite` }} />
-      ))}
-      {/* Bright car headlights */}
-      {cars.map((car, i) => (
-        <div key={`car${i}`} className="absolute rounded-full"
-          style={{ bottom: `${15 + car.y * 2}%`, width: '8px', height: '3px',
-            background: car.color,
-            boxShadow: `0 0 15px ${car.color}, 0 0 30px ${car.color}80`,
-            animation: `tn-car${car.dir === 'ltr' ? 'L' : 'R'} ${car.speed}s linear ${car.delay}s infinite` }} />
-      ))}
-      {/* Intense lightning flash */}
-      <div className="absolute inset-0" style={{ animation: 'tn-lightning 12s ease-in-out infinite' }} />
-      <style>{`
-        @keyframes tn-blink { 0%,100%{opacity:0.2} 40%{opacity:0.9} 60%{opacity:0.9} }
-        @keyframes tn-carL { 0%{left:-3%;opacity:0} 8%{opacity:0.9} 92%{opacity:0.9} 100%{left:105%;opacity:0} }
-        @keyframes tn-carR { 0%{right:-3%;opacity:0} 8%{opacity:0.9} 92%{opacity:0.9} 100%{right:105%;opacity:0} }
-        @keyframes tn-rain { 0%{opacity:0;transform:translateY(0)} 10%{opacity:0.7} 90%{opacity:0.4} 100%{opacity:0;transform:translateY(115vh)} }
-        @keyframes tn-neon1 { 0%,100%{opacity:1} 48%{opacity:0.3} 52%{opacity:1} }
-        @keyframes tn-neon2 { 0%,100%{opacity:0.9} 50%{opacity:0.2} }
-        @keyframes tn-neon3 { 0%,100%{opacity:1} 33%{opacity:0.5} 36%{opacity:1} 66%{opacity:0.4} 69%{opacity:1} }
-        @keyframes tn-neon4 { 0%,100%{opacity:0.9} 50%{opacity:0.6} }
-        @keyframes tn-neon5 { 0%,100%{opacity:1} 25%{opacity:0.3} 27%{opacity:1} 75%{opacity:0.4} 77%{opacity:1} }
-        @keyframes tn-neon6 { 0%,100%{opacity:0.8} 50%{opacity:0.3} }
-        @keyframes tn-cloud { 0%{transform:translateX(0)} 100%{transform:translateX(125vw)} }
-        @keyframes tn-puddle { 0%,100%{opacity:0.8;transform:scaleX(1)} 50%{opacity:0.4;transform:scaleX(1.4)} }
-        @keyframes tn-lightning { 0%,100%{background:transparent} 52%{background:transparent} 52.2%{background:rgba(122,162,247,0.15)} 52.4%{background:transparent} 52.8%{background:rgba(122,162,247,0.25)} 53%{background:transparent} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* -- Dracula: Castle, graveyard, large moon, fog, bats, candles, mist, blood drips -- */
-function DraculaBg() {
-  const fogLayers = useMemo(() => {
-    const rand = seededRand(1111);
-    return Array.from({ length: 10 }, (_, i) => ({
-      x: -40 + rand() * 80,
-      bottom: rand() * 40,
-      w: 500 + rand() * 700,
-      h: 150 + rand() * 250,
-      dur: 14 + rand() * 18,
-      delay: rand() * 12,
-      depth: i,
-    }));
-  }, []);
-  const bats = useMemo(() => {
-    const rand = seededRand(1112);
-    return Array.from({ length: 12 }, (_, i) => ({
-      size: 18 + rand() * 28,
-      top: 8 + rand() * 45,
-      dur: 10 + rand() * 12,
-      delay: rand() * 20,
-      waveAmp: 15 + rand() * 30,
-    }));
-  }, []);
-  const candles = useMemo(() => {
-    const rand = seededRand(1113);
-    return Array.from({ length: 8 }, () => ({
-      x: 10 + rand() * 80, y: 40 + rand() * 40,
-      dur: 1.5 + rand() * 1,
-      delay: rand() * 3,
-    }));
-  }, []);
-  const tendrils = useMemo(() => {
-    const rand = seededRand(1114);
-    return Array.from({ length: 6 }, () => ({
-      x: 5 + rand() * 85, y: 25 + rand() * 40,
-      w: 120 + rand() * 180, h: 30 + rand() * 50,
-      dur: 20 + rand() * 15,
-      delay: rand() * 15,
-    }));
-  }, []);
-  const bloodDrops = useMemo(() => {
-    const rand = seededRand(1115);
-    return Array.from({ length: 4 }, () => ({
-      x: 15 + rand() * 70,
-      dur: 25 + rand() * 15,
-      delay: rand() * 12,
-    }));
-  }, []);
-  return (
-    <Shell>
-      {/* Deep gothic sky */}
-      <div className="absolute top-0 left-0 right-0 h-[60%]"
-        style={{ background: 'linear-gradient(180deg, rgba(60,25,80,0.7), rgba(189,147,249,0.3) 50%, rgba(139,92,246,0.15) 80%, transparent)' }} />
-      {/* Moon with halo */}
-      <div className="absolute" style={{ top: '8%', right: '15%', width: '140px', height: '140px' }}>
-        <div className="absolute rounded-full"
-          style={{ top: '-30%', left: '-30%', width: '160%', height: '160%',
-            border: '2px solid rgba(189,147,249,0.4)', animation: 'dr-moonring 8s ease-in-out infinite' }} />
-        <div className="absolute rounded-full"
-          style={{ top: '-50%', left: '-50%', width: '200%', height: '200%',
-            border: '1px solid rgba(189,147,249,0.2)', animation: 'dr-moonring 12s ease-in-out 2s infinite' }} />
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: 'radial-gradient(circle at 35% 35%, rgba(240,220,255,0.6), rgba(189,147,249,0.35) 40%, rgba(139,92,246,0.15) 70%, transparent)',
-            boxShadow: '0 0 60px rgba(189,147,249,0.4), 0 0 120px rgba(189,147,249,0.2)',
-            animation: 'dr-moon 10s ease-in-out infinite' }} />
-        <div className="absolute rounded-full"
-          style={{ top: '10%', left: '18%', width: '75%', height: '75%',
-            background: 'radial-gradient(circle, rgba(20,10,30,0.8), transparent 65%)' }} />
-        <div className="absolute rounded-full"
-          style={{ top: '25%', left: '22%', width: '14px', height: '14px',
-            background: 'rgba(160,120,220,0.4)', boxShadow: 'inset 0 0 6px rgba(0,0,0,0.3)' }} />
-        <div className="absolute rounded-full"
-          style={{ top: '50%', left: '38%', width: '10px', height: '10px',
-            background: 'rgba(150,100,200,0.3)', boxShadow: 'inset 0 0 4px rgba(0,0,0,0.25)' }} />
-        <div className="absolute rounded-full"
-          style={{ top: '35%', left: '55%', width: '8px', height: '8px',
-            background: 'rgba(140,90,190,0.25)', boxShadow: 'inset 0 0 3px rgba(0,0,0,0.2)' }} />
-      </div>
-      {/* Blood drip streaks */}
-      {bloodDrops.map((bd, i) => (
-        <div key={`bd${i}`} className="absolute top-0"
-          style={{ left: `${bd.x}%`, width: '4px', height: '0%',
-            background: 'linear-gradient(to bottom, rgba(220,40,60,0.6), rgba(180,30,40,0.4) 60%, rgba(140,20,30,0.2))',
-            animation: `dr-drip ${bd.dur}s ease-in ${bd.delay}s infinite` }} />
-      ))}
-      {/* Dense fog layers */}
-      {fogLayers.map((f, i) => (
-        <div key={`fog${i}`} className="absolute rounded-full"
-          style={{ left: `${f.x}%`, bottom: `${f.bottom}%`,
-            width: `${f.w}px`, height: `${f.h}px`,
-            background: `radial-gradient(ellipse, rgba(${i % 2 === 0 ? '100,80,160' : '80,65,140'},${0.3 + (f.depth % 4) * 0.05}), rgba(60,50,120,${0.15 + (f.depth % 3) * 0.05}) 50%, transparent 70%)`,
-            filter: `blur(${18 + i * 4}px)`,
-            animation: `dr-fog ${f.dur}s ease-in-out ${f.delay}s infinite` }} />
-      ))}
-      {/* Bright lightning flashes */}
-      <div className="absolute inset-0" style={{ animation: 'dr-lightning 10s ease-in-out infinite' }} />
-      <div className="absolute inset-0" style={{ animation: 'dr-lightning2 10s ease-in-out 0.2s infinite' }} />
-      {/* Candle flames */}
-      {candles.map((c, i) => (
-        <div key={`ca${i}`} className="absolute rounded-full"
-          style={{ left: `${c.x}%`, top: `${c.y}%`, width: '8px', height: '12px',
-            background: 'radial-gradient(ellipse at 50% 75%, rgba(255,200,80,0.9), rgba(255,150,60,0.6) 40%, rgba(255,100,30,0.3) 70%, transparent)',
-            boxShadow: '0 0 15px rgba(255,180,60,0.7), 0 0 30px rgba(255,150,40,0.4)',
-            animation: `dr-candle ${c.dur}s ease-in-out ${c.delay}s infinite` }} />
-      ))}
-      {/* Visible mist tendrils */}
-      {tendrils.map((t, i) => (
-        <div key={`td${i}`} className="absolute"
-          style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}px`, height: `${t.h}px`,
-            background: 'radial-gradient(ellipse, rgba(120,100,180,0.35), rgba(100,80,160,0.2) 50%, transparent 70%)',
-            filter: 'blur(8px)', borderRadius: '50%',
-            animation: `dr-tendril ${t.dur}s ease-in-out ${t.delay}s infinite` }} />
-      ))}
-      {/* Flying bats */}
-      {bats.map((bat, i) => (
-        <svg key={`bat${i}`} className="absolute" viewBox="0 0 30 12"
-          style={{ width: `${bat.size}px`, top: `${bat.top}%`, left: '-8%', opacity: 0,
-            animation: `dr-bat ${bat.dur}s ease-in-out ${bat.delay}s infinite`,
-            ['--wa' as string]: `${bat.waveAmp}px` }}>
-          <path d="M15,6 Q10,0 5,3 Q2,1 0,4 Q3,5 5,5 Q8,8 12,7 L15,6 Q17,8 20,7 Q22,8 25,5 Q27,5 30,4 Q28,1 25,3 Q20,0 15,6Z"
-            fill="rgba(189,147,249,0.8)" stroke="rgba(139,92,246,0.6)" strokeWidth="0.5">
-            <animate attributeName="d"
-              values="M15,6 Q10,0 5,3 Q2,1 0,4 Q3,5 5,5 Q8,8 12,7 L15,6 Q17,8 20,7 Q22,8 25,5 Q27,5 30,4 Q28,1 25,3 Q20,0 15,6Z;M15,6 Q10,3 5,5 Q2,4 0,6 Q3,6 5,6 Q8,7 12,6.5 L15,6 Q17,7 20,6.5 Q22,6 25,6 Q27,6 30,6 Q28,4 25,5 Q20,3 15,6Z;M15,6 Q10,0 5,3 Q2,1 0,4 Q3,5 5,5 Q8,8 12,7 L15,6 Q17,8 20,7 Q22,8 25,5 Q27,5 30,4 Q28,1 25,3 Q20,0 15,6Z"
-              dur="0.4s" repeatCount="indefinite" />
-          </path>
-        </svg>
-      ))}
-      {/* Castle and graveyard silhouettes */}
-      <svg className="absolute bottom-0 left-0 w-full" style={{ height: '28%' }} viewBox="0 0 1000 140" preserveAspectRatio="none">
-        {Array.from({ length: 25 }, (_, i) => (
-          <rect key={`f${i}`} x={i * 40} y={85} width={5} height={55} fill="rgba(25,15,35,0.9)" />
-        ))}
-        {Array.from({ length: 25 }, (_, i) => (
-          <polygon key={`fp${i}`} points={`${i * 40},85 ${i * 40 + 2.5},72 ${i * 40 + 5},85`} fill="rgba(25,15,35,0.9)" />
-        ))}
-        <rect x={100} y={60} width={25} height={35} rx={4} fill="rgba(35,25,50,0.85)" />
-        <line x1={112} y1={64} x2={112} y2={78} stroke="rgba(120,100,160,0.6)" strokeWidth="2" />
-        <line x1={105} y1={71} x2={119} y2={71} stroke="rgba(120,100,160,0.6)" strokeWidth="2" />
-        <rect x={300} y={55} width={28} height={40} rx={4} fill="rgba(32,22,45,0.85)" />
-        <line x1={314} y1={60} x2={314} y2={76} stroke="rgba(120,100,160,0.6)" strokeWidth="2" />
-        <line x1={306} y1={68} x2={322} y2={68} stroke="rgba(120,100,160,0.6)" strokeWidth="2" />
-        <rect x={550} y={58} width={22} height={32} rx={3} fill="rgba(30,20,40,0.85)" />
-        <line x1={561} y1={62} x2={561} y2={75} stroke="rgba(120,100,160,0.6)" strokeWidth="2" />
-        <line x1={554} y1={68} x2={568} y2={68} stroke="rgba(120,100,160,0.6)" strokeWidth="2" />
-        <path d="M700,140 L700,25 L715,25 L715,12 L730,12 L730,25 L745,25 L745,12 L760,12 L760,25 L775,25 L775,140 Z" fill="rgba(18,12,30,0.95)" />
-        <path d="M800,140 L800,45 L815,45 L815,30 L830,30 L830,45 L845,45 L845,30 L860,30 L860,45 L875,45 L875,140 Z" fill="rgba(18,12,30,0.95)" />
-        <path d="M880,140 L880,15 L898,15 L898,5 L916,5 L916,15 L934,15 L934,5 L952,5 L952,15 L970,15 L970,140 Z" fill="rgba(15,10,25,0.98)" />
-      </svg>
-      <style>{`
-        @keyframes dr-fog { 0%,100%{transform:translateX(0) translateY(0) scaleX(1)} 50%{transform:translateX(80px) translateY(-30px) scaleX(1.25)} }
-        @keyframes dr-bat { 0%{left:-8%;opacity:0;transform:translateY(0)} 8%{opacity:0.7} 25%{transform:translateY(calc(-1 * var(--wa)))} 50%{transform:translateY(calc(var(--wa) * 0.6))} 75%{transform:translateY(calc(-1 * var(--wa) * 0.8))} 92%{opacity:0.7} 100%{left:110%;opacity:0} }
-        @keyframes dr-lightning { 0%,100%{background:transparent} 44%{background:transparent} 44.3%{background:rgba(189,147,249,0.2)} 44.6%{background:transparent} 45%{background:rgba(189,147,249,0.15)} 45.3%{background:transparent} }
-        @keyframes dr-lightning2 { 0%,100%{background:transparent} 44%{background:transparent} 44.3%{background:rgba(139,92,246,0.25)} 44.6%{background:transparent} 45%{background:rgba(139,92,246,0.18)} 45.3%{background:transparent} }
-        @keyframes dr-moon { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.8;transform:scale(1.08)} }
-        @keyframes dr-moonring { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.15)} }
-        @keyframes dr-candle { 0%,100%{transform:scale(1) translateX(0);opacity:1} 25%{transform:scale(1.3,0.7) translateX(2px);opacity:0.8} 50%{transform:scale(0.8,1.2) translateX(-2px);opacity:1} 75%{transform:scale(1.2,0.8) translateX(1px);opacity:0.9} }
-        @keyframes dr-tendril { 0%,100%{transform:translateX(0) scaleX(1);opacity:1} 50%{transform:translateX(60px) scaleX(1.5);opacity:0.4} }
-        @keyframes dr-drip { 0%{height:0%;opacity:0} 15%{opacity:0.8} 85%{opacity:0.6} 100%{height:60%;opacity:0} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* -- Solarized: Big sun, golden atmosphere, deep ocean, birds, sea spray -- */
-function SolarizedBg() {
-  const waves = useMemo(() => {
-    const rand = seededRand(551);
-    return Array.from({ length: 12 }, (_, i) => ({
-      y: 52 + i * 3.5 + rand() * 2.5,
-      dur: 3.5 + rand() * 4,
-      delay: rand() * 5,
-      opacity: 0.2 + i * 0.06,
-    }));
-  }, []);
-  const seaSpray = useMemo(() => {
-    const rand = seededRand(552);
-    return Array.from({ length: 20 }, () => ({
-      x: 15 + rand() * 70,
-      dur: 1.2 + rand() * 1.8,
-      delay: rand() * 8,
-    }));
-  }, []);
-  const windParticles = useMemo(() => {
-    const rand = seededRand(553);
-    return Array.from({ length: 15 }, () => ({
-      y: 8 + rand() * 60,
-      dur: 6 + rand() * 8,
-      delay: rand() * 12,
-    }));
-  }, []);
-  const birds = useMemo(() => {
-    const rand = seededRand(554);
-    return Array.from({ length: 4 }, () => ({
-      y: 12 + rand() * 28,
-      scale: 0.8 + rand() * 1,
-      dur: 25 + rand() * 18,
-      delay: rand() * 20,
-    }));
-  }, []);
-  const clouds = useMemo(() => {
-    const rand = seededRand(555);
-    return Array.from({ length: 6 }, () => ({
-      y: 6 + rand() * 22,
-      w: 120 + rand() * 180, h: 35 + rand() * 45,
-      dur: 45 + rand() * 35, delay: rand() * 30,
-    }));
-  }, []);
-  const rayAngles = [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180, 202.5, 225, 247.5, 270, 292.5, 315, 337.5];
-  return (
-    <Shell>
-      {/* Golden atmosphere */}
-      <div className="absolute top-0 left-0 right-0 h-[65%]"
-        style={{ background: 'linear-gradient(180deg, rgba(181,137,0,0.4), rgba(203,75,22,0.25) 40%, rgba(38,139,210,0.15) 75%, transparent)' }} />
-      {/* Warm horizon glow */}
-      <div className="absolute left-0 right-0" style={{ bottom: '45%', height: '12%',
-        background: 'linear-gradient(180deg, transparent, rgba(181,137,0,0.5) 30%, rgba(203,75,22,0.3) 70%, transparent)',
-        filter: 'blur(4px)' }} />
-      {/* Deep ocean */}
-      <div className="absolute bottom-0 left-0 right-0 h-[48%]"
-        style={{ background: 'linear-gradient(to top, rgba(38,139,210,0.6), rgba(38,139,210,0.35) 50%, rgba(6,182,212,0.15) 80%, transparent)' }} />
-      {/* Fluffy cloud puffs */}
-      {clouds.map((cl, i) => (
-        <div key={`cl${i}`} className="absolute"
-          style={{ top: `${cl.y}%`, left: '-25%', width: `${cl.w}px`, height: `${cl.h}px`,
-            background: 'radial-gradient(ellipse, rgba(255,250,220,0.7), rgba(255,240,200,0.4) 50%, transparent 75%)',
-            filter: 'blur(10px)', borderRadius: '50%',
-            animation: `sl-cloud ${cl.dur}s linear ${cl.delay}s infinite` }} />
-      ))}
-      {/* Sun with corona and rays */}
-      <div className="absolute" style={{ top: '8%', right: '10%', width: '180px', height: '180px' }}>
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(181,137,0,0.7) 0%, rgba(181,137,0,0.4) 30%, rgba(203,75,22,0.15) 60%, transparent)',
-            filter: 'blur(3px)', animation: 'sl-corona 4s ease-in-out infinite' }} />
-        {[1, 2, 3].map(r => (
-          <div key={`ring${r}`} className="absolute rounded-full"
-            style={{ top: `${-25 * r}%`, left: `${-25 * r}%`, width: `${100 + 50 * r}%`, height: `${100 + 50 * r}%`,
-              border: `2px solid rgba(181,137,0,${0.3 - r * 0.08})`,
-              animation: `sl-ring ${5 + r * 1.5}s ease-in-out ${r * 0.8}s infinite` }} />
-        ))}
-        {rayAngles.map((angle, i) => (
-          <div key={`ray${i}`} className="absolute"
-            style={{ top: '50%', left: '50%', width: '120px', height: '3px',
-              background: `linear-gradient(90deg, transparent 10%, rgba(181,137,0,${0.4 + (i % 4) * 0.1}) 30%, rgba(181,137,0,${0.3 + (i % 4) * 0.1}) 70%, transparent 90%)`,
-              transformOrigin: '0 50%',
-              transform: `rotate(${angle}deg) translateX(85px)`,
-              animation: `sl-ray ${5 + (i % 4) * 0.6}s ease-in-out ${i * 0.2}s infinite` }} />
-        ))}
-        <div className="absolute rounded-full"
-          style={{ top: '20%', left: '20%', width: '60%', height: '60%',
-            background: 'radial-gradient(circle, rgba(255,220,100,0.8), rgba(181,137,0,0.6) 40%, rgba(181,137,0,0.3) 70%, transparent)',
-            boxShadow: '0 0 50px rgba(181,137,0,0.4)' }} />
-      </div>
-      {/* Bright horizon line */}
-      <div className="absolute left-0 right-0" style={{ bottom: '46%', height: '3px',
-        background: 'linear-gradient(90deg, transparent 5%, rgba(181,137,0,0.6) 15%, rgba(203,75,22,0.8) 50%, rgba(181,137,0,0.6) 85%, transparent 95%)',
-        filter: 'blur(1px)' }} />
-      {/* Ocean waves */}
-      {waves.map((w, i) => (
-        <div key={`w${i}`} className="absolute left-[-15%] right-[-15%]"
-          style={{ bottom: `${100 - w.y}%`, height: `${2 + i * 0.6}px`,
-            background: `linear-gradient(90deg, transparent 6%, rgba(38,139,210,${w.opacity}) 18%, rgba(6,182,212,${w.opacity * 1.3}) 50%, rgba(38,139,210,${w.opacity}) 82%, transparent 94%)`,
-            animation: `sl-wave ${w.dur}s ease-in-out ${w.delay}s infinite` }} />
-      ))}
-      {/* Bright sun reflection */}
-      <div className="absolute" style={{ right: '16%', bottom: '0', width: '80px', height: '46%' }}>
-        <div style={{ position: 'absolute', inset: 0,
-          background: 'linear-gradient(to bottom, rgba(181,137,0,0.6) 0%, rgba(203,75,22,0.4) 30%, rgba(181,137,0,0.2) 60%, transparent)',
-          animation: 'sl-sunrefl 3s ease-in-out infinite' }} />
-      </div>
-      {/* Lens flares */}
-      <div className="absolute" style={{ top: '22%', right: '28%', width: '70px', height: '14px',
-        background: 'linear-gradient(90deg, transparent, rgba(181,137,0,0.6), transparent)',
-        borderRadius: '50%', animation: 'sl-flare 5s ease-in-out infinite' }} />
-      <div className="absolute rounded-full" style={{ top: '35%', left: '38%', width: '40px', height: '40px',
-        background: 'radial-gradient(circle, rgba(38,139,210,0.5), transparent 60%)',
-        animation: 'sl-flare 5s ease-in-out 2.5s infinite' }} />
-      <div className="absolute" style={{ top: '15%', right: '45%', width: '30px', height: '8px',
-        background: 'linear-gradient(90deg, transparent, rgba(203,75,22,0.4), transparent)',
-        borderRadius: '50%', animation: 'sl-flare 5s ease-in-out 1.2s infinite' }} />
-      {/* Sea spray droplets */}
-      {seaSpray.map((sp, i) => (
-        <div key={`sp${i}`} className="absolute rounded-full"
-          style={{ left: `${sp.x}%`, bottom: '48%', width: '5px', height: '5px',
-            background: 'rgba(38,139,210,0.8)', opacity: 0,
-            boxShadow: '0 0 8px rgba(38,139,210,0.6)',
-            animation: `sl-spray ${sp.dur}s ease-out ${sp.delay}s infinite` }} />
-      ))}
-      {/* Golden wind particles */}
-      {windParticles.map((wp, i) => (
-        <div key={`wp${i}`} className="absolute rounded-full"
-          style={{ left: '-3%', top: `${wp.y}%`, width: '6px', height: '6px',
-            background: 'rgba(181,137,0,0.7)', opacity: 0,
-            boxShadow: '0 0 10px rgba(181,137,0,0.5)',
-            animation: `sl-wind ${wp.dur}s ease-in-out ${wp.delay}s infinite` }} />
-      ))}
-      {/* Bird silhouettes */}
-      {birds.map((bird, i) => (
-        <svg key={`bird${i}`} className="absolute" viewBox="0 0 24 12"
-          style={{ width: `${22 * bird.scale}px`, top: `${bird.y}%`, left: '-8%',
-            opacity: 0, animation: `sl-bird ${bird.dur}s ease-in-out ${bird.delay}s infinite` }}>
-          <path d="M12,6 Q9,3 6,4 Q3,3 0,5" stroke="rgba(88,110,117,0.8)" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-          <path d="M12,6 Q15,3 18,4 Q21,3 24,5" stroke="rgba(88,110,117,0.8)" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-        </svg>
-      ))}
-      <style>{`
-        @keyframes sl-corona { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.7;transform:scale(1.25)} }
-        @keyframes sl-ring { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.18)} }
-        @keyframes sl-ray { 0%,100%{opacity:0.7} 50%{opacity:1} }
-        @keyframes sl-wave { 0%,100%{transform:scaleX(1) translateX(0)} 50%{transform:scaleX(1.1) translateX(6%)} }
-        @keyframes sl-flare { 0%,100%{opacity:0} 40%{opacity:0.9} 60%{opacity:0.9} }
-        @keyframes sl-sunrefl { 0%,100%{opacity:1;transform:scaleX(1)} 50%{opacity:0.6;transform:scaleX(1.4)} }
-        @keyframes sl-spray { 0%{opacity:0;transform:translateY(0)} 25%{opacity:0.8} 100%{opacity:0;transform:translateY(-30px) translateX(12px)} }
-        @keyframes sl-wind { 0%{opacity:0;left:-3%} 12%{opacity:0.7} 88%{opacity:0.5} 100%{opacity:0;left:108%} }
-        @keyframes sl-bird { 0%{left:-8%;opacity:0} 8%{opacity:0.8} 92%{opacity:0.8} 100%{left:112%;opacity:0} }
-        @keyframes sl-cloud { 0%{transform:translateX(0)} 100%{transform:translateX(125vw)} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* -- Lightning: Thunderstorm with realistic bolt strikes, driving rain, storm clouds -- */
-function LightningBg() {
-  const rain = useMemo(() => {
-    const rand = seededRand(900);
-    return Array.from({ length: 60 }, () => {
-      const windLayer = rand();
-      const angle = 8 + rand() * 12 + (windLayer > 0.7 ? rand() * 8 : 0);
-      return {
-        x: rand() * 130 - 15,
-        len: 14 + rand() * 32,
-        width: rand() > 0.85 ? 1.5 : 1,
-        dur: 0.25 + rand() * 0.45,
-        delay: rand() * 3,
-        opacity: 0.15 + rand() * 0.4,
-        angle,
-        layer: windLayer < 0.4 ? 0 : windLayer < 0.75 ? 1 : 2,
-      };
-    });
-  }, []);
-
-  const clouds = useMemo(() => {
-    const rand = seededRand(902);
-    return Array.from({ length: 14 }, (_, i) => ({
-      x: -25 + rand() * 130,
-      y: -12 + rand() * 28,
-      w: 200 + rand() * 500,
-      h: 60 + rand() * 140,
-      opacity: 0.35 + rand() * 0.5,
-      dur: 18 + rand() * 40,
-      delay: rand() * 20,
-      layer: i < 5 ? 0 : i < 9 ? 1 : 2,
-      roilDur: 8 + rand() * 12,
-      roilDelay: rand() * 8,
-    }));
-  }, []);
-
-  const sheetFlashes = useMemo(() => {
-    const rand = seededRand(904);
-    return Array.from({ length: 5 }, () => ({
-      x: rand() * 80 + 5,
-      y: rand() * 15 + 3,
-      w: 20 + rand() * 25,
-      h: 10 + rand() * 12,
-      cycle: 6 + rand() * 14,
-      delay: rand() * 18,
-      flashes: 1 + Math.floor(rand() * 3),
-    }));
-  }, []);
-
-  const bolts = useMemo(() => {
-    const rand = seededRand(903);
-    const flashPatterns = [
-      { vals: '0;0;1;0;0.6;0;0', times: '0;0.74;0.75;0.76;0.78;0.80;1' },
-      { vals: '0;0;1;0;0.8;0;0.5;0;0', times: '0;0.72;0.73;0.74;0.76;0.78;0.80;0.82;1' },
-      { vals: '0;0;1;0;0;0.7;0;0.4;0;0', times: '0;0.74;0.75;0.76;0.79;0.80;0.82;0.84;0.86;1' },
-      { vals: '0;0;1;0.3;0;0', times: '0;0.74;0.75;0.77;0.80;1' },
-    ];
-    return Array.from({ length: 7 }, () => {
-      const startX = 6 + rand() * 88;
-      const segs: { x: number; y: number }[] = [{ x: startX, y: 3 + rand() * 8 }];
-      let cx = startX;
-      let cy = segs[0].y;
-      const n = 7 + Math.floor(rand() * 7);
-      const drift = (rand() - 0.5) * 0.6;
-      for (let j = 0; j < n; j++) {
-        const jitter = (rand() - 0.5) * 18;
-        const bigKink = rand() > 0.82 ? (rand() - 0.5) * 12 : 0;
-        cx += jitter + bigKink + drift * 3;
-        cy += 4 + rand() * 8;
-        cx = Math.max(2, Math.min(98, cx));
-        cy = Math.min(95, cy);
-        segs.push({ x: cx, y: cy });
+      // streams (traveling dots)
+      for (const s of streams) {
+        const e = edges[s.fromEdge];
+        if (!e) continue;
+        const a = nodes[e.i], b = nodes[e.j];
+        const t01 = (tt * s.speed + s.phase) % 1;
+        const px = a.x + (b.x - a.x) * t01;
+        const py = a.y + (b.y - a.y) * t01;
+        cx.fillStyle = 'rgba(129,140,248,0.6)';
+        cx.beginPath();
+        cx.arc(px, py, 1.5, 0, Math.PI * 2);
+        cx.fill();
       }
-      const branches: { x: number; y: number }[][] = [];
-      const nBranches = 2 + Math.floor(rand() * 3);
-      for (let b = 0; b < nBranches; b++) {
-        const bi = 1 + Math.floor(rand() * Math.max(1, segs.length - 2));
-        const bsegs: { x: number; y: number }[] = [{ x: segs[bi].x, y: segs[bi].y }];
-        let bx = segs[bi].x;
-        let by = segs[bi].y;
-        const side = rand() > 0.5 ? 1 : -1;
-        const bn = 2 + Math.floor(rand() * 4);
-        for (let k = 0; k < bn; k++) {
-          bx += side * (3 + rand() * 10) + (rand() - 0.5) * 4;
-          by += 3 + rand() * 7;
-          bsegs.push({ x: Math.max(1, Math.min(99, bx)), y: Math.min(96, by) });
+
+      // pulse rings from hubs
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (!n.hub) continue;
+        const cycle = 6 + (i % 3) * 2;
+        const ph = ((tt + i * 3) % cycle) / cycle;
+        const radius = ph * Math.min(w, h) * 0.15;
+        cx.strokeStyle = `rgba(129,140,248,${0.2 * (1 - ph)})`;
+        cx.lineWidth = 0.5;
+        cx.beginPath();
+        cx.arc(n.x, n.y, radius, 0, Math.PI * 2);
+        cx.stroke();
+      }
+
+      // nodes
+      for (const n of nodes) {
+        const op = n.baseOp * (0.5 + 0.5 * Math.sin(tt * n.speed + n.phase));
+        if (n.hub) {
+          const grd = cx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 4);
+          grd.addColorStop(0, `rgba(167,139,250,${0.4 * op})`);
+          grd.addColorStop(1, 'rgba(0,0,0,0)');
+          cx.fillStyle = grd;
+          cx.beginPath();
+          cx.arc(n.x, n.y, n.r * 4, 0, Math.PI * 2);
+          cx.fill();
         }
-        branches.push(bsegs);
+        cx.fillStyle = n.hub ? `rgba(167,139,250,${op})` : `rgba(129,140,248,${op})`;
+        cx.beginPath();
+        cx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        cx.fill();
       }
-      const pat = flashPatterns[Math.floor(rand() * flashPatterns.length)];
-      return {
-        segs,
-        branches,
-        cycle: 5 + rand() * 10,
-        delay: rand() * 16,
-        pattern: pat,
-        intensity: 0.7 + rand() * 0.3,
+
+      // scan line
+      const sy = (Math.sin(tt * 0.5) * 0.5 + 0.5) * h;
+      const sgrd = cx.createLinearGradient(0, 0, w, 0);
+      sgrd.addColorStop(0, 'rgba(129,140,248,0)');
+      sgrd.addColorStop(0.5, 'rgba(129,140,248,0.1)');
+      sgrd.addColorStop(1, 'rgba(129,140,248,0)');
+      cx.fillStyle = sgrd;
+      cx.fillRect(0, sy, w, 1);
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Midnight: starfield + nebulae + crescent moon ── */
+function MidnightBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Star { x: number; y: number; size: number; baseOp: number; speed: number; phase: number; blue: boolean; }
+    let stars: Star[] = [];
+    interface Shooter { x: number; y: number; angle: number; cycle: number; phase: number; }
+    let shooters: Shooter[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(99);
+      stars = Array.from({ length: 120 }, () => ({
+        x: r() * w, y: r() * h,
+        size: 0.4 + r() * 2,
+        baseOp: 0.2 + r() * 0.7,
+        speed: 0.5 + r() * 2,
+        phase: r() * Math.PI * 2,
+        blue: r() > 0.6,
+      }));
+      const rs = seededRand(503);
+      shooters = Array.from({ length: 3 }, (_, i) => ({
+        x: (10 + rs() * 70) / 100 * w,
+        y: (3 + rs() * 30) / 100 * h,
+        angle: (20 + rs() * 30) * Math.PI / 180,
+        cycle: 6 + i * 4,
+        phase: i * 5,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // milky way diagonal haze
+      const bg = cx.createLinearGradient(0, 0, w, h);
+      bg.addColorStop(0.15, 'rgba(0,0,0,0)');
+      bg.addColorStop(0.35, 'rgba(120,140,230,0.15)');
+      bg.addColorStop(0.55, 'rgba(100,120,210,0.2)');
+      bg.addColorStop(0.75, 'rgba(120,140,230,0.12)');
+      bg.addColorStop(0.95, 'rgba(0,0,0,0)');
+      cx.fillStyle = bg;
+      cx.fillRect(0, 0, w, h);
+
+      // nebulae
+      const drawNeb = (x: number, y: number, rad: number, r: number, g: number, b: number, a: number) => {
+        const grd = cx.createRadialGradient(x, y, 0, x, y, rad);
+        grd.addColorStop(0, `rgba(${r},${g},${b},${a})`);
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = grd;
+        cx.beginPath();
+        cx.arc(x, y, rad, 0, Math.PI * 2);
+        cx.fill();
       };
-    });
+      const breathe1 = 1 + Math.sin(tt * 0.4) * 0.3;
+      const breathe2 = 1 + Math.sin(tt * 0.3 + 1) * 0.3;
+      drawNeb(w * 0.2, h * 0.25, w * 0.25 * breathe1, 139, 156, 248, 0.25);
+      drawNeb(w * 0.6, h * 0.55, w * 0.22 * breathe2, 160, 100, 220, 0.3);
+      drawNeb(w * 0.1, h * 0.7, w * 0.18, 80, 120, 200, 0.22);
+
+      // stars
+      for (const s of stars) {
+        const op = s.baseOp * (0.4 + 0.6 * Math.sin(tt * s.speed + s.phase));
+        cx.globalAlpha = Math.max(0, op);
+        cx.fillStyle = s.blue ? '#8b9cf8' : '#e8eaff';
+        cx.beginPath();
+        cx.arc(s.x, s.y, s.size / 2, 0, Math.PI * 2);
+        cx.fill();
+        if (s.size > 1.5) {
+          const grd = cx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.size * 3);
+          grd.addColorStop(0, s.blue ? `rgba(139,156,248,${op * 0.5})` : `rgba(220,225,255,${op * 0.5})`);
+          grd.addColorStop(1, 'rgba(0,0,0,0)');
+          cx.fillStyle = grd;
+          cx.beginPath();
+          cx.arc(s.x, s.y, s.size * 3, 0, Math.PI * 2);
+          cx.fill();
+        }
+      }
+      cx.globalAlpha = 1;
+
+      // crescent moon
+      const moonX = w * 0.92, moonY = h * 0.1, moonR = 26;
+      cx.fillStyle = 'rgba(210,220,255,0.5)';
+      cx.beginPath();
+      cx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+      cx.fill();
+      cx.fillStyle = 'rgba(8,8,22,0.92)';
+      cx.beginPath();
+      cx.arc(moonX + 8, moonY - 4, moonR * 0.9, 0, Math.PI * 2);
+      cx.fill();
+
+      // shooting stars
+      for (const sh of shooters) {
+        const t01 = ((tt + sh.phase) % sh.cycle) / sh.cycle;
+        if (t01 < 0.08 || t01 > 0.92) continue;
+        const progress = (t01 - 0.08) / 0.84;
+        const dx = Math.cos(sh.angle) * 150 * progress;
+        const dy = Math.sin(sh.angle) * 100 * progress;
+        const sx = sh.x + dx, sy = sh.y + dy;
+        const tailLen = 40;
+        const grd = cx.createLinearGradient(sx - Math.cos(sh.angle) * tailLen, sy - Math.sin(sh.angle) * tailLen, sx, sy);
+        grd.addColorStop(0, 'rgba(255,255,255,0)');
+        grd.addColorStop(1, 'rgba(255,255,255,0.9)');
+        cx.strokeStyle = grd;
+        cx.lineWidth = 2.5;
+        cx.lineCap = 'round';
+        cx.beginPath();
+        cx.moveTo(sx - Math.cos(sh.angle) * tailLen, sy - Math.sin(sh.angle) * tailLen);
+        cx.lineTo(sx, sy);
+        cx.stroke();
+      }
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
 
-  const splashes = useMemo(() => {
-    const rand = seededRand(905);
-    return Array.from({ length: 30 }, () => ({
-      x: rand() * 100,
-      dur: 0.3 + rand() * 0.4,
-      delay: rand() * 2,
-      size: 2 + rand() * 3,
-    }));
-  }, []);
-
-  return (
-    <Shell>
-      {/* Storm clouds — layered with roiling motion */}
-      {clouds.map((c, i) => (
-        <div key={`cl${i}`} className="absolute rounded-full"
-          style={{
-            left: `${c.x}%`, top: `${c.y}%`,
-            width: `${c.w}px`, height: `${c.h}px`,
-            background: c.layer === 0
-              ? 'radial-gradient(ellipse, rgba(12,16,35,0.9) 0%, rgba(8,12,28,0.55) 35%, transparent 65%)'
-              : c.layer === 1
-              ? 'radial-gradient(ellipse, rgba(18,24,48,0.75) 0%, rgba(12,18,38,0.35) 40%, transparent 68%)'
-              : 'radial-gradient(ellipse, rgba(22,30,55,0.55) 0%, rgba(16,22,42,0.2) 45%, transparent 70%)',
-            filter: `blur(${12 + c.layer * 8}px)`,
-            animation: `ln-cloud ${c.dur}s ease-in-out ${c.delay}s infinite, ln-roil ${c.roilDur}s ease-in-out ${c.roilDelay}s infinite`,
-            opacity: c.opacity,
-          }} />
-      ))}
-
-      {/* Cloud underside glow — ambient internal lightning */}
-      <div className="absolute left-0 right-0 top-[6%] h-[22%]"
-        style={{
-          background: 'linear-gradient(to bottom, rgba(80,130,220,0.1), rgba(60,110,200,0.03), transparent)',
-          filter: 'blur(28px)',
-          animation: 'ln-underglow 5s ease-in-out infinite',
-        }} />
-
-      {/* Sheet lightning — cloud-to-cloud flickers with no visible bolt */}
-      {sheetFlashes.map((sf, i) => (
-        <div key={`sf${i}`} className="absolute rounded-full"
-          style={{
-            left: `${sf.x}%`, top: `${sf.y}%`,
-            width: `${sf.w}%`, height: `${sf.h}%`,
-            background: 'radial-gradient(ellipse, rgba(140,180,255,0.35), rgba(100,150,240,0.1) 40%, transparent 65%)',
-            filter: 'blur(25px)',
-            animation: `ln-sheet${sf.flashes} ${sf.cycle}s ease-out ${sf.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Lightning bolts via SVG */}
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <defs>
-        </defs>
-        {bolts.map((bolt, bi) => {
-          const mainD = bolt.segs.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x},${s.y}`).join(' ');
-          const { vals, times } = bolt.pattern;
-          const c = bolt.cycle;
-          const endPt = bolt.segs[bolt.segs.length - 1];
-          return (
-            <g key={`b${bi}`}>
-              {/* Ultra-wide atmospheric scatter */}
-              <path d={mainD} fill="none" stroke={`rgba(70,120,220,${0.3 * bolt.intensity})`} strokeWidth="6"
-                strokeLinecap="round" strokeLinejoin="round"                opacity="0" vectorEffect="non-scaling-stroke">
-                <animate attributeName="opacity" values={vals} keyTimes={times}
-                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
-              </path>
-              {/* Wide outer glow */}
-              <path d={mainD} fill="none" stroke={`rgba(100,160,250,${0.5 * bolt.intensity})`} strokeWidth="3.5"
-                strokeLinecap="round" strokeLinejoin="round"                opacity="0" vectorEffect="non-scaling-stroke">
-                <animate attributeName="opacity" values={vals} keyTimes={times}
-                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
-              </path>
-              {/* Main channel */}
-              <path d={mainD} fill="none" stroke={`rgba(190,215,255,${0.95 * bolt.intensity})`} strokeWidth="1.6"
-                strokeLinecap="round" strokeLinejoin="round"                opacity="0" vectorEffect="non-scaling-stroke">
-                <animate attributeName="opacity" values={vals} keyTimes={times}
-                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
-              </path>
-              {/* Hot white core */}
-              <path d={mainD} fill="none" stroke="rgba(245,248,255,0.98)" strokeWidth="0.6"
-                strokeLinecap="round" strokeLinejoin="round"
-                opacity="0" vectorEffect="non-scaling-stroke">
-                <animate attributeName="opacity" values={vals} keyTimes={times}
-                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
-              </path>
-              {/* Branches */}
-              {bolt.branches.map((br, bri) => {
-                const brD = br.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x},${s.y}`).join(' ');
-                const branchDelay = bolt.delay + 0.01 + bri * 0.015;
-                return (
-                  <g key={`br${bri}`}>
-                    <path d={brD} fill="none" stroke={`rgba(120,170,250,${0.55 * bolt.intensity})`} strokeWidth="2"
-                      strokeLinecap="round" strokeLinejoin="round"                      opacity="0" vectorEffect="non-scaling-stroke">
-                      <animate attributeName="opacity" values={vals} keyTimes={times}
-                        dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
-                    </path>
-                    <path d={brD} fill="none" stroke={`rgba(180,210,255,${0.75 * bolt.intensity})`} strokeWidth="1"
-                      strokeLinecap="round" strokeLinejoin="round"                      opacity="0" vectorEffect="non-scaling-stroke">
-                      <animate attributeName="opacity" values={vals} keyTimes={times}
-                        dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
-                    </path>
-                    <path d={brD} fill="none" stroke="rgba(230,240,255,0.85)" strokeWidth="0.4"
-                      strokeLinecap="round" strokeLinejoin="round"
-                      opacity="0" vectorEffect="non-scaling-stroke">
-                      <animate attributeName="opacity" values={vals} keyTimes={times}
-                        dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
-                    </path>
-                  </g>
-                );
-              })}
-              {/* Ground strike illumination — wide spread */}
-              <ellipse cx={endPt.x} cy={endPt.y + 3}
-                rx="14" ry="5" fill={`rgba(100,160,250,${0.5 * bolt.intensity})`} opacity="0">
-                <animate attributeName="opacity" values={vals} keyTimes={times}
-                  dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
-              </ellipse>
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* Full-screen flash per bolt — whole sky illuminates */}
-      {bolts.map((bolt, bi) => {
-        const flashIntensity = Math.round(bolt.intensity * 18);
-        return (
-          <div key={`fl${bi}`} className="absolute inset-0"
-            style={{ animation: `ln-skyflash-${bi % 4} ${bolt.cycle}s ease-out ${bolt.delay}s infinite` }} />
-        );
-      })}
-
-      {/* Cloud illumination — localized glow near each bolt origin */}
-      {bolts.map((bolt, bi) => (
-        <div key={`cfl${bi}`} className="absolute rounded-full"
-          style={{
-            left: `${bolt.segs[0].x - 18}%`, top: `${bolt.segs[0].y - 6}%`,
-            width: '36%', height: '22%',
-            background: `radial-gradient(ellipse, rgba(140,185,255,${0.35 * bolt.intensity}), transparent 55%)`,
-            filter: 'blur(22px)',
-            animation: `ln-skyflash-${bi % 4} ${bolt.cycle}s ease-out ${bolt.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Driving rain — three depth layers with varied angle for wind gusts */}
-      {rain.map((r, i) => (
-        <div key={`r${i}`} className="absolute"
-          style={{
-            left: `${r.x}%`, top: '-12%',
-            width: `${r.width}px`, height: `${r.len}px`,
-            background: r.layer === 0
-              ? `linear-gradient(to bottom, transparent, rgba(180,210,255,${r.opacity}))`
-              : r.layer === 1
-              ? `linear-gradient(to bottom, transparent, rgba(150,190,240,${r.opacity * 0.75}))`
-              : `linear-gradient(to bottom, transparent, rgba(130,170,230,${r.opacity * 0.5}))`,
-            transform: `rotate(${r.angle}deg)`,
-            transformOrigin: 'top left',
-            animation: `ln-rain ${r.dur}s linear ${r.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Rain splash at ground level */}
-      {splashes.map((sp, i) => (
-        <div key={`sp${i}`} className="absolute"
-          style={{
-            left: `${sp.x}%`, bottom: '2%',
-            width: `${sp.size}px`, height: `${sp.size * 0.4}px`,
-            borderRadius: '50%',
-            background: 'rgba(160,200,255,0.3)',
-            filter: 'blur(0.5px)',
-            animation: `ln-splash ${sp.dur}s ease-out ${sp.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Low fog / mist — wind-driven */}
-      <div className="absolute bottom-0 left-[-5%] right-[-5%] h-[28%]"
-        style={{
-          background: 'linear-gradient(to top, rgba(8,12,25,0.55), rgba(12,18,35,0.2) 45%, transparent)',
-          filter: 'blur(12px)',
-          animation: 'ln-fog 12s ease-in-out infinite',
-        }} />
-      <div className="absolute bottom-0 left-[-8%] right-[-8%] h-[20%]"
-        style={{
-          background: 'radial-gradient(ellipse at 55% 100%, rgba(18,25,48,0.45), transparent 50%)',
-          filter: 'blur(20px)',
-          animation: 'ln-fog 16s ease-in-out 4s infinite',
-        }} />
-      <div className="absolute bottom-0 left-[-3%] right-[-3%] h-[15%]"
-        style={{
-          background: 'radial-gradient(ellipse at 30% 100%, rgba(15,22,42,0.35), transparent 45%)',
-          filter: 'blur(16px)',
-          animation: 'ln-fog 20s ease-in-out 9s infinite',
-        }} />
-
-      <style>{`
-        @keyframes ln-rain { 0%{top:-12%;opacity:0} 4%{opacity:1} 92%{opacity:0.7} 100%{top:112%;opacity:0} }
-        @keyframes ln-cloud { 0%,100%{transform:translateX(0) scale(1)} 50%{transform:translateX(30px) scale(1.04)} }
-        @keyframes ln-roil { 0%,100%{transform:scaleX(1) scaleY(1)} 30%{transform:scaleX(1.06) scaleY(0.95)} 60%{transform:scaleX(0.96) scaleY(1.04)} }
-        @keyframes ln-underglow { 0%,100%{opacity:0.4} 40%{opacity:0.9} 60%{opacity:0.5} }
-        @keyframes ln-fog { 0%,100%{transform:translateX(0);opacity:1} 50%{transform:translateX(20px);opacity:0.6} }
-        @keyframes ln-splash { 0%{transform:scale(0);opacity:0.8} 50%{transform:scale(1.5);opacity:0.4} 100%{transform:scale(2.5);opacity:0} }
-
-        @keyframes ln-sheet1 { 0%,88%{opacity:0} 89%{opacity:0.8} 90%{opacity:0} 100%{opacity:0} }
-        @keyframes ln-sheet2 { 0%,85%{opacity:0} 86%{opacity:0.6} 87%{opacity:0} 88.5%{opacity:0.9} 89.5%{opacity:0} 100%{opacity:0} }
-        @keyframes ln-sheet3 { 0%,82%{opacity:0} 83%{opacity:0.5} 83.5%{opacity:0} 84.5%{opacity:0.7} 85%{opacity:0.2} 86%{opacity:0.9} 86.5%{opacity:0} 100%{opacity:0} }
-
-        @keyframes ln-skyflash-0 { 0%,73%{background:transparent} 74%{background:rgba(140,185,250,0.12)} 75%{background:rgba(160,200,255,0.18)} 76%{background:transparent} 78%{background:rgba(120,170,250,0.14)} 79%{background:transparent} 100%{background:transparent} }
-        @keyframes ln-skyflash-1 { 0%,72%{background:transparent} 73%{background:rgba(150,190,255,0.16)} 74%{background:transparent} 76%{background:rgba(130,175,250,0.22)} 77.5%{background:rgba(110,160,245,0.08)} 78.5%{background:transparent} 100%{background:transparent} }
-        @keyframes ln-skyflash-2 { 0%,74%{background:transparent} 75%{background:rgba(160,200,255,0.2)} 75.5%{background:rgba(140,185,250,0.06)} 76.5%{background:transparent} 100%{background:transparent} }
-        @keyframes ln-skyflash-3 { 0%,73%{background:transparent} 74%{background:rgba(130,175,250,0.1)} 75%{background:rgba(150,195,255,0.2)} 76%{background:transparent} 78%{background:rgba(140,185,250,0.15)} 79%{background:transparent} 80.5%{background:rgba(120,165,245,0.08)} 81%{background:transparent} 100%{background:transparent} }
-      `}</style>
-    </Shell>
-  );
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
 }
 
-/* ── Phoenix: Majestic flaming phoenix rising from inferno ── */
-function PhoenixBg() {
-  const embersSmall = useMemo(() => {
-    const rand = seededRand(660);
-    return Array.from({ length: 30 }, () => ({
-      x: rand() * 100,
-      size: 1.5 + rand() * 2.5,
-      dur: 1.5 + rand() * 2,
-      delay: rand() * 10,
-      drift: (rand() - 0.5) * 70,
-    }));
+/* ── Obsidian: floating polygonal fragments + glints + ambient glow ── */
+function ObsidianBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Shard { x: number; y: number; size: number; rot: number; rotSpeed: number; pts: { x: number; y: number }[]; phase: number; speed: number; }
+    interface Glint { x: number; y: number; size: number; cycle: number; phase: number; }
+    interface Mote { x: number; size: number; speed: number; drift: number; phase: number; }
+    let shards: Shard[] = [];
+    let glints: Glint[] = [];
+    let motes: Mote[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(44);
+      shards = Array.from({ length: 9 }, () => {
+        const cxp = r() * w, cyp = r() * h;
+        const size = 40 + r() * 80;
+        const n = 4 + Math.floor(r() * 3);
+        const pts: { x: number; y: number }[] = [];
+        for (let j = 0; j < n; j++) {
+          const a = (j / n) * Math.PI * 2 - Math.PI / 2;
+          const rr = size * (0.7 + r() * 0.3);
+          pts.push({ x: Math.cos(a) * rr, y: Math.sin(a) * rr });
+        }
+        return {
+          x: cxp, y: cyp, size,
+          rot: r() * Math.PI * 2,
+          rotSpeed: (r() - 0.5) * 0.2,
+          pts, phase: r() * Math.PI * 2,
+          speed: 0.3 + r() * 0.4,
+        };
+      });
+      const rg = seededRand(144);
+      glints = Array.from({ length: 14 }, () => ({
+        x: rg() * w, y: rg() * h,
+        size: 1 + rg() * 2.5,
+        cycle: 3 + rg() * 6,
+        phase: rg() * 14,
+      }));
+      const rm = seededRand(344);
+      motes = Array.from({ length: 18 }, () => ({
+        x: rm() * w,
+        size: 1 + rm() * 2,
+        speed: 8 + rm() * 16,
+        drift: (rm() - 0.5) * 40,
+        phase: rm() * 16,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // base volcanic gradient
+      const grd1 = cx.createRadialGradient(w * 0.35, h * 0.25, 0, w * 0.35, h * 0.25, w * 0.5);
+      grd1.addColorStop(0, 'rgba(30,20,60,0.6)');
+      grd1.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = grd1;
+      cx.beginPath();
+      cx.arc(w * 0.35, h * 0.25, w * 0.5, 0, Math.PI * 2);
+      cx.fill();
+      const grd2 = cx.createRadialGradient(w * 0.7, h * 0.75, 0, w * 0.7, h * 0.75, w * 0.45);
+      grd2.addColorStop(0, 'rgba(20,15,50,0.5)');
+      grd2.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = grd2;
+      cx.beginPath();
+      cx.arc(w * 0.7, h * 0.75, w * 0.45, 0, Math.PI * 2);
+      cx.fill();
+
+      // core ambient glow
+      const coreS = 1 + Math.sin(tt * 0.3) * 0.15;
+      const cg = cx.createRadialGradient(w * 0.5, h * 0.5, 0, w * 0.5, h * 0.5, w * 0.3 * coreS);
+      cg.addColorStop(0, 'rgba(120,90,200,0.15)');
+      cg.addColorStop(0.4, 'rgba(80,50,160,0.06)');
+      cg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = cg;
+      cx.beginPath();
+      cx.arc(w * 0.5, h * 0.5, w * 0.3 * coreS, 0, Math.PI * 2);
+      cx.fill();
+
+      // shards
+      for (const sh of shards) {
+        const alpha = 0.5 + 0.4 * Math.sin(tt * sh.speed + sh.phase);
+        sh.rot += sh.rotSpeed * 0.005;
+        cx.save();
+        cx.translate(sh.x, sh.y);
+        cx.rotate(sh.rot);
+        cx.beginPath();
+        sh.pts.forEach((p, i) => i === 0 ? cx.moveTo(p.x, p.y) : cx.lineTo(p.x, p.y));
+        cx.closePath();
+        const lg = cx.createLinearGradient(-sh.size, -sh.size, sh.size, sh.size);
+        lg.addColorStop(0, 'rgba(120,90,200,0)');
+        lg.addColorStop(0.5, `rgba(180,160,240,${0.15 * alpha})`);
+        lg.addColorStop(1, 'rgba(120,90,200,0)');
+        cx.fillStyle = lg;
+        cx.fill();
+        cx.strokeStyle = `rgba(167,139,250,${0.3 * alpha})`;
+        cx.lineWidth = 1;
+        cx.stroke();
+        cx.restore();
+      }
+
+      // prismatic sweep
+      const swX = ((tt * 0.05) % 1) * w * 2 - w * 0.5;
+      const swg = cx.createLinearGradient(swX, 0, swX + 200, 0);
+      swg.addColorStop(0, 'rgba(0,0,0,0)');
+      swg.addColorStop(0.5, 'rgba(200,180,255,0.08)');
+      swg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = swg;
+      cx.fillRect(0, h * 0.25, w, 100);
+
+      // glints
+      for (const g of glints) {
+        const t01 = ((tt + g.phase) % g.cycle) / g.cycle;
+        if (t01 < 0.05 || t01 > 0.4) continue;
+        const a = t01 < 0.2 ? t01 / 0.2 : (0.4 - t01) / 0.2;
+        cx.fillStyle = `rgba(220,210,255,${a * 0.9})`;
+        cx.beginPath();
+        cx.arc(g.x, g.y, g.size, 0, Math.PI * 2);
+        cx.fill();
+        const gg = cx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.size * 4);
+        gg.addColorStop(0, `rgba(167,139,250,${a * 0.6})`);
+        gg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = gg;
+        cx.beginPath();
+        cx.arc(g.x, g.y, g.size * 4, 0, Math.PI * 2);
+        cx.fill();
+      }
+
+      // rising motes
+      for (const m of motes) {
+        const t01 = ((tt + m.phase) / m.speed) % 1;
+        const y = h - t01 * h * 1.1;
+        const x = m.x + t01 * m.drift;
+        const a = t01 < 0.1 ? t01 / 0.1 : t01 > 0.85 ? (1 - t01) / 0.15 : 0.6;
+        cx.fillStyle = `rgba(167,139,250,${a * 0.6})`;
+        cx.beginPath();
+        cx.arc(x, y, m.size, 0, Math.PI * 2);
+        cx.fill();
+      }
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
-  const embersMed = useMemo(() => {
-    const rand = seededRand(661);
-    return Array.from({ length: 20 }, () => ({
-      x: rand() * 100,
-      size: 3 + rand() * 4,
-      dur: 2.5 + rand() * 3,
-      delay: rand() * 12,
-      drift: (rand() - 0.5) * 90,
-      color: rand() > 0.5 ? '#fbbf24' : '#f97316',
-    }));
-  }, []);
-  const embersLarge = useMemo(() => {
-    const rand = seededRand(662);
-    return Array.from({ length: 12 }, () => ({
-      x: rand() * 100,
-      size: 5 + rand() * 5,
-      dur: 3.5 + rand() * 4,
-      delay: rand() * 14,
-      drift: (rand() - 0.5) * 110,
-    }));
-  }, []);
-  const smoke = useMemo(() => {
-    const rand = seededRand(663);
-    return Array.from({ length: 10 }, () => ({
-      x: 5 + rand() * 90,
-      dur: 16 + rand() * 14,
-      delay: rand() * 12,
-      w: 80 + rand() * 160,
-    }));
-  }, []);
-  const vortex = useMemo(() => {
-    const rand = seededRand(664);
-    return Array.from({ length: 16 }, (_, i) => ({
-      angle: (i / 16) * 360,
-      r: 35 + rand() * 40,
-      size: 2 + rand() * 4,
-      dur: 2.5 + rand() * 3,
-      delay: rand() * 5,
-      color: rand() > 0.5 ? '#fbbf24' : rand() > 0.3 ? '#f97316' : '#ef4444',
-    }));
-  }, []);
-  const feathers = useMemo(() => {
-    const rand = seededRand(665);
-    return Array.from({ length: 8 }, () => ({
-      x: 20 + rand() * 60,
-      y: 15 + rand() * 50,
-      size: 8 + rand() * 16,
-      dur: 6 + rand() * 10,
-      delay: rand() * 12,
-      rot: rand() * 360,
-      drift: (rand() - 0.5) * 80,
-      color: rand() < 0.4 ? '#f59e0b' : rand() < 0.7 ? '#ef4444' : '#fb923c',
-    }));
-  }, []);
-  const sparks = useMemo(() => {
-    const rand = seededRand(666);
-    return Array.from({ length: 16 }, () => ({
-      x: 30 + rand() * 40,
-      y: 25 + rand() * 35,
-      dur: 1.2 + rand() * 2.5,
-      delay: rand() * 14,
-      angle: rand() * 360,
-      dist: 50 + rand() * 100,
-      size: 0.8 + rand() * 1.8,
-    }));
-  }, []);
 
-  return (
-    <Shell>
-      {/* Intense fire base — 5 layers of blazing gradient */}
-      <div className="absolute bottom-0 left-0 right-0 h-[65%]"
-        style={{ background: 'linear-gradient(to top, rgba(180,60,10,0.5), rgba(239,68,68,0.3) 35%, rgba(245,158,11,0.12) 65%, transparent)', animation: 'ph-heat 3s ease-in-out infinite' }} />
-      <div className="absolute bottom-0 left-[5%] right-[5%] h-[55%]"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(251,191,36,0.45), rgba(249,115,22,0.25) 45%, transparent 70%)', animation: 'ph-heat 4.5s ease-in-out 1s infinite' }} />
-      <div className="absolute bottom-0 left-[15%] right-[15%] h-[45%]"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(239,68,68,0.35), rgba(180,60,10,0.2) 55%, transparent)', animation: 'ph-heat 3.8s ease-in-out 1.8s infinite' }} />
-      <div className="absolute bottom-0 left-[25%] right-[25%] h-[35%]"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(255,200,60,0.5), transparent 65%)', animation: 'ph-heat 4s ease-in-out 0.5s infinite' }} />
-      <div className="absolute bottom-0 left-[35%] right-[35%] h-[25%]"
-        style={{ background: 'radial-gradient(ellipse at 50% 100%, rgba(255,240,100,0.55), transparent 70%)', animation: 'ph-heat 2.8s ease-in-out 2s infinite' }} />
-
-      {/* Fire veins rising from below */}
-      {[8, 18, 30, 42, 55, 68, 78, 88].map((x, i) => (
-        <div key={`fv${i}`} className="absolute bottom-0"
-          style={{ left: `${x}%`, width: `${3 + (i % 3) * 2}px`, height: `${20 + (i % 5) * 8}%`,
-            background: `linear-gradient(to top, rgba(${i % 2 === 0 ? '251,191,36' : '249,115,22'},0.7), rgba(239,68,68,0.4) 55%, rgba(180,60,10,0.15) 80%, transparent)`,
-            filter: 'blur(1px)',
-            boxShadow: `0 0 6px rgba(249,115,22,0.5), 0 0 14px rgba(251,191,36,0.2)`,
-            animation: `ph-vein ${2.8 + i * 0.7}s ease-in-out ${i * 0.45}s infinite` }} />
-      ))}
-
-      {/* Heat shimmer */}
-      <div className="absolute bottom-0 left-0 right-0 h-[40%]"
-        style={{ background: 'linear-gradient(to top, rgba(255,180,60,0.18), rgba(255,140,40,0.08) 50%, transparent)', filter: 'blur(3px)', animation: 'ph-shimmer 1.6s ease-in-out infinite' }} />
-
-      {/* Dense smoke columns */}
-      {smoke.map((s, i) => (
-        <div key={`sm${i}`} className="absolute bottom-[2%]"
-          style={{ left: `${s.x}%`, width: `${s.w}px`, height: '70%',
-            background: 'linear-gradient(to top, rgba(60,30,15,0.6), rgba(50,25,12,0.4) 30%, rgba(35,18,10,0.2) 60%, rgba(20,10,5,0.08) 85%, transparent)',
-            filter: 'blur(14px)', animation: `ph-smoke ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
-      ))}
-
-      {/* Central phoenix glow — multi-layer radiance */}
-      <div className="absolute top-[18%] left-[50%] -translate-x-1/2 w-[min(700px,55vw)] h-[min(600px,50vh)] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(245,158,11,0.18) 0%, rgba(239,68,68,0.08) 40%, transparent 65%)', animation: 'ph-core 5s ease-in-out infinite', filter: 'blur(35px)' }} />
-      <div className="absolute top-[22%] left-[50%] -translate-x-1/2 w-[min(450px,38vw)] h-[min(400px,36vh)] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(251,191,36,0.2) 0%, rgba(245,158,11,0.08) 45%, transparent 70%)', animation: 'ph-core 5s ease-in-out 2.5s infinite', filter: 'blur(25px)' }} />
-      <div className="absolute top-[28%] left-[50%] -translate-x-1/2 w-[min(250px,22vw)] h-[min(220px,20vh)] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(254,243,199,0.15) 0%, rgba(251,191,36,0.06) 50%, transparent 70%)', animation: 'ph-core 4s ease-in-out 1s infinite', filter: 'blur(18px)' }} />
-
-      {/* Phoenix SVG — detailed majestic bird with layered flames */}
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <linearGradient id="ph-fg" x1="0.5" y1="1" x2="0.5" y2="0">
-            <stop offset="0%" stopColor="#dc2626" stopOpacity="0.7" />
-            <stop offset="30%" stopColor="#f97316" stopOpacity="0.6" />
-            <stop offset="60%" stopColor="#f59e0b" stopOpacity="0.45" />
-            <stop offset="85%" stopColor="#fbbf24" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#fef3c7" stopOpacity="0.1" />
-          </linearGradient>
-          <linearGradient id="ph-wg" x1="0" y1="0.5" x2="1" y2="0.5">
-            <stop offset="0%" stopColor="#ef4444" stopOpacity="0.35" />
-            <stop offset="40%" stopColor="#f97316" stopOpacity="0.25" />
-            <stop offset="70%" stopColor="#f59e0b" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.04" />
-          </linearGradient>
-          <linearGradient id="ph-wgr" x1="1" y1="0.5" x2="0" y2="0.5">
-            <stop offset="0%" stopColor="#ef4444" stopOpacity="0.35" />
-            <stop offset="40%" stopColor="#f97316" stopOpacity="0.25" />
-            <stop offset="70%" stopColor="#f59e0b" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.04" />
-          </linearGradient>
-          <radialGradient id="ph-body" cx="0.5" cy="0.4" r="0.5">
-            <stop offset="0%" stopColor="#fef3c7" stopOpacity="0.3" />
-            <stop offset="40%" stopColor="#fbbf24" stopOpacity="0.22" />
-            <stop offset="70%" stopColor="#f59e0b" stopOpacity="0.14" />
-            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.06" />
-          </radialGradient>
-        </defs>
-
-        {/* Outer glow aura around the whole bird */}
-        <g style={{ animation: 'ph-float 7s ease-in-out infinite' }}>
-          <ellipse cx="500" cy="440" rx="160" ry="200" fill="rgba(245,158,11,0.06)" />
-        </g>
-
-        {/* Main phoenix group */}
-        <g style={{ animation: 'ph-float 7s ease-in-out infinite' }}>
-
-          {/* Tail — long sweeping fire plumes (7 streams) */}
-          <path d="M500 620 Q475 720 430 850 Q455 790 465 730 Q485 670 500 620Z" fill="url(#ph-fg)" style={{ animation: 'ph-t1 3s ease-in-out infinite' }} />
-          <path d="M500 620 Q525 730 570 860 Q545 790 535 730 Q515 670 500 620Z" fill="url(#ph-fg)" style={{ animation: 'ph-t2 3.4s ease-in-out infinite' }} />
-          <path d="M500 620 Q490 740 500 880 Q510 760 505 700 Q502 660 500 620Z" fill="url(#ph-fg)" style={{ animation: 'ph-t3 3.8s ease-in-out infinite' }} />
-          <path d="M500 620 Q460 740 400 870 Q440 800 460 740 Q480 680 500 620Z" fill="rgba(239,68,68,0.25)" style={{ animation: 'ph-t1 4.2s ease-in-out 0.5s infinite' }} />
-          <path d="M500 620 Q540 740 600 870 Q560 800 540 740 Q520 680 500 620Z" fill="rgba(239,68,68,0.25)" style={{ animation: 'ph-t2 4s ease-in-out 0.8s infinite' }} />
-          <path d="M500 620 Q465 760 380 900 Q430 830 455 760 Q480 690 500 620Z" fill="rgba(180,60,10,0.18)" style={{ animation: 'ph-t1 5s ease-in-out 1.2s infinite' }} />
-          <path d="M500 620 Q535 760 620 900 Q570 830 545 760 Q520 690 500 620Z" fill="rgba(180,60,10,0.18)" style={{ animation: 'ph-t2 4.8s ease-in-out 1s infinite' }} />
-
-          {/* Body — teardrop with layered glow */}
-          <ellipse cx="500" cy="470" rx="40" ry="100" fill="url(#ph-body)" />
-          <ellipse cx="500" cy="460" rx="28" ry="75" fill="rgba(251,191,36,0.22)" />
-          <ellipse cx="500" cy="445" rx="16" ry="45" fill="rgba(254,243,199,0.2)" />
-          <ellipse cx="500" cy="435" rx="8" ry="22" fill="rgba(255,255,220,0.18)" />
-
-          {/* Left wing — primary feathers (sweeping arc with 4 layers) */}
-          <path d="M475 445 Q400 370 270 290 Q320 340 355 375 Q390 410 430 438 Q455 448 475 445Z"
-            fill="url(#ph-wg)" style={{ animation: 'ph-wl 3.8s ease-in-out infinite', transformOrigin: '475px 445px' }} />
-          <path d="M475 460 Q385 400 230 330 Q300 370 345 400 Q390 430 440 455 Q460 462 475 460Z"
-            fill="rgba(249,115,22,0.18)" style={{ animation: 'ph-wl 3.8s ease-in-out 0.2s infinite', transformOrigin: '475px 460px' }} />
-          <path d="M475 475 Q370 430 200 380 Q280 410 335 435 Q395 460 450 473Z"
-            fill="rgba(239,68,68,0.12)" style={{ animation: 'ph-wl 3.8s ease-in-out 0.4s infinite', transformOrigin: '475px 475px' }} />
-          <path d="M478 490 Q390 460 250 430 Q320 450 370 465 Q425 482 465 488Z"
-            fill="rgba(180,60,10,0.08)" style={{ animation: 'ph-wl 3.8s ease-in-out 0.6s infinite', transformOrigin: '478px 490px' }} />
-
-          {/* Right wing — primary feathers (mirrored) */}
-          <path d="M525 445 Q600 370 730 290 Q680 340 645 375 Q610 410 570 438 Q545 448 525 445Z"
-            fill="url(#ph-wgr)" style={{ animation: 'ph-wr 3.8s ease-in-out infinite', transformOrigin: '525px 445px' }} />
-          <path d="M525 460 Q615 400 770 330 Q700 370 655 400 Q610 430 560 455 Q540 462 525 460Z"
-            fill="rgba(249,115,22,0.18)" style={{ animation: 'ph-wr 3.8s ease-in-out 0.2s infinite', transformOrigin: '525px 460px' }} />
-          <path d="M525 475 Q630 430 800 380 Q720 410 665 435 Q605 460 550 473Z"
-            fill="rgba(239,68,68,0.12)" style={{ animation: 'ph-wr 3.8s ease-in-out 0.4s infinite', transformOrigin: '525px 475px' }} />
-          <path d="M522 490 Q610 460 750 430 Q680 450 630 465 Q575 482 535 488Z"
-            fill="rgba(180,60,10,0.08)" style={{ animation: 'ph-wr 3.8s ease-in-out 0.6s infinite', transformOrigin: '522px 490px' }} />
-
-          {/* Wing tip fire — left */}
-          <path d="M270 290 Q250 260 220 220 Q240 255 260 280Z" fill="rgba(251,191,36,0.3)" style={{ animation: 'ph-wtl 2.5s ease-in-out infinite' }} />
-          <path d="M270 290 Q240 275 200 250 Q235 270 265 285Z" fill="rgba(245,158,11,0.2)" style={{ animation: 'ph-wtl 3s ease-in-out 0.4s infinite' }} />
-          <path d="M230 330 Q205 305 170 270 Q195 300 225 325Z" fill="rgba(239,68,68,0.15)" style={{ animation: 'ph-wtl 2.8s ease-in-out 0.8s infinite' }} />
-
-          {/* Wing tip fire — right */}
-          <path d="M730 290 Q750 260 780 220 Q760 255 740 280Z" fill="rgba(251,191,36,0.3)" style={{ animation: 'ph-wtr 2.5s ease-in-out infinite' }} />
-          <path d="M730 290 Q760 275 800 250 Q765 270 735 285Z" fill="rgba(245,158,11,0.2)" style={{ animation: 'ph-wtr 3s ease-in-out 0.4s infinite' }} />
-          <path d="M770 330 Q795 305 830 270 Q805 300 775 325Z" fill="rgba(239,68,68,0.15)" style={{ animation: 'ph-wtr 2.8s ease-in-out 0.8s infinite' }} />
-
-          {/* Neck */}
-          <ellipse cx="500" cy="380" rx="14" ry="35" fill="rgba(245,158,11,0.2)" />
-          <ellipse cx="500" cy="375" rx="9" ry="25" fill="rgba(251,191,36,0.22)" />
-
-          {/* Head */}
-          <ellipse cx="500" cy="350" rx="18" ry="24" fill="rgba(245,158,11,0.22)" />
-          <ellipse cx="500" cy="345" rx="12" ry="17" fill="rgba(251,191,36,0.28)" />
-          <ellipse cx="500" cy="340" rx="7" ry="10" fill="rgba(254,243,199,0.2)" />
-
-          {/* Eyes — twin points of white-hot light */}
-          <circle cx="492" cy="342" r="2.5" fill="rgba(255,255,230,0.5)">
-            <animate attributeName="opacity" values="0.5;0.9;0.5" dur="3s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="508" cy="342" r="2.5" fill="rgba(255,255,230,0.5)">
-            <animate attributeName="opacity" values="0.5;0.9;0.5" dur="3s" begin="0.3s" repeatCount="indefinite" />
-          </circle>
-
-          {/* Beak */}
-          <path d="M500 335 L507 320 L500 326 L493 320Z" fill="rgba(254,243,199,0.35)" />
-
-          {/* Crown flames — 5 tongues */}
-          <path d="M500 330 Q497 305 490 280 Q498 300 500 330Z" fill="rgba(245,158,11,0.25)" style={{ animation: 'ph-crown 2.2s ease-in-out infinite' }} />
-          <path d="M500 330 Q504 302 512 275 Q503 298 500 330Z" fill="rgba(239,68,68,0.2)" style={{ animation: 'ph-crown 2.6s ease-in-out 0.4s infinite' }} />
-          <path d="M500 330 Q494 308 482 288 Q494 305 500 330Z" fill="rgba(251,191,36,0.18)" style={{ animation: 'ph-crown 2.4s ease-in-out 0.8s infinite' }} />
-          <path d="M500 330 Q508 310 520 292 Q508 308 500 330Z" fill="rgba(249,115,22,0.15)" style={{ animation: 'ph-crown 3s ease-in-out 1.2s infinite' }} />
-          <path d="M500 330 Q500 308 500 270 Q502 300 500 330Z" fill="rgba(254,243,199,0.12)" style={{ animation: 'ph-crown 2.8s ease-in-out 0.6s infinite' }} />
-        </g>
-      </svg>
-
-      {/* Fire vortex swirl around phoenix center */}
-      <div className="absolute" style={{ left: '50%', top: '42%', width: '0', height: '0' }}>
-        {vortex.map((v, i) => {
-          const rad = (v.angle * Math.PI) / 180;
-          const px = Math.cos(rad) * v.r;
-          const py = Math.sin(rad) * v.r;
-          return (
-            <div key={`vo${i}`} className="absolute rounded-full"
-              style={{ left: `${px}px`, top: `${py}px`, width: `${v.size}px`, height: `${v.size}px`,
-                background: v.color, opacity: 0,
-                boxShadow: `0 0 ${v.size * 4}px ${v.color}`,
-                animation: `ph-vortex ${v.dur}s ease-in-out ${v.delay}s infinite` }} />
-          );
-        })}
-      </div>
-
-      {/* Floating fire feather shapes */}
-      {feathers.map((f, i) => (
-        <div key={`ff${i}`} className="absolute"
-          style={{
-            left: `${f.x}%`, top: `${f.y}%`,
-            width: `${f.size * 0.35}px`, height: `${f.size}px`,
-            borderRadius: '50% 50% 50% 50% / 20% 20% 80% 80%',
-            background: `linear-gradient(to bottom, ${f.color}, transparent)`,
-            boxShadow: `0 0 ${f.size}px ${f.color}40`,
-            transform: `rotate(${f.rot}deg)`,
-            opacity: 0,
-            animation: `ph-feather ${f.dur}s ease-in-out ${f.delay}s infinite`,
-            ['--ph-fdrift' as string]: `${f.drift}px`,
-          }}
-        />
-      ))}
-
-      {/* Spark bursts radiating from phoenix */}
-      {sparks.map((s, i) => (
-        <div key={`sp${i}`} className="absolute rounded-full"
-          style={{
-            left: `${s.x}%`, top: `${s.y}%`,
-            width: `${s.size}px`, height: `${s.size}px`,
-            background: '#fbbf24',
-            boxShadow: '0 0 8px #f59e0b, 0 0 16px rgba(245,158,11,0.3)',
-            animation: `ph-spark ${s.dur}s ease-out ${s.delay}s infinite`,
-            ['--ph-sx' as string]: `${Math.cos(s.angle * Math.PI / 180) * s.dist}px`,
-            ['--ph-sy' as string]: `${Math.sin(s.angle * Math.PI / 180) * s.dist}px`,
-            opacity: 0,
-          }}
-        />
-      ))}
-
-      {/* Three tiers of rising embers */}
-      {embersSmall.map((e, i) => (
-        <div key={`es${i}`} className="absolute rounded-full"
-          style={{ left: `${e.x}%`, bottom: '0', width: `${e.size}px`, height: `${e.size}px`,
-            background: '#fde68a', opacity: 0,
-            boxShadow: '0 0 8px #fbbf24, 0 0 16px rgba(251,191,36,0.3)',
-            animation: `ph-eS ${e.dur}s ease-out ${e.delay}s infinite`,
-            ['--dr' as string]: `${e.drift}px` }} />
-      ))}
-      {embersMed.map((e, i) => (
-        <div key={`em${i}`} className="absolute rounded-full"
-          style={{ left: `${e.x}%`, bottom: '0', width: `${e.size}px`, height: `${e.size}px`,
-            background: e.color, opacity: 0,
-            boxShadow: `0 0 ${e.size * 3}px ${e.color}, 0 0 ${e.size * 6}px rgba(249,115,22,0.25)`,
-            animation: `ph-eM ${e.dur}s ease-out ${e.delay}s infinite`,
-            ['--dr' as string]: `${e.drift}px` }} />
-      ))}
-      {embersLarge.map((e, i) => (
-        <div key={`el${i}`} className="absolute rounded-full"
-          style={{ left: `${e.x}%`, bottom: '0', width: `${e.size}px`, height: `${e.size}px`,
-            background: '#ef4444', opacity: 0,
-            boxShadow: `0 0 ${e.size * 5}px rgba(239,68,68,0.7), 0 0 ${e.size * 10}px rgba(180,60,10,0.35)`,
-            animation: `ph-eL ${e.dur}s ease-out ${e.delay}s infinite`,
-            ['--dr' as string]: `${e.drift}px` }} />
-      ))}
-
-      {/* Magma pools at base */}
-      {[18, 48, 80].map((x, i) => (
-        <div key={`pool${i}`} className="absolute bottom-0"
-          style={{ left: `${x - 10}%`, width: '20%', height: '8%',
-            background: `radial-gradient(ellipse, rgba(${i % 2 === 0 ? '255,200,60' : '251,191,36'},0.6), rgba(249,115,22,0.35) 40%, rgba(239,68,68,0.2) 70%, transparent)`,
-            borderRadius: '50%', filter: 'blur(2px)',
-            boxShadow: `0 0 25px rgba(251,191,36,0.4), 0 0 50px rgba(249,115,22,0.2)`,
-            animation: `ph-pool ${2.2 + i * 1.1}s ease-in-out ${i * 0.7}s infinite` }} />
-      ))}
-
-      {/* Flickering ambient light on the whole scene */}
-      <div className="absolute inset-0"
-        style={{ animation: 'ph-flicker 0.15s step-end infinite', background: 'rgba(245,158,11,0.02)' }} />
-
-      <style>{`
-        @keyframes ph-heat { 0%,100%{opacity:1} 50%{opacity:0.75} }
-        @keyframes ph-vein { 0%,100%{opacity:1;transform:scaleY(1)} 50%{opacity:0.65;transform:scaleY(0.88)} }
-        @keyframes ph-shimmer { 0%,100%{transform:translateX(0) skewX(0deg)} 33%{transform:translateX(3px) skewX(0.6deg)} 66%{transform:translateX(-3px) skewX(-0.6deg)} }
-        @keyframes ph-smoke { 0%,100%{transform:translateY(0) scaleX(1);opacity:1} 50%{transform:translateY(-45px) scaleX(1.5);opacity:0.45} }
-        @keyframes ph-core { 0%,100%{opacity:0.7;transform:translateX(-50%) scale(1)} 50%{opacity:1;transform:translateX(-50%) scale(1.1)} }
-        @keyframes ph-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-14px)} }
-        @keyframes ph-wl { 0%,100%{transform:rotate(0deg) scaleY(1)} 35%{transform:rotate(-10deg) scaleY(1.04)} 65%{transform:rotate(-4deg) scaleY(0.98)} }
-        @keyframes ph-wr { 0%,100%{transform:rotate(0deg) scaleY(1)} 35%{transform:rotate(10deg) scaleY(1.04)} 65%{transform:rotate(4deg) scaleY(0.98)} }
-        @keyframes ph-t1 { 0%,100%{transform:scaleY(1) skewX(0) translateY(0)} 50%{transform:scaleY(1.18) skewX(-4deg) translateY(5px)} }
-        @keyframes ph-t2 { 0%,100%{transform:scaleY(1) skewX(0) translateY(0)} 50%{transform:scaleY(1.22) skewX(4deg) translateY(5px)} }
-        @keyframes ph-t3 { 0%,100%{transform:scaleY(1) translateY(0)} 50%{transform:scaleY(1.28) translateY(8px)} }
-        @keyframes ph-crown { 0%,100%{transform:scaleY(1);opacity:1} 50%{transform:scaleY(1.4);opacity:0.45} }
-        @keyframes ph-wtl { 0%,100%{transform:scale(1);opacity:0.8} 50%{transform:scale(1.3) translate(-4px,-6px);opacity:0.3} }
-        @keyframes ph-wtr { 0%,100%{transform:scale(1);opacity:0.8} 50%{transform:scale(1.3) translate(4px,-6px);opacity:0.3} }
-        @keyframes ph-vortex { 0%,100%{opacity:0;transform:translate(-50%,-50%) scale(0.2)} 50%{opacity:0.85;transform:translate(-50%,-50%) scale(1.3)} }
-        @keyframes ph-feather { 0%{opacity:0;transform:rotate(var(--ph-frot,0deg)) translateY(0) translateX(0)} 15%{opacity:0.4} 85%{opacity:0.15} 100%{opacity:0;transform:rotate(var(--ph-frot,0deg)) translateY(-200px) translateX(var(--ph-fdrift,0px))} }
-        @keyframes ph-spark { 0%{transform:translate(0,0) scale(1);opacity:0} 10%{opacity:1} 100%{transform:translate(var(--ph-sx,20px),var(--ph-sy,-20px)) scale(0);opacity:0} }
-        @keyframes ph-eS { 0%{opacity:0.9;transform:translateY(0) translateX(0)} 100%{opacity:0;transform:translateY(-300px) translateX(var(--dr))} }
-        @keyframes ph-eM { 0%{opacity:0.75;transform:translateY(0) translateX(0)} 30%{opacity:0.55} 100%{opacity:0;transform:translateY(-400px) translateX(var(--dr))} }
-        @keyframes ph-eL { 0%{opacity:0.6;transform:translateY(0) translateX(0)} 40%{opacity:0.4} 100%{opacity:0;transform:translateY(-500px) translateX(var(--dr))} }
-        @keyframes ph-pool { 0%,100%{transform:scaleX(1) scaleY(1);opacity:1} 50%{transform:scaleX(1.25) scaleY(1.4);opacity:0.65} }
-        @keyframes ph-flicker { 0%{opacity:0.6} 20%{opacity:0.9} 40%{opacity:0.5} 60%{opacity:1} 80%{opacity:0.7} 100%{opacity:0.55} }
-      `}</style>
-    </Shell>
-  );
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
 }
 
-/* ── Retro Arcade: CRT scanlines, pixel characters, neon glow, arcade cabinets ── */
-function RetroArcadeBg() {
-  const starsBack = useMemo(() => {
-    const rand = seededRand(800);
-    return Array.from({ length: 30 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 0.5 + rand() * 1,
-      dur: 2 + rand() * 4,
-      delay: rand() * 6,
-    }));
-  }, []);
-  const starsFront = useMemo(() => {
-    const rand = seededRand(799);
-    return Array.from({ length: 20 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 1 + rand() * 2,
-      dur: 1 + rand() * 2.5,
-      delay: rand() * 4,
-      color: rand() < 0.3 ? '#ff88ff' : rand() < 0.6 ? '#88ffff' : '#ffffff',
-    }));
-  }, []);
+/* ── Nord: aurora bands + snowflakes ── */
+function NordBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
 
-  const invaders = useMemo(() => {
-    const rand = seededRand(801);
-    const types: ('crab' | 'squid' | 'octo')[] = ['crab', 'squid', 'octo'];
-    return Array.from({ length: 12 }, (_, i) => ({
-      x: 3 + (i % 6) * 16 + rand() * 3,
-      y: 4 + Math.floor(i / 6) * 12 + rand() * 2,
-      type: types[i % 3],
-      dur: 3.5 + rand() * 3.5,
-      delay: rand() * 5,
-      color: i % 3 === 0 ? '#00ff88' : i % 3 === 1 ? '#ff00ff' : '#00ffff',
-    }));
-  }, []);
+    interface Snow { x: number; y: number; size: number; speed: number; drift: number; phase: number; }
+    let snowflakes: Snow[] = [];
+    interface Frost { x: number; y: number; size: number; color: number; phase: number; speed: number; }
+    let frosts: Frost[] = [];
 
-  const ghosts = useMemo(() => {
-    const rand = seededRand(802);
-    const colors = ['#ff0000', '#ffb8ff', '#00ffff', '#ffb852'];
-    return Array.from({ length: 4 }, (_, i) => ({
-      x: 5 + rand() * 85,
-      y: 45 + rand() * 40,
-      color: colors[i],
-      dur: 14 + rand() * 12,
-      delay: rand() * 10,
-      dir: rand() > 0.5 ? 1 : -1,
-    }));
-  }, []);
+    function build(w: number, h: number) {
+      const r = seededRand(122);
+      snowflakes = Array.from({ length: 35 }, () => ({
+        x: r() * w, y: r() * h,
+        size: 2 + r() * 4,
+        speed: 30 + r() * 50,
+        drift: (r() - 0.5) * 40,
+        phase: r() * Math.PI * 2,
+      }));
+      const r2 = seededRand(22);
+      frosts = Array.from({ length: 30 }, () => ({
+        x: r2() * w, y: r2() * h * 0.7,
+        size: 0.8 + r2() * 2.5,
+        color: Math.floor(r2() * 3),
+        phase: r2() * Math.PI * 2,
+        speed: 0.3 + r2() * 0.5,
+      }));
+    }
 
-  const coins = useMemo(() => {
-    const rand = seededRand(803);
-    return Array.from({ length: 15 }, () => ({
-      x: rand() * 100,
-      dur: 3.5 + rand() * 4.5,
-      delay: rand() * 18,
-      size: 5 + rand() * 7,
-    }));
-  }, []);
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
 
-  const cabinets = useMemo(() => {
-    const rand = seededRand(804);
-    return Array.from({ length: 6 }, (_, i) => ({
-      x: 2 + i * 17 + rand() * 5,
-      h: 30 + rand() * 18,
-      w: 8 + rand() * 5,
-      screenColor: ['#00ff88', '#ff00ff', '#00ffff', '#ffff00', '#ff6600', '#88ff00'][i],
-      flicker: 1.5 + rand() * 3,
-    }));
-  }, []);
-
-  const tetris = useMemo(() => {
-    const rand = seededRand(806);
-    const colors = ['#00ffff', '#ffff00', '#ff00ff', '#00ff00', '#ff6600', '#ff0000', '#0088ff'];
-    const shapes: number[][][] = [
-      [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,0],[1,0],[1,1]], [[0,1],[0,1],[1,1]],
-      [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]],
+    const auroraColors: [number, number, number][] = [
+      [136, 192, 208], [163, 190, 140], [94, 129, 172],
+      [180, 142, 173], [235, 203, 139], [129, 161, 193], [191, 97, 106],
     ];
-    return Array.from({ length: 12 }, () => {
-      const si = Math.floor(rand() * shapes.length);
-      return {
-        x: rand() * 92,
-        shape: shapes[si],
-        color: colors[Math.floor(rand() * colors.length)],
-        dur: 8 + rand() * 14,
-        delay: rand() * 22,
-        rot: Math.floor(rand() * 4) * 90,
+    const frostColors = ['#88c0d0', '#81a1c1', '#8fbcbb'];
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // aurora bands
+      for (let i = 0; i < auroraColors.length; i++) {
+        const [r, g, b] = auroraColors[i];
+        const wave = Math.sin(tt * 0.3 + i * 0.8) * 0.2 + 1;
+        const top = -h * 0.05 + i * 5;
+        const bandH = h * (0.3 + (i % 3) * 0.1) * wave;
+        const grd = cx.createLinearGradient(0, top, 0, top + bandH);
+        grd.addColorStop(0, `rgba(${r},${g},${b},0.4)`);
+        grd.addColorStop(0.4, `rgba(${r},${g},${b},0.25)`);
+        grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        cx.fillStyle = grd;
+        cx.fillRect(0, top, w, bandH);
+      }
+
+      // vertical curtain columns
+      for (let i = 0; i < 12; i++) {
+        const col = auroraColors[i % auroraColors.length];
+        const stretch = 1 + Math.sin(tt * 0.5 + i * 0.5) * 0.5;
+        const grd = cx.createLinearGradient(0, 0, 0, h * 0.58 * stretch);
+        grd.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},0.3)`);
+        grd.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+        cx.fillStyle = grd;
+        const x = (2 + i * 8) / 100 * w;
+        cx.fillRect(x, 0, w * 0.05, h * 0.58 * stretch);
+      }
+
+      // mountain silhouette
+      cx.fillStyle = 'rgba(28,32,48,0.9)';
+      cx.beginPath();
+      cx.moveTo(0, h);
+      cx.lineTo(0, h * 0.78);
+      for (let i = 0; i < 12; i++) {
+        const x = (i / 11) * w;
+        const y = h * (0.78 + Math.sin(i * 1.5) * 0.08);
+        cx.lineTo(x, y);
+      }
+      cx.lineTo(w, h);
+      cx.closePath();
+      cx.fill();
+
+      // frost particles
+      for (const f of frosts) {
+        const op = 0.4 + 0.5 * Math.sin(tt * f.speed + f.phase);
+        const col = frostColors[f.color];
+        cx.fillStyle = col;
+        cx.globalAlpha = Math.max(0, op);
+        cx.beginPath();
+        cx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      // snowflakes
+      for (const s of snowflakes) {
+        s.y += 0.4;
+        if (s.y > h) { s.y = -10; s.x = Math.random() * w; }
+        const x = s.x + Math.sin(tt * 0.5 + s.phase) * 8;
+        cx.fillStyle = 'rgba(236,239,244,0.85)';
+        cx.beginPath();
+        cx.arc(x, s.y, s.size / 2, 0, Math.PI * 2);
+        cx.fill();
+      }
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Gruvbox: warm earthy geometric shapes ── */
+function GruvboxBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Ember { x: number; size: number; speed: number; drift: number; phase: number; color: string; }
+    let embers: Ember[] = [];
+    interface Shape { x: number; y: number; size: number; rot: number; rotSpeed: number; type: number; color: string; phase: number; }
+    let shapes: Shape[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(73);
+      embers = Array.from({ length: 40 }, (_, i) => ({
+        x: r() * w,
+        size: i < 10 ? (0.6 + r() * 1.2) : i < 28 ? (1.5 + r() * 2.5) : (3 + r() * 4.5),
+        speed: 30 + r() * 60,
+        drift: (r() - 0.5) * 80,
+        phase: r() * 10,
+        color: r() > 0.55 ? '#d79921' : r() > 0.3 ? '#d65d0e' : '#cc241d',
+      }));
+      const r2 = seededRand(173);
+      const palette = ['#d79921', '#b57614', '#d65d0e', '#cc241d', '#a89984'];
+      shapes = Array.from({ length: 12 }, () => ({
+        x: r2() * w, y: r2() * h,
+        size: 20 + r2() * 50,
+        rot: r2() * Math.PI * 2,
+        rotSpeed: (r2() - 0.5) * 0.3,
+        type: Math.floor(r2() * 3),
+        color: palette[Math.floor(r2() * palette.length)],
+        phase: r2() * Math.PI * 2,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // heat glow base
+      const glow = cx.createLinearGradient(0, h, 0, h * 0.4);
+      glow.addColorStop(0, 'rgba(215,153,33,0.4)');
+      glow.addColorStop(0.5, 'rgba(214,93,14,0.2)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = glow;
+      cx.fillRect(0, 0, w, h);
+
+      // coal bed strip
+      const cgrd = cx.createLinearGradient(0, 0, w, 0);
+      cgrd.addColorStop(0.05, 'rgba(0,0,0,0)');
+      cgrd.addColorStop(0.5, 'rgba(255,200,60,0.9)');
+      cgrd.addColorStop(0.95, 'rgba(0,0,0,0)');
+      cx.fillStyle = cgrd;
+      const pulse = 0.7 + Math.sin(tt) * 0.3;
+      cx.globalAlpha = pulse;
+      cx.fillRect(0, h - 3, w, 3);
+      cx.globalAlpha = 1;
+
+      // geometric shapes
+      for (const s of shapes) {
+        s.rot += s.rotSpeed * 0.005;
+        const wob = Math.sin(tt * 0.5 + s.phase) * 10;
+        const op = 0.15 + Math.sin(tt * 0.3 + s.phase) * 0.1;
+        cx.save();
+        cx.translate(s.x, s.y + wob);
+        cx.rotate(s.rot);
+        cx.globalAlpha = Math.max(0, op);
+        cx.fillStyle = s.color;
+        cx.strokeStyle = s.color;
+        cx.lineWidth = 2;
+        if (s.type === 0) {
+          // triangle
+          cx.beginPath();
+          cx.moveTo(0, -s.size / 2);
+          cx.lineTo(s.size / 2, s.size / 2);
+          cx.lineTo(-s.size / 2, s.size / 2);
+          cx.closePath();
+          cx.stroke();
+        } else if (s.type === 1) {
+          // square
+          cx.strokeRect(-s.size / 2, -s.size / 2, s.size, s.size);
+        } else {
+          // hex
+          cx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            const px = Math.cos(a) * s.size / 2;
+            const py = Math.sin(a) * s.size / 2;
+            i === 0 ? cx.moveTo(px, py) : cx.lineTo(px, py);
+          }
+          cx.closePath();
+          cx.stroke();
+        }
+        cx.restore();
+      }
+      cx.globalAlpha = 1;
+
+      // rising embers
+      for (const e of embers) {
+        const t01 = ((tt + e.phase) / (e.speed / 8)) % 1;
+        const y = h - t01 * h;
+        const x = e.x + t01 * e.drift;
+        const a = t01 < 0.1 ? t01 / 0.1 : t01 > 0.85 ? (1 - t01) / 0.15 : 0.8;
+        cx.fillStyle = e.color;
+        cx.globalAlpha = Math.max(0, a);
+        cx.beginPath();
+        cx.arc(x, y, e.size, 0, Math.PI * 2);
+        cx.fill();
+        const gg = cx.createRadialGradient(x, y, 0, x, y, e.size * 4);
+        gg.addColorStop(0, e.color);
+        gg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.globalAlpha = Math.max(0, a * 0.4);
+        cx.fillStyle = gg;
+        cx.beginPath();
+        cx.arc(x, y, e.size * 4, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── RosePine: soft floating rose petals/bubbles ── */
+function RosePineBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Petal { x: number; y: number; size: number; speed: number; drift: number; phase: number; color: string; rot: number; rotSpeed: number; type: number; }
+    let petals: Petal[] = [];
+    interface Fly { x: number; y: number; size: number; phase: number; speed: number; color: string; }
+    let flies: Fly[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(55);
+      const palette = ['#eb6f92', '#c4a7e7', '#f6c177', '#ebbcba'];
+      petals = Array.from({ length: 25 }, () => ({
+        x: r() * w, y: r() * h,
+        size: 6 + r() * 14,
+        speed: 12 + r() * 18,
+        drift: (r() - 0.5) * 80,
+        phase: r() * 16,
+        color: palette[Math.floor(r() * palette.length)],
+        rot: r() * Math.PI * 2,
+        rotSpeed: (r() - 0.5) * 0.5,
+        type: Math.floor(r() * 3),
+      }));
+      const rf = seededRand(56);
+      flies = Array.from({ length: 12 }, () => ({
+        x: rf() * w, y: rf() * h,
+        size: 1.5 + rf() * 2,
+        phase: rf() * Math.PI * 2,
+        speed: 0.3 + rf() * 0.6,
+        color: rf() > 0.6 ? '#f6c177' : rf() > 0.3 ? '#eb6f92' : '#c4a7e7',
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // fog/mist
+      const fog = (x: number, y: number, rad: number, r: number, g: number, b: number, a: number) => {
+        const grd = cx.createRadialGradient(x, y, 0, x, y, rad);
+        grd.addColorStop(0, `rgba(${r},${g},${b},${a})`);
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = grd;
+        cx.beginPath();
+        cx.arc(x, y, rad, 0, Math.PI * 2);
+        cx.fill();
       };
-    });
+      fog(w * 0.85, h * 0.25, w * 0.4, 235, 111, 146, 0.25);
+      fog(w * 0.1, h * 0.85, w * 0.35, 196, 167, 231, 0.3);
+      fog(w * 0.45, h * 0.55, w * 0.3, 246, 193, 119, 0.2);
+
+      // falling petals
+      for (const p of petals) {
+        p.y += p.speed / 60;
+        p.rot += p.rotSpeed * 0.01;
+        if (p.y > h + 20) { p.y = -20; p.x = Math.random() * w; }
+        const x = p.x + Math.sin(tt * 0.4 + p.phase) * 30;
+        cx.save();
+        cx.translate(x, p.y);
+        cx.rotate(p.rot);
+        cx.fillStyle = p.color;
+        cx.globalAlpha = 0.6;
+        cx.beginPath();
+        if (p.type === 0) {
+          cx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+        } else if (p.type === 1) {
+          cx.ellipse(0, 0, p.size * 0.3, p.size * 0.6, 0, 0, Math.PI * 2);
+        } else {
+          cx.moveTo(0, -p.size / 2);
+          cx.quadraticCurveTo(p.size / 2, 0, 0, p.size / 2);
+          cx.quadraticCurveTo(-p.size / 2, 0, 0, -p.size / 2);
+        }
+        cx.fill();
+        cx.restore();
+      }
+      cx.globalAlpha = 1;
+
+      // fireflies
+      for (const f of flies) {
+        const op = 0.4 + 0.5 * Math.sin(tt * f.speed + f.phase);
+        const x = f.x + Math.sin(tt * f.speed * 0.5 + f.phase) * 30;
+        const y = f.y + Math.cos(tt * f.speed * 0.3 + f.phase) * 20;
+        cx.globalAlpha = Math.max(0, op);
+        cx.fillStyle = f.color;
+        cx.beginPath();
+        cx.arc(x, y, f.size, 0, Math.PI * 2);
+        cx.fill();
+        const gg = cx.createRadialGradient(x, y, 0, x, y, f.size * 5);
+        gg.addColorStop(0, f.color);
+        gg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = gg;
+        cx.globalAlpha = Math.max(0, op * 0.4);
+        cx.beginPath();
+        cx.arc(x, y, f.size * 5, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
 
-  const lasers = useMemo(() => {
-    const rand = seededRand(807);
-    return Array.from({ length: 10 }, () => ({
-      x: 8 + rand() * 84,
-      dur: 0.5 + rand() * 0.7,
-      delay: rand() * 14,
-      color: rand() < 0.5 ? '#00ff88' : '#ff4444',
-    }));
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Abyss: deep ocean with floating bioluminescent particles + bubbles ── */
+function AbyssBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Orb { x: number; y: number; size: number; color: string; phase: number; cycle: number; }
+    interface Bubble { x: number; y: number; size: number; speed: number; phase: number; drift: number; }
+    interface Snow { x: number; y: number; size: number; speed: number; phase: number; drift: number; }
+    let orbs: Orb[] = [];
+    let bubbles: Bubble[] = [];
+    let snow: Snow[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(88);
+      orbs = Array.from({ length: 20 }, () => ({
+        x: r() * w, y: r() * h,
+        size: 4 + r() * 12,
+        color: r() > 0.5 ? '#2dd4bf' : r() > 0.3 ? '#22d3ee' : '#34d399',
+        phase: r() * Math.PI * 2,
+        cycle: 4 + r() * 9,
+      }));
+      const rb = seededRand(89);
+      bubbles = Array.from({ length: 18 }, () => ({
+        x: rb() * w, y: rb() * h,
+        size: 3 + rb() * 6,
+        speed: 25 + rb() * 40,
+        phase: rb() * 14,
+        drift: (rb() - 0.5) * 30,
+      }));
+      const rs = seededRand(189);
+      snow = Array.from({ length: 24 }, () => ({
+        x: rs() * w, y: rs() * h,
+        size: 0.8 + rs() * 2,
+        speed: 8 + rs() * 14,
+        phase: rs() * 18,
+        drift: (rs() - 0.5) * 25,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // depth gradient
+      const dg = cx.createLinearGradient(0, 0, 0, h);
+      dg.addColorStop(0, 'rgba(45,212,191,0.15)');
+      dg.addColorStop(0.35, 'rgba(34,211,238,0.25)');
+      dg.addColorStop(0.65, 'rgba(20,150,140,0.35)');
+      dg.addColorStop(1, 'rgba(10,80,80,0.45)');
+      cx.fillStyle = dg;
+      cx.fillRect(0, 0, w, h);
+
+      // caustic light lines
+      cx.lineWidth = 1.5;
+      for (let i = 0; i < 10; i++) {
+        const y = (2 + i * 9) / 100 * h + Math.sin(tt * 0.5 + i) * 8;
+        const op = 0.25 + Math.sin(tt * 0.7 + i * 0.3) * 0.15;
+        const cg = cx.createLinearGradient(0, 0, w, 0);
+        cg.addColorStop(0, 'rgba(0,0,0,0)');
+        cg.addColorStop(0.4, `rgba(45,212,191,${op})`);
+        cg.addColorStop(0.5, `rgba(34,211,238,${op * 1.3})`);
+        cg.addColorStop(0.6, `rgba(45,212,191,${op})`);
+        cg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.strokeStyle = cg;
+        cx.beginPath();
+        cx.moveTo(0, y);
+        cx.lineTo(w, y);
+        cx.stroke();
+      }
+
+      // bioluminescent orbs
+      for (const o of orbs) {
+        const t01 = ((tt + o.phase) % o.cycle) / o.cycle;
+        const op = t01 < 0.2 ? t01 / 0.2 * 0.7 : t01 > 0.8 ? (1 - t01) / 0.2 * 0.7 : 0.7;
+        cx.globalAlpha = Math.max(0, op);
+        cx.fillStyle = o.color;
+        cx.beginPath();
+        cx.arc(o.x, o.y, o.size / 2, 0, Math.PI * 2);
+        cx.fill();
+        const gg = cx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.size * 3);
+        gg.addColorStop(0, o.color);
+        gg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = gg;
+        cx.globalAlpha = Math.max(0, op * 0.5);
+        cx.beginPath();
+        cx.arc(o.x, o.y, o.size * 3, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      // rising bubbles
+      for (const b of bubbles) {
+        const t01 = ((tt + b.phase) / (b.speed / 8)) % 1;
+        const y = h - t01 * h;
+        const x = b.x + t01 * b.drift;
+        const a = t01 < 0.1 ? t01 / 0.1 : t01 > 0.85 ? (1 - t01) / 0.15 : 0.7;
+        cx.strokeStyle = `rgba(45,212,191,${a * 0.6})`;
+        cx.lineWidth = 1;
+        cx.beginPath();
+        cx.arc(x, y, b.size, 0, Math.PI * 2);
+        cx.stroke();
+      }
+
+      // marine snow falling
+      for (const m of snow) {
+        const t01 = ((tt + m.phase) / (m.speed / 8)) % 1;
+        const y = t01 * h * 1.05;
+        const x = m.x + t01 * m.drift;
+        const a = t01 < 0.1 ? t01 / 0.1 : t01 > 0.85 ? (1 - t01) / 0.15 : 0.6;
+        cx.fillStyle = `rgba(200,240,240,${a})`;
+        cx.beginPath();
+        cx.arc(x, y, m.size, 0, Math.PI * 2);
+        cx.fill();
+      }
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
 
-  const powerups = useMemo(() => {
-    const rand = seededRand(808);
-    const types = ['cherry', 'star', 'mushroom', 'heart'];
-    const colors = ['#ff0040', '#ffff00', '#ff6600', '#ff4488'];
-    return Array.from({ length: 8 }, (_, i) => ({
-      x: 10 + rand() * 80,
-      y: 20 + rand() * 60,
-      type: types[i % 4],
-      color: colors[i % 4],
-      dur: 5 + rand() * 6,
-      delay: rand() * 16,
-      size: 10 + rand() * 6,
-    }));
-  }, []);
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
 
-  const explosions = useMemo(() => {
-    const rand = seededRand(809);
-    return Array.from({ length: 6 }, () => ({
-      x: 10 + rand() * 80,
-      y: 10 + rand() * 60,
-      dur: 4 + rand() * 6,
-      delay: rand() * 18,
-      particles: Array.from({ length: 8 }, () => ({
-        angle: rand() * 360,
-        dist: 15 + rand() * 30,
-        size: 1.5 + rand() * 2,
-        color: rand() < 0.33 ? '#ffff00' : rand() < 0.66 ? '#ff6600' : '#ff0000',
-      })),
-    }));
-  }, []);
+/* ── Ember: glowing fire particles + rising sparks ── */
+function EmberBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
 
-  const mazeWalls = useMemo(() => {
-    const rand = seededRand(810);
-    const walls: { x1: number; y1: number; x2: number; y2: number }[] = [];
-    for (let i = 0; i < 20; i++) {
-      const x = 5 + rand() * 90;
-      const y = 40 + rand() * 55;
-      const horiz = rand() > 0.5;
-      const len = 5 + rand() * 15;
-      walls.push({
-        x1: x, y1: y,
-        x2: horiz ? x + len : x,
-        y2: horiz ? y : y + len * 0.6,
+    interface Spark { x: number; size: number; speed: number; drift: number; phase: number; color: string; tier: number; }
+    let sparks: Spark[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(661);
+      sparks = [];
+      // small
+      for (let i = 0; i < 28; i++) sparks.push({
+        x: r() * w, size: 2 + r() * 3, speed: 8 + r() * 10,
+        drift: (r() - 0.5) * 80, phase: r() * 9, color: '#fde68a', tier: 0,
+      });
+      // medium
+      for (let i = 0; i < 20; i++) sparks.push({
+        x: r() * w, size: 4 + r() * 4, speed: 12 + r() * 14,
+        drift: (r() - 0.5) * 100, phase: r() * 10,
+        color: r() > 0.5 ? '#fbbf24' : '#f97316', tier: 1,
+      });
+      // large
+      for (let i = 0; i < 14; i++) sparks.push({
+        x: r() * w, size: 6 + r() * 4, speed: 15 + r() * 18,
+        drift: (r() - 0.5) * 120, phase: r() * 12, color: '#ef4444', tier: 2,
       });
     }
-    return walls;
-  }, []);
 
-  const snake = useMemo(() => {
-    const rand = seededRand(811);
-    const segs: { x: number; y: number }[] = [];
-    let sx = 5 + rand() * 30;
-    let sy = 35 + rand() * 20;
-    for (let i = 0; i < 12; i++) {
-      segs.push({ x: sx, y: sy });
-      if (rand() > 0.5) sx += 1.5; else sy += 1.2;
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
     }
-    return { segs, dur: 18 + rand() * 10, delay: rand() * 5 };
-  }, []);
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
 
-  return (
-    <Shell>
-      {/* Deep space gradient */}
-      <div className="absolute inset-0" style={{
-        background: 'radial-gradient(ellipse at 50% 40%, rgba(20,8,50,0.35) 0%, rgba(4,4,16,0.15) 50%, transparent 100%)',
-      }} />
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
 
-      {/* Parallax star layers */}
-      {starsBack.map((s, i) => (
-        <div key={`sb${i}`} className="absolute"
-          style={{ left: `${s.x}%`, top: `${s.y}%`,
-            width: `${s.size}px`, height: `${s.size}px`,
-            background: '#888',
-            animation: `rc-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
-          }} />
-      ))}
-      {starsFront.map((s, i) => (
-        <div key={`sf${i}`} className="absolute"
-          style={{ left: `${s.x}%`, top: `${s.y}%`,
-            width: `${s.size}px`, height: `${s.size}px`,
-            background: s.color,
-            boxShadow: `0 0 4px ${s.color}80`,
-            animation: `rc-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
-          }} />
-      ))}
+      // intense fire base
+      const heat = 1 + Math.sin(tt * 0.6) * 0.2;
+      const bg = cx.createLinearGradient(0, h, 0, h * 0.3);
+      bg.addColorStop(0, `rgba(249,115,22,${0.6 * heat})`);
+      bg.addColorStop(0.4, `rgba(239,68,68,${0.35 * heat})`);
+      bg.addColorStop(0.7, 'rgba(251,191,36,0.12)');
+      bg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = bg;
+      cx.fillRect(0, 0, w, h);
 
-      {/* Pixel grid overlay */}
-      <div className="absolute inset-0" style={{
-        backgroundImage: `
-          linear-gradient(rgba(0,255,100,0.015) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(0,255,100,0.015) 1px, transparent 1px)`,
-        backgroundSize: '12px 12px',
-      }} />
-
-      {/* Neon floor reflection at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 h-[12%]" style={{
-        background: 'linear-gradient(to top, rgba(255,0,255,0.06), rgba(0,255,255,0.03) 50%, transparent)',
-        filter: 'blur(8px)',
-      }} />
-      <div className="absolute bottom-0 left-0 right-0 h-[3%]" style={{
-        background: 'linear-gradient(90deg, transparent 5%, rgba(255,0,255,0.08) 20%, rgba(0,255,255,0.06) 40%, rgba(0,255,136,0.07) 60%, rgba(255,255,0,0.05) 80%, transparent 95%)',
-        filter: 'blur(4px)',
-        animation: 'rc-floorpulse 4s ease-in-out infinite',
-      }} />
-
-      {/* SVG layer — invaders, pac-man, pong, maze, snake, spaceship */}
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-        <defs>
-        </defs>
-
-        {/* Space Invaders — 3 rows of 8 */}
-        {invaders.map((inv, i) => {
-          const p = 0.7;
-          const pixels: [number, number][] = inv.type === 'crab'
-            ? [[2,0],[5,0],[0,1],[2,1],[3,1],[4,1],[5,1],[7,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[0,3],[1,3],[3,3],[4,3],[6,3],[7,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[1,5],[2,5],[5,5],[6,5],[0,6],[2,6],[5,6],[7,6]]
-            : inv.type === 'squid'
-            ? [[3,0],[0,1],[2,1],[3,1],[4,1],[6,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[1,4],[2,4],[4,4],[5,4],[0,5],[1,5],[5,5],[6,5],[1,6],[5,6]]
-            : [[3,0],[1,1],[3,1],[5,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[0,3],[2,3],[4,3],[6,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[2,5],[4,5],[0,6],[1,6],[5,6],[6,6]];
-          return (
-            <g key={`inv${i}`}              style={{ animation: `rc-invader ${inv.dur}s ease-in-out ${inv.delay}s infinite` }}>
-              {pixels.map(([px, py], pi) => (
-                <rect key={pi} x={inv.x + px * p} y={inv.y + py * p}
-                  width={p} height={p} fill={inv.color} opacity="0.45" />
-              ))}
-            </g>
-          );
-        })}
-
-        {/* Player spaceship at bottom */}
-        <g style={{ animation: 'rc-ship 10s ease-in-out infinite' }}>
-          {/* Ship body */}
-          {[[3,0],[2,1],[3,1],[4,1],[1,2],[2,2],[3,2],[4,2],[5,2],[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]].map(([px,py], pi) => (
-            <rect key={`sh${pi}`} x={46 + px * 0.6} y={92 + py * 0.6}
-              width="0.6" height="0.6" fill="#00ff88" opacity="0.5" />
-          ))}
-        </g>
-
-        {/* Pac-Man chomping across */}
-        <g style={{ animation: 'rc-pacmove 14s linear infinite' }}>
-          <circle cx="0" cy="68" r="2.2" fill="#ffff00" opacity="0.5" />
-          <path d="M0 68 L2.2 66.5 L2.2 69.5Z" fill="rgba(4,6,16,0.95)"
-            style={{ animation: 'rc-chomp 0.25s step-end infinite' }} />
-        </g>
-        {/* Pac dot trail */}
-        {Array.from({ length: 20 }, (_, i) => (
-          <rect key={`pd${i}`} x={5 + i * 4.8} y="67.6" width="0.8" height="0.8"
-            fill="#ffff00" opacity="0.12" />
-        ))}
-        {/* Power pellets */}
-        {[20, 55, 85].map((x, i) => (
-          <circle key={`pp${i}`} cx={x} cy="68" r="1" fill="#ffff00" opacity="0.2"
-            style={{ animation: `rc-twinkle 1.5s ease-in-out ${i * 0.5}s infinite` }} />
-        ))}
-
-        {/* Pong game — left side */}
-        <rect x="2" y="42" width="0.8" height="6" fill="#ffffff" opacity="0.15"
-          style={{ animation: 'rc-paddle-l 4s ease-in-out infinite' }} />
-        <rect x="97.2" y="44" width="0.8" height="6" fill="#ffffff" opacity="0.15"
-          style={{ animation: 'rc-paddle-r 3.5s ease-in-out infinite' }} />
-        <rect x="49.5" y="44" width="1" height="1" fill="#ffffff" opacity="0.2"
-          style={{ animation: 'rc-pongball 3s linear infinite' }} />
-        {/* Pong center line */}
-        {Array.from({ length: 10 }, (_, i) => (
-          <rect key={`pl${i}`} x="49.8" y={38 + i * 3} width="0.4" height="1.5"
-            fill="#ffffff" opacity="0.05" />
-        ))}
-
-        {/* Maze walls — pac-man style */}
-        {mazeWalls.map((w, i) => (
-          <line key={`mw${i}`} x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2}
-            stroke="#0044ff" strokeWidth="0.4" opacity="0.12"
-            strokeLinecap="round" />
-        ))}
-
-        {/* Snake game */}
-        <g style={{ animation: `rc-snakemove ${snake.dur}s ease-in-out ${snake.delay}s infinite` }}>
-          {snake.segs.map((seg, i) => (
-            <rect key={`sn${i}`} x={seg.x} y={seg.y} width="1.2" height="1.2"
-              fill={i === 0 ? '#88ff00' : '#44cc00'} opacity={0.3 - i * 0.015}
-              rx="0.1" />
-          ))}
-          {/* Apple */}
-          <circle cx={snake.segs[0].x + 8} cy={snake.segs[0].y} r="0.7"
-            fill="#ff0040" opacity="0.35" />
-        </g>
-      </svg>
-
-      {/* Pac-Man ghosts */}
-      {ghosts.map((g, i) => (
-        <svg key={`gh${i}`} className="absolute" viewBox="0 0 14 16"
-          style={{
-            left: `${g.x}%`, top: `${g.y}%`,
-            width: '24px', height: '28px',
-            filter: `drop-shadow(0 0 8px ${g.color}50)`,
-            animation: `rc-ghost ${g.dur}s ease-in-out ${g.delay}s infinite`,
-            ['--rc-gdir' as string]: `${g.dir * 250}px`,
-            opacity: 0,
-          }}>
-          <path d="M1 14 L1 5 Q1 1 7 1 Q13 1 13 5 L13 14 L11 12 L9 14 L7 12 L5 14 L3 12Z"
-            fill={g.color} opacity="0.4" />
-          <rect x="3" y="5" width="3" height="3" fill="white" opacity="0.55" rx="0.5" />
-          <rect x="8" y="5" width="3" height="3" fill="white" opacity="0.55" rx="0.5" />
-          <rect x={g.dir > 0 ? '5' : '3'} y="6" width="1.5" height="1.5" fill="#111" opacity="0.6" />
-          <rect x={g.dir > 0 ? '10' : '8'} y="6" width="1.5" height="1.5" fill="#111" opacity="0.6" />
-        </svg>
-      ))}
-
-      {/* Falling Tetris pieces */}
-      {tetris.map((t, i) => (
-        <div key={`tet${i}`} className="absolute" style={{
-          left: `${t.x}%`, top: '-5%',
-          transform: `rotate(${t.rot}deg)`,
-          animation: `rc-tetfall ${t.dur}s linear ${t.delay}s infinite`,
-          opacity: 0,
-        }}>
-          {t.shape.map((row, ri) =>
-            row.map((cell, ci) => cell ? (
-              <div key={`${ri}-${ci}`} className="absolute"
-                style={{
-                  left: `${ci * 7}px`, top: `${ri * 7}px`,
-                  width: '6px', height: '6px',
-                  background: t.color,
-                  opacity: 0.18,
-                  border: `1px solid ${t.color}35`,
-                  boxShadow: `0 0 3px ${t.color}25`,
-                }} />
-            ) : null)
-          )}
-        </div>
-      ))}
-
-      {/* Power-ups floating */}
-      {powerups.map((p, i) => (
-        <div key={`pu${i}`} className="absolute" style={{
-          left: `${p.x}%`, top: `${p.y}%`,
-          width: `${p.size}px`, height: `${p.size}px`,
-          opacity: 0,
-          animation: `rc-powerup ${p.dur}s ease-in-out ${p.delay}s infinite`,
-        }}>
-          <svg viewBox="0 0 16 16" width="100%" height="100%">
-            {p.type === 'cherry' && <>
-              <circle cx="6" cy="12" r="3.5" fill="#ff0040" opacity="0.4" />
-              <circle cx="11" cy="10" r="3" fill="#ff0040" opacity="0.35" />
-              <path d="M6 8 Q8 2 11 7" fill="none" stroke="#00cc00" strokeWidth="1" opacity="0.3" />
-            </>}
-            {p.type === 'star' && <path d="M8 1 L10 6 L15 6 L11 9 L13 14 L8 11 L3 14 L5 9 L1 6 L6 6Z"
-              fill="#ffff00" opacity="0.3" />}
-            {p.type === 'mushroom' && <>
-              <ellipse cx="8" cy="7" rx="6" ry="5" fill="#ff0000" opacity="0.35" />
-              <circle cx="5" cy="6" r="1.5" fill="white" opacity="0.25" />
-              <circle cx="11" cy="6" r="1.5" fill="white" opacity="0.25" />
-              <rect x="6" y="11" width="4" height="4" fill="#ffe0a0" opacity="0.3" rx="1" />
-            </>}
-            {p.type === 'heart' && <path d="M8 14 Q2 9 2 5 Q2 2 5 2 Q7 2 8 4 Q9 2 11 2 Q14 2 14 5 Q14 9 8 14Z"
-              fill="#ff4488" opacity="0.35" />}
-          </svg>
-        </div>
-      ))}
-
-      {/* Pixel explosion bursts */}
-      {explosions.map((ex, ei) => (
-        <div key={`ex${ei}`} className="absolute" style={{
-          left: `${ex.x}%`, top: `${ex.y}%`, width: 0, height: 0,
-        }}>
-          {ex.particles.map((p, pi) => (
-            <div key={pi} className="absolute"
-              style={{
-                width: `${p.size}px`, height: `${p.size}px`,
-                background: p.color,
-                boxShadow: `0 0 4px ${p.color}60`,
-                opacity: 0,
-                animation: `rc-explode ${ex.dur}s ease-out ${ex.delay}s infinite`,
-                ['--rc-ex' as string]: `${Math.cos(p.angle * Math.PI / 180) * p.dist}px`,
-                ['--rc-ey' as string]: `${Math.sin(p.angle * Math.PI / 180) * p.dist}px`,
-              }} />
-          ))}
-        </div>
-      ))}
-
-      {/* Arcade cabinet silhouettes */}
-      {cabinets.map((cab, i) => (
-        <div key={`cab${i}`} className="absolute bottom-0"
-          style={{ left: `${cab.x}%`, width: `${cab.w}%`, height: `${cab.h}%` }}>
-          <div className="absolute inset-0" style={{
-            background: 'linear-gradient(to top, rgba(8,8,22,0.85), rgba(12,12,30,0.65) 65%, rgba(16,16,38,0.4) 82%, transparent)',
-            clipPath: 'polygon(8% 100%, 3% 28%, 12% 0%, 88% 0%, 97% 28%, 92% 100%)',
-          }} />
-          <div className="absolute" style={{
-            left: '18%', right: '18%', top: '6%', height: '32%',
-            background: cab.screenColor,
-            opacity: 0.07,
-            boxShadow: `0 0 25px ${cab.screenColor}25, 0 0 50px ${cab.screenColor}10`,
-            animation: `rc-screen ${cab.flicker}s step-end infinite`,
-          }} />
-          <div className="absolute" style={{
-            left: '18%', right: '18%', top: '6%', height: '32%',
-            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 3px)',
-            opacity: 0.5,
-          }} />
-          {/* Marquee glow at top */}
-          <div className="absolute" style={{
-            left: '15%', right: '15%', top: '1%', height: '4%',
-            background: cab.screenColor,
-            opacity: 0.04,
-            filter: 'blur(3px)',
-            animation: `rc-twinkle ${cab.flicker * 1.5}s ease-in-out infinite`,
-          }} />
-          {/* Joystick dot */}
-          <div className="absolute" style={{
-            left: '40%', top: '52%', width: '8%', height: '4%',
-            borderRadius: '50%',
-            background: 'rgba(200,200,200,0.08)',
-          }} />
-          {/* Buttons */}
-          {[55, 63, 71].map((bx, bi) => (
-            <div key={`btn${bi}`} className="absolute" style={{
-              left: `${bx}%`, top: '53%', width: '6%', height: '3%',
-              borderRadius: '50%',
-              background: ['rgba(255,0,0,0.1)', 'rgba(0,100,255,0.08)', 'rgba(255,255,0,0.07)'][bi],
-            }} />
-          ))}
-          <div className="absolute" style={{
-            left: '40%', width: '20%', top: '70%', height: '2.5%',
-            background: 'rgba(80,80,80,0.12)',
-            borderRadius: '2px',
-          }} />
-        </div>
-      ))}
-
-      {/* Laser shots */}
-      {lasers.map((l, i) => (
-        <div key={`ls${i}`} className="absolute"
-          style={{
-            left: `${l.x}%`, bottom: '0', width: '2px', height: '14px',
-            background: `linear-gradient(to top, ${l.color}, ${l.color}88)`,
-            boxShadow: `0 0 6px ${l.color}50, 0 0 14px ${l.color}20`,
-            animation: `rc-laser ${l.dur}s linear ${l.delay}s infinite`,
-            opacity: 0,
-          }} />
-      ))}
-
-      {/* Falling coins with spin */}
-      {coins.map((c, i) => (
-        <div key={`cn${i}`} className="absolute"
-          style={{
-            left: `${c.x}%`, top: '-4%',
-            width: `${c.size}px`, height: `${c.size}px`,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #ffd700, #ffaa00, #ffd700)',
-            border: '1px solid rgba(255,200,0,0.25)',
-            boxShadow: '0 0 10px rgba(255,215,0,0.25), inset 0 0 3px rgba(255,255,200,0.25)',
-            animation: `rc-coin ${c.dur}s ease-in ${c.delay}s infinite`,
-            opacity: 0,
-          }} />
-      ))}
-
-      {/* HUD elements */}
-      <div className="absolute top-[2%] left-[50%] -translate-x-1/2" style={{
-        fontFamily: '"Courier New", monospace', fontSize: '9px', letterSpacing: '4px',
-        color: '#ff0000', opacity: 0.07,
-        textShadow: '0 0 8px #ff000030',
-        animation: 'rc-blink 1.5s step-end infinite',
-      }}>HIGH SCORE</div>
-
-      <div className="absolute top-[5%] left-[50%] -translate-x-1/2" style={{
-        fontFamily: '"Courier New", monospace', fontSize: '7px', letterSpacing: '2px',
-        color: '#ffffff', opacity: 0.05,
-      }}>99999</div>
-
-      {/* Lives indicator — 3 small ships */}
-      <div className="absolute top-[2.5%] left-[5%] flex gap-[4px]">
-        {[0,1,2].map(i => (
-          <div key={`life${i}`} style={{
-            width: '6px', height: '6px',
-            clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-            background: '#00ff88', opacity: 0.08,
-          }} />
-        ))}
-      </div>
-
-      {/* Level indicator */}
-      <div className="absolute top-[2.5%] right-[5%]" style={{
-        fontFamily: '"Courier New", monospace', fontSize: '6px', letterSpacing: '1px',
-        color: '#00ffff', opacity: 0.06,
-      }}>LVL 42</div>
-
-      {/* Health bar */}
-      <div className="absolute top-[8%] left-[5%]" style={{
-        width: '40px', height: '4px',
-        background: 'rgba(255,0,0,0.06)',
-        border: '1px solid rgba(255,255,255,0.04)',
-      }}>
-        <div style={{
-          width: '75%', height: '100%',
-          background: 'linear-gradient(90deg, #ff0000, #ffff00)',
-          opacity: 0.3,
-        }} />
-      </div>
-
-      <div className="absolute bottom-[3%] left-[50%] -translate-x-1/2" style={{
-        fontFamily: '"Courier New", monospace', fontSize: '8px', letterSpacing: '3px',
-        color: '#00ff88', opacity: 0.06,
-        textShadow: '0 0 10px #00ff8830',
-        animation: 'rc-blink 1s step-end infinite',
-      }}>INSERT COIN</div>
-
-      {/* "GAME OVER" — occasional flash */}
-      <div className="absolute top-[45%] left-[50%] -translate-x-1/2" style={{
-        fontFamily: '"Courier New", monospace', fontSize: '14px', letterSpacing: '6px',
-        color: '#ff0000', opacity: 0,
-        textShadow: '0 0 15px #ff000040, 0 0 30px #ff000020',
-        animation: 'rc-gameover 20s step-end infinite',
-      }}>GAME OVER</div>
-
-      {/* CRT scanline overlay */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px)',
-        animation: 'rc-scanroll 6s linear infinite',
-      }} />
-
-      {/* Horizontal CRT interference line */}
-      <div className="absolute left-0 right-0 h-[2px]" style={{
-        background: 'rgba(255,255,255,0.03)',
-        animation: 'rc-hline 4s linear infinite',
-      }} />
-
-      {/* CRT vignette */}
-      <div className="absolute inset-0" style={{
-        background: 'radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(0,0,0,0.3) 100%)',
-      }} />
-
-      {/* Neon border glow — all 4 edges */}
-      <div className="absolute top-0 left-0 bottom-0 w-[2px]" style={{
-        background: 'linear-gradient(to bottom, transparent 8%, rgba(255,0,255,0.12) 25%, rgba(0,255,255,0.1) 50%, rgba(0,255,136,0.08) 75%, transparent 92%)',
-        boxShadow: '2px 0 15px rgba(255,0,255,0.04)',
-      }} />
-      <div className="absolute top-0 right-0 bottom-0 w-[2px]" style={{
-        background: 'linear-gradient(to bottom, transparent 8%, rgba(0,255,255,0.12) 25%, rgba(255,0,255,0.1) 50%, rgba(0,255,136,0.08) 75%, transparent 92%)',
-        boxShadow: '-2px 0 15px rgba(0,255,255,0.04)',
-      }} />
-      <div className="absolute top-0 left-0 right-0 h-[2px]" style={{
-        background: 'linear-gradient(to right, transparent 8%, rgba(255,0,255,0.08) 30%, rgba(0,255,255,0.06) 70%, transparent 92%)',
-        boxShadow: '0 2px 12px rgba(255,0,255,0.03)',
-      }} />
-      <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{
-        background: 'linear-gradient(to right, transparent 8%, rgba(0,255,136,0.1) 30%, rgba(255,0,255,0.07) 70%, transparent 92%)',
-        boxShadow: '0 -2px 12px rgba(0,255,136,0.04)',
-      }} />
-
-      {/* Ambient neon glow clouds */}
-      <div className="absolute top-[15%] left-[12%] w-[min(220px,22vw)] h-[min(220px,22vh)] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(255,0,255,0.045), transparent 60%)', filter: 'blur(35px)', animation: 'rc-glow1 7s ease-in-out infinite' }} />
-      <div className="absolute top-[35%] right-[8%] w-[min(280px,25vw)] h-[min(280px,25vh)] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(0,255,255,0.04), transparent 60%)', filter: 'blur(40px)', animation: 'rc-glow1 9s ease-in-out 2.5s infinite' }} />
-      <div className="absolute bottom-[20%] left-[35%] w-[min(200px,20vw)] h-[min(200px,20vh)] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(0,255,136,0.04), transparent 60%)', filter: 'blur(30px)', animation: 'rc-glow1 6s ease-in-out 4.5s infinite' }} />
-      <div className="absolute top-[60%] left-[60%] w-[min(160px,16vw)] h-[min(160px,16vh)] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(255,255,0,0.025), transparent 60%)', filter: 'blur(25px)', animation: 'rc-glow1 8s ease-in-out 6s infinite' }} />
-
-      {/* CRT flicker */}
-      <div className="absolute inset-0" style={{
-        animation: 'rc-crtflick 5s step-end infinite',
-        background: 'rgba(255,255,255,0.012)',
-        opacity: 0,
-      }} />
-
-      <style>{`
-        @keyframes rc-twinkle { 0%,100%{opacity:0.15} 50%{opacity:0.65} }
-        @keyframes rc-invader { 0%,100%{transform:translateX(0)} 25%{transform:translateX(6px)} 50%{transform:translateX(0)} 75%{transform:translateX(-6px)} }
-        @keyframes rc-ship { 0%,100%{transform:translateX(0)} 25%{transform:translateX(12px)} 75%{transform:translateX(-12px)} }
-        @keyframes rc-pacmove { 0%{transform:translateX(-5%)} 100%{transform:translateX(105%)} }
-        @keyframes rc-chomp { 0%,49%{opacity:1} 50%,100%{opacity:0} }
-        @keyframes rc-ghost { 0%{opacity:0;transform:translateX(0)} 6%{opacity:0.55} 94%{opacity:0.35} 100%{opacity:0;transform:translateX(var(--rc-gdir,120px))} }
-        @keyframes rc-tetfall { 0%{opacity:0;transform:translateY(0)} 3%{opacity:0.22} 97%{opacity:0.1} 100%{opacity:0;transform:translateY(115vh)} }
-        @keyframes rc-laser { 0%{opacity:0;bottom:0} 5%{opacity:0.6} 95%{opacity:0.4} 100%{opacity:0;bottom:100%} }
-        @keyframes rc-coin { 0%{opacity:0;transform:translateY(0) rotateY(0deg)} 6%{opacity:0.3} 92%{opacity:0.15} 100%{opacity:0;transform:translateY(110vh) rotateY(1440deg)} }
-        @keyframes rc-screen { 0%{opacity:0.07} 25%{opacity:0.09} 50%{opacity:0.04} 75%{opacity:0.08} 100%{opacity:0.07} }
-        @keyframes rc-blink { 0%,49%{opacity:inherit} 50%,100%{opacity:0} }
-        @keyframes rc-scanroll { 0%{background-position:0 0} 100%{background-position:0 80px} }
-        @keyframes rc-hline { 0%{top:-2%} 100%{top:102%} }
-        @keyframes rc-glow1 { 0%,100%{opacity:0.65;transform:scale(1)} 50%{opacity:1;transform:scale(1.12)} }
-        @keyframes rc-crtflick { 0%,96%{opacity:0} 96.5%{opacity:1} 97%{opacity:0} 97.5%{opacity:0.6} 98%{opacity:0} }
-        @keyframes rc-powerup { 0%{opacity:0;transform:scale(0.5)} 15%{opacity:0.5;transform:scale(1.1)} 50%{opacity:0.4;transform:scale(1) translateY(-8px)} 85%{opacity:0.3;transform:scale(0.9)} 100%{opacity:0;transform:scale(0.4)} }
-        @keyframes rc-explode { 0%{opacity:0;transform:translate(0,0) scale(1)} 8%{opacity:0.8} 100%{opacity:0;transform:translate(var(--rc-ex,15px),var(--rc-ey,-15px)) scale(0)} }
-        @keyframes rc-paddle-l { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
-        @keyframes rc-paddle-r { 0%,100%{transform:translateY(0)} 50%{transform:translateY(3px)} }
-        @keyframes rc-pongball { 0%{transform:translate(0,0)} 25%{transform:translate(20px,-3px)} 50%{transform:translate(0,2px)} 75%{transform:translate(-20px,-2px)} 100%{transform:translate(0,0)} }
-        @keyframes rc-snakemove { 0%,100%{transform:translate(0,0)} 50%{transform:translate(15px,5px)} }
-        @keyframes rc-floorpulse { 0%,100%{opacity:0.7} 50%{opacity:1} }
-        @keyframes rc-gameover { 0%,92%{opacity:0} 93%{opacity:0.06} 93.5%{opacity:0} 94%{opacity:0.05} 94.5%{opacity:0} 95%{opacity:0.07} 96%{opacity:0} }
-      `}</style>
-    </Shell>
-  );
-}
-
-/* ── Starfield: Deep space with dense twinkling stars, nebulae, shooting stars ── */
-function StarfieldBg() {
-  const stars = useMemo(() => {
-    const rand = seededRand(555);
-    return Array.from({ length: 60 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 0.4 + rand() * 2.8,
-      opacity: 0.15 + rand() * 0.65,
-      dur: 1.5 + rand() * 4,
-      delay: rand() * 8,
-      bright: rand() < 0.18,
-      color: rand() < 0.3 ? '180,200,255' : rand() < 0.5 ? '220,200,255' : '199,210,254',
-    }));
-  }, []);
-
-  const driftStars = useMemo(() => {
-    const rand = seededRand(666);
-    return Array.from({ length: 25 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 0.8 + rand() * 1.5,
-      opacity: 0.2 + rand() * 0.4,
-      driftX: -20 + rand() * 40,
-      driftY: -15 + rand() * 30,
-      dur: 20 + rand() * 40,
-      delay: rand() * 20,
-    }));
-  }, []);
-
-  const shootingStars = useMemo(() => {
-    const rand = seededRand(777);
-    return Array.from({ length: 8 }, (_, i) => ({
-      x: 5 + rand() * 90, y: 3 + rand() * 50,
-      angle: -20 - rand() * 30,
-      dur: 8 + rand() * 14,
-      delay: i * 5 + rand() * 4,
-      len: 80 + rand() * 140,
-    }));
-  }, []);
-
-  const constellations = useMemo(() => {
-    const rand = seededRand(333);
-    const lines: { x1: number; y1: number; x2: number; y2: number; opacity: number; dur: number; delay: number }[] = [];
-    const pts = Array.from({ length: 18 }, () => ({ x: rand() * 90 + 5, y: rand() * 90 + 5 }));
-    for (let i = 0; i < pts.length - 1; i++) {
-      const dx = pts[i].x - pts[i + 1].x;
-      const dy = pts[i].y - pts[i + 1].y;
-      if (Math.sqrt(dx * dx + dy * dy) < 28) {
-        lines.push({ x1: pts[i].x, y1: pts[i].y, x2: pts[i + 1].x, y2: pts[i + 1].y, opacity: 0.06 + rand() * 0.1, dur: 6 + rand() * 10, delay: rand() * 8 });
+      // magma pools at bottom
+      for (let i = 0; i < 3; i++) {
+        const x = (20 + i * 30) / 100 * w;
+        const y = h * 0.97;
+        const rad = w * 0.12 * (1 + Math.sin(tt * 1.5 + i) * 0.15);
+        const grd = cx.createRadialGradient(x, y, 0, x, y, rad);
+        const c1 = i % 2 === 0 ? '255,220,80' : '251,191,36';
+        grd.addColorStop(0, `rgba(${c1},0.8)`);
+        grd.addColorStop(0.4, 'rgba(249,115,22,0.5)');
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = grd;
+        cx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
       }
+
+      // rising sparks
+      for (const s of sparks) {
+        const t01 = ((tt + s.phase) / s.speed) % 1;
+        const y = h - t01 * h * 0.95;
+        const x = s.x + t01 * s.drift;
+        const a = s.tier === 0
+          ? (1 - t01) * 0.9
+          : s.tier === 1
+            ? (t01 < 0.3 ? 0.8 : 0.6 * (1 - t01))
+            : (t01 < 0.4 ? 0.7 : 0.5 * (1 - t01));
+        cx.globalAlpha = Math.max(0, a);
+        cx.fillStyle = s.color;
+        cx.beginPath();
+        cx.arc(x, y, s.size, 0, Math.PI * 2);
+        cx.fill();
+        const gg = cx.createRadialGradient(x, y, 0, x, y, s.size * 5);
+        gg.addColorStop(0, s.color);
+        gg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.globalAlpha = Math.max(0, a * 0.4);
+        cx.fillStyle = gg;
+        cx.beginPath();
+        cx.arc(x, y, s.size * 5, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      raf = requestAnimationFrame(draw);
     }
-    return lines;
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
 
-  return (
-    <Shell>
-      <div className="absolute inset-0" style={{
-        background: 'radial-gradient(ellipse at 25% 35%, rgba(99,102,241,0.1) 0%, transparent 50%), radial-gradient(ellipse at 75% 65%, rgba(139,92,246,0.08) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, rgba(59,130,246,0.06) 0%, transparent 40%)',
-      }} />
-
-      <div className="absolute w-[min(550px,50vw)] h-[min(450px,45vh)] top-[8%] left-[3%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(99,102,241,0.12), rgba(139,92,246,0.06) 40%, transparent 65%)', filter: 'blur(50px)', animation: 'sf-nebula1 20s ease-in-out infinite' }} />
-      <div className="absolute w-[min(450px,45vw)] h-[min(400px,40vh)] bottom-[12%] right-[8%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(167,139,250,0.1), rgba(129,140,248,0.05) 45%, transparent 65%)', filter: 'blur(45px)', animation: 'sf-nebula2 18s ease-in-out 3s infinite' }} />
-      <div className="absolute w-[min(300px,35vw)] h-[min(250px,30vh)] top-[50%] left-[40%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(59,130,246,0.08), transparent 60%)', filter: 'blur(40px)', animation: 'sf-nebula3 24s ease-in-out 7s infinite' }} />
-
-      <svg className="absolute inset-0 w-full h-full">
-        {constellations.map((l, i) => (
-          <line key={`cl${i}`} x1={`${l.x1}%`} y1={`${l.y1}%`} x2={`${l.x2}%`} y2={`${l.y2}%`}
-            stroke="rgba(199,210,254,0.08)" strokeWidth="0.5"
-            style={{ animation: `sf-constell ${l.dur}s ease-in-out ${l.delay}s infinite` }} />
-        ))}
-        {stars.map((s, i) => (
-          <circle key={`s${i}`} cx={`${s.x}%`} cy={`${s.y}%`} r={s.size}
-            fill={s.bright ? `rgba(${s.color},0.95)` : `rgba(${s.color},0.8)`}
-            opacity={s.opacity}
-            style={{
-              animation: `sf-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
-              filter: s.bright ? `drop-shadow(0 0 4px rgba(${s.color},0.6))` : undefined,
-            }} />
-        ))}
-        {driftStars.map((d, i) => (
-          <circle key={`d${i}`} cx={`${d.x}%`} cy={`${d.y}%`} r={d.size}
-            fill="rgba(199,210,254,0.7)" opacity={d.opacity}
-            style={{ animation: `sf-drift${i % 3} ${d.dur}s ease-in-out ${d.delay}s infinite` }} />
-        ))}
-      </svg>
-
-      {shootingStars.map((ss, i) => (
-        <div key={`sh${i}`} className="absolute" style={{
-          left: `${ss.x}%`, top: `${ss.y}%`,
-          width: `${ss.len}px`, height: '1.5px',
-          background: 'linear-gradient(90deg, transparent, rgba(199,210,254,0.5) 30%, rgba(255,255,255,0.9) 70%, rgba(199,210,254,0.7) 90%, transparent)',
-          transform: `rotate(${ss.angle}deg)`,
-          animation: `sf-shoot ${ss.dur}s ease-in ${ss.delay}s infinite`,
-          opacity: 0,
-          borderRadius: '1px',
-          boxShadow: '0 0 6px rgba(199,210,254,0.4)',
-        }} />
-      ))}
-
-      <div className="absolute inset-0" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.25'/%3E%3C/svg%3E")`,
-        opacity: 0.04,
-      }} />
-
-      <style>{`
-        @keyframes sf-twinkle { 0%,100%{opacity:0.1} 25%{opacity:0.7} 50%{opacity:0.05} 75%{opacity:0.5} }
-        @keyframes sf-nebula1 { 0%,100%{transform:scale(1) translate(0,0);opacity:0.6} 33%{transform:scale(1.2) translate(3%,-2%);opacity:1} 66%{transform:scale(0.95) translate(-2%,1%);opacity:0.8} }
-        @keyframes sf-nebula2 { 0%,100%{transform:scale(1) translate(0,0);opacity:0.5} 40%{transform:scale(1.15) translate(-3%,3%);opacity:0.9} 80%{transform:scale(1.05) translate(2%,-1%);opacity:0.7} }
-        @keyframes sf-nebula3 { 0%,100%{transform:scale(0.9) translate(0,0);opacity:0.4} 50%{transform:scale(1.2) translate(5%,-4%);opacity:0.8} }
-        @keyframes sf-constell { 0%,100%{opacity:0.3} 30%{opacity:0.9} 60%{opacity:0.15} }
-        @keyframes sf-shoot { 0%{opacity:0;transform:rotate(var(--sf-a,-30deg)) translateX(-100px)} 1.5%{opacity:0.9} 4%{opacity:0.3} 6%{opacity:0} 100%{opacity:0} }
-        @keyframes sf-drift0 { 0%,100%{transform:translate(0,0);opacity:0.3} 50%{transform:translate(25px,15px);opacity:0.6} }
-        @keyframes sf-drift1 { 0%,100%{transform:translate(0,0);opacity:0.25} 50%{transform:translate(-20px,10px);opacity:0.55} }
-        @keyframes sf-drift2 { 0%,100%{transform:translate(0,0);opacity:0.2} 50%{transform:translate(15px,-20px);opacity:0.5} }
-      `}</style>
-    </Shell>
-  );
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
 }
 
-/* ── Light: Warm sunlit atmosphere with soft rays and floating motes ── */
+/* ── Aurora: aurora borealis bands ── */
+function AuroraBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Star { x: number; y: number; size: number; baseOp: number; phase: number; speed: number; }
+    let stars: Star[] = [];
+    interface Particle { x: number; y: number; size: number; color: string; phase: number; cycle: number; }
+    let particles: Particle[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(771);
+      stars = Array.from({ length: 60 }, () => ({
+        x: r() * w, y: r() * h * 0.7,
+        size: 0.8 + r() * 2,
+        baseOp: 0.3 + r() * 0.7,
+        phase: r() * Math.PI * 2,
+        speed: 0.5 + r() * 2,
+      }));
+      const rp = seededRand(772);
+      particles = Array.from({ length: 20 }, () => ({
+        x: rp() * w, y: rp() * h * 0.6,
+        size: 2 + rp() * 4,
+        color: rp() > 0.4 ? '#a78bfa' : rp() > 0.2 ? '#34d399' : '#22d3ee',
+        phase: rp() * Math.PI * 2,
+        cycle: 3 + rp() * 6,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    const bands: Array<[string, string, number, number]> = [
+      ['#a78bfa', '#34d399', -0.1, 0.7],
+      ['#06b6d4', '#a78bfa', -0.05, 0.6],
+      ['#818cf8', '#6366f1', -0.08, 0.75],
+      ['#e879f9', '#22d3ee', 0, 0.55],
+      ['#6366f1', '#34d399', -0.04, 0.65],
+    ];
+
+    function hex(s: string): [number, number, number] {
+      const n = parseInt(s.slice(1), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // deep space background
+      const sg = cx.createRadialGradient(w / 2, 0, 0, w / 2, 0, h * 0.7);
+      sg.addColorStop(0, 'rgba(100,60,180,0.25)');
+      sg.addColorStop(0.5, 'rgba(50,30,100,0.15)');
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = sg;
+      cx.beginPath();
+      cx.arc(w / 2, 0, h * 0.7, 0, Math.PI * 2);
+      cx.fill();
+
+      // aurora bands
+      for (let i = 0; i < bands.length; i++) {
+        const [c1, c2, top, ph] = bands[i];
+        const wave = 1 + Math.sin(tt * 0.4 + i * 0.7) * 0.3;
+        const [r1, g1, b1] = hex(c1);
+        const [r2, g2, b2] = hex(c2);
+        const startY = top * h;
+        const bandH = ph * h * wave;
+        const grd = cx.createLinearGradient(0, startY, 0, startY + bandH);
+        grd.addColorStop(0, `rgba(${r1},${g1},${b1},0.5)`);
+        grd.addColorStop(0.2, `rgba(${r1},${g1},${b1},0.4)`);
+        grd.addColorStop(0.5, `rgba(${r2},${g2},${b2},0.3)`);
+        grd.addColorStop(1, `rgba(${r2},${g2},${b2},0)`);
+        cx.fillStyle = grd;
+        cx.fillRect(0, startY, w, bandH);
+      }
+
+      // stars
+      for (const s of stars) {
+        const op = s.baseOp * (0.4 + 0.6 * Math.sin(tt * s.speed + s.phase));
+        cx.globalAlpha = Math.max(0, op);
+        cx.fillStyle = '#e2e8f0';
+        cx.beginPath();
+        cx.arc(s.x, s.y, s.size / 2, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      // particles
+      for (const p of particles) {
+        const op = 0.5 + 0.5 * Math.sin(tt * 0.7 / p.cycle * 4 + p.phase);
+        const y = p.y + Math.sin(tt * 0.4 + p.phase) * 20;
+        cx.globalAlpha = Math.max(0, op * 0.7);
+        cx.fillStyle = p.color;
+        cx.beginPath();
+        cx.arc(p.x, y, p.size, 0, Math.PI * 2);
+        cx.fill();
+        const gg = cx.createRadialGradient(p.x, y, 0, p.x, y, p.size * 6);
+        gg.addColorStop(0, p.color);
+        gg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = gg;
+        cx.globalAlpha = Math.max(0, op * 0.3);
+        cx.beginPath();
+        cx.arc(p.x, y, p.size * 6, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      // mountain silhouette
+      cx.fillStyle = 'rgba(15,15,25,0.9)';
+      cx.beginPath();
+      cx.moveTo(0, h);
+      cx.lineTo(0, h * 0.88);
+      const pts = [0.06, 0.11, 0.18, 0.24, 0.32, 0.4, 0.48, 0.55, 0.62, 0.68, 0.76, 0.82, 0.9, 0.95];
+      for (let i = 0; i < pts.length; i++) {
+        const x = pts[i] * w;
+        const y = h * (0.78 + Math.sin(i * 1.7) * 0.06);
+        cx.lineTo(x, y);
+      }
+      cx.lineTo(w, h);
+      cx.closePath();
+      cx.fill();
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Catppuccin: pastel orbs + sparkles ── */
+function CatppuccinBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Orb { x: number; y: number; size: number; color: string; phase: number; speed: number; }
+    interface Sparkle { x: number; y: number; cycle: number; phase: number; color: string; }
+    interface Candy { x: number; y: number; cycle: number; phase: number; color: string; }
+    let orbs: Orb[] = [];
+    let sparkles: Sparkle[] = [];
+    let candies: Candy[] = [];
+
+    function build(w: number, h: number) {
+      const palette = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1', '#fab387', '#f38ba8', '#94e2d5', '#b4befe'];
+      const r = seededRand(331);
+      orbs = Array.from({ length: 18 }, (_, i) => ({
+        x: r() * w, y: r() * h,
+        size: 60 + r() * 220,
+        color: palette[i % palette.length],
+        phase: r() * Math.PI * 2,
+        speed: 0.2 + r() * 0.3,
+      }));
+      const rs = seededRand(333);
+      const sparkColors = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1'];
+      sparkles = Array.from({ length: 20 }, () => ({
+        x: rs() * w, y: rs() * h,
+        cycle: 3 + rs() * 5,
+        phase: rs() * 9,
+        color: sparkColors[Math.floor(rs() * sparkColors.length)],
+      }));
+      const rc = seededRand(335);
+      candies = Array.from({ length: 30 }, (_, i) => ({
+        x: rc() * w, y: rc() * h,
+        cycle: 2 + rc() * 3,
+        phase: (i / 30) * 8 + rc() * 2,
+        color: palette[i % palette.length],
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function hex(s: string): [number, number, number] {
+      const n = parseInt(s.slice(1), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // orbs
+      for (const o of orbs) {
+        const x = o.x + Math.sin(tt * o.speed + o.phase) * 35;
+        const y = o.y + Math.cos(tt * o.speed * 0.8 + o.phase) * 30;
+        const [r, g, b] = hex(o.color);
+        const grd = cx.createRadialGradient(x, y, 0, x, y, o.size);
+        grd.addColorStop(0, `rgba(${r},${g},${b},0.3)`);
+        grd.addColorStop(0.4, `rgba(${r},${g},${b},0.18)`);
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = grd;
+        cx.fillRect(x - o.size, y - o.size, o.size * 2, o.size * 2);
+      }
+
+      // rainbow wave band
+      const bandY = h * 0.45;
+      const rg = cx.createLinearGradient(0, 0, w * 2, 0);
+      const palette = ['#cba6f7', '#f5c2e7', '#fab387', '#a6e3a1', '#89b4fa', '#b4befe', '#f38ba8', '#94e2d5', '#cba6f7'];
+      const offset = (tt * 0.05) % 1;
+      palette.forEach((cc, i) => rg.addColorStop(((i / (palette.length - 1)) - offset + 1) % 1, cc));
+      cx.fillStyle = rg;
+      cx.globalAlpha = 0.4;
+      cx.fillRect(0, bandY, w, 6);
+      cx.globalAlpha = 1;
+
+      // sparkle crosses
+      for (const s of sparkles) {
+        const t01 = ((tt + s.phase) % s.cycle) / s.cycle;
+        const op = Math.sin(t01 * Math.PI);
+        if (op < 0.05) continue;
+        cx.globalAlpha = op * 0.9;
+        cx.fillStyle = s.color;
+        cx.fillRect(s.x - 1.5, s.y - 6, 3, 12);
+        cx.fillRect(s.x - 6, s.y - 1.5, 12, 3);
+      }
+      cx.globalAlpha = 1;
+
+      // candy dots
+      for (const cd of candies) {
+        const t01 = ((tt + cd.phase) % cd.cycle) / cd.cycle;
+        const op = Math.sin(t01 * Math.PI);
+        if (op < 0.1) continue;
+        const sz = 2 + op * 4;
+        cx.fillStyle = cd.color;
+        cx.globalAlpha = op * 0.9;
+        cx.beginPath();
+        cx.arc(cd.x, cd.y, sz, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── TokyoNight: neon city grid + rain + windows ── */
+function TokyoNightBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Building { x: number; w: number; h: number; windows: number; color: string; spire: boolean; }
+    interface Rain { x: number; y: number; len: number; speed: number; }
+    interface Neon { x: number; y: number; w: number; h: number; color: string; cycle: number; phase: number; }
+    let buildings: Building[] = [];
+    let rain: Rain[] = [];
+    let neons: Neon[] = [];
+
+    const winColors = ['#7aa2f7', '#ff9e64', '#9ece6a', '#bb9af7', '#7dcfff', '#e0af68', '#f7768e'];
+
+    function build(w: number, h: number) {
+      const r = seededRand(779);
+      buildings = Array.from({ length: 20 }, (_, i) => ({
+        x: (i * 5 + r() * 3) / 100 * w,
+        w: (2.5 + r() * 5) / 100 * w,
+        h: (15 + r() * 50) / 100 * h,
+        windows: Math.floor(4 + r() * 10),
+        color: winColors[i % winColors.length],
+        spire: r() > 0.5,
+      }));
+      const rr = seededRand(780);
+      rain = Array.from({ length: 40 }, () => ({
+        x: rr() * w * 1.1,
+        y: rr() * h,
+        len: 18 + rr() * 35,
+        speed: 200 + rr() * 200,
+      }));
+      const rn = seededRand(784);
+      const neonColors = ['#ff9e64', '#bb9af7', '#7dcfff', '#9ece6a', '#f7768e', '#e0af68'];
+      neons = Array.from({ length: 6 }, (_, i) => ({
+        x: (15 + i * 13) / 100 * w,
+        y: (18 + (i % 3) * 8) / 100 * h,
+        w: 80 + rn() * 100,
+        h: 25 + rn() * 25,
+        color: neonColors[i],
+        cycle: 2 + rn() * 4,
+        phase: rn() * 5,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function hex(s: string): [number, number, number] {
+      const n = parseInt(s.slice(1), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // cyberpunk sky
+      const sg = cx.createLinearGradient(0, 0, 0, h * 0.7);
+      sg.addColorStop(0, 'rgba(25,15,45,0.8)');
+      sg.addColorStop(0.6, 'rgba(122,162,247,0.25)');
+      sg.addColorStop(0.8, 'rgba(187,154,247,0.15)');
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = sg;
+      cx.fillRect(0, 0, w, h);
+
+      // neon sign glows
+      for (const n of neons) {
+        const cyc = ((tt + n.phase) % n.cycle) / n.cycle;
+        const flicker = cyc < 0.48 || cyc > 0.52 ? 1 : 0.3;
+        const [r, g, b] = hex(n.color);
+        const grd = cx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.w);
+        grd.addColorStop(0, `rgba(${r},${g},${b},${0.4 * flicker})`);
+        grd.addColorStop(0.5, `rgba(${r},${g},${b},${0.2 * flicker})`);
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = grd;
+        cx.fillRect(n.x - n.w, n.y - n.h, n.w * 2, n.h * 2);
+      }
+
+      // street ground
+      cx.fillStyle = 'rgba(15,15,25,0.95)';
+      cx.fillRect(0, h * 0.85, w, h * 0.15);
+
+      // buildings
+      for (let bi = 0; bi < buildings.length; bi++) {
+        const b = buildings[bi];
+        const top = h * 0.85 - b.h;
+        cx.fillStyle = 'rgba(20,20,35,0.95)';
+        cx.fillRect(b.x, top, b.w, b.h);
+        // top edge highlight
+        cx.fillStyle = 'rgba(80,90,140,0.6)';
+        cx.fillRect(b.x, top, b.w, 2);
+        if (b.spire) {
+          cx.fillStyle = 'rgba(122,162,247,0.6)';
+          cx.fillRect(b.x + b.w / 2 - 1, top - 14, 2, 14);
+        }
+        // windows
+        for (let wi = 0; wi < b.windows; wi++) {
+          const wy = top + 6 + wi * (b.h - 12) / b.windows;
+          const cyc = 1.5 + ((wi + bi) % 5) * 0.3;
+          const ph = bi * 0.2 + wi * 0.3;
+          const blink = 0.2 + 0.8 * Math.sin(tt / cyc + ph) * 0.5 + 0.4;
+          const col = winColors[wi % winColors.length];
+          cx.fillStyle = col;
+          cx.globalAlpha = Math.max(0.1, blink * 0.8);
+          cx.fillRect(b.x + b.w * 0.12, wy, b.w * 0.76, 4);
+        }
+        cx.globalAlpha = 1;
+      }
+
+      // rain
+      cx.strokeStyle = 'rgba(122,162,247,0.6)';
+      cx.lineWidth = 1.2;
+      for (const r of rain) {
+        r.y += r.speed / 60;
+        if (r.y > h) { r.y = -r.len; r.x = Math.random() * w * 1.1; }
+        const ang = 15 * Math.PI / 180;
+        const dx = Math.sin(ang) * r.len;
+        const dy = Math.cos(ang) * r.len;
+        cx.beginPath();
+        cx.moveTo(r.x, r.y);
+        cx.lineTo(r.x + dx, r.y + dy);
+        cx.stroke();
+      }
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Dracula: bats + dark purple particles + moon ── */
+function DraculaBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Bat { x: number; y: number; size: number; speed: number; phase: number; waveAmp: number; flap: number; }
+    interface Fog { x: number; y: number; w: number; h: number; phase: number; speed: number; }
+    interface Candle { x: number; y: number; phase: number; speed: number; }
+    let bats: Bat[] = [];
+    let fogs: Fog[] = [];
+    let candles: Candle[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(1112);
+      bats = Array.from({ length: 10 }, () => ({
+        x: -50, y: r() * h * 0.55,
+        size: 18 + r() * 24,
+        speed: 30 + r() * 50,
+        phase: r() * 30,
+        waveAmp: 15 + r() * 30,
+        flap: r() * Math.PI * 2,
+      }));
+      const rf = seededRand(1111);
+      fogs = Array.from({ length: 8 }, (_, i) => ({
+        x: rf() * w, y: h - rf() * h * 0.4,
+        w: 250 + rf() * 350, h: 80 + rf() * 130,
+        phase: rf() * Math.PI * 2,
+        speed: 0.1 + rf() * 0.2,
+      }));
+      const rc = seededRand(1113);
+      candles = Array.from({ length: 8 }, () => ({
+        x: rc() * w,
+        y: h * (0.4 + rc() * 0.4),
+        phase: rc() * Math.PI * 2,
+        speed: 3 + rc() * 3,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function drawBat(x: number, y: number, size: number, flap: number) {
+      cx.save();
+      cx.translate(x, y);
+      cx.scale(size / 30, size / 30);
+      const wing = Math.sin(flap) * 0.3;
+      cx.fillStyle = 'rgba(189,147,249,0.8)';
+      cx.beginPath();
+      cx.moveTo(15, 6);
+      cx.quadraticCurveTo(10, 0 + wing * 4, 5, 3);
+      cx.quadraticCurveTo(2, 1, 0, 4);
+      cx.quadraticCurveTo(3, 5, 5, 5);
+      cx.quadraticCurveTo(8, 8 - wing * 4, 12, 7);
+      cx.lineTo(15, 6);
+      cx.quadraticCurveTo(17, 8 - wing * 4, 20, 7);
+      cx.quadraticCurveTo(22, 8, 25, 5);
+      cx.quadraticCurveTo(27, 5, 30, 4);
+      cx.quadraticCurveTo(28, 1, 25, 3);
+      cx.quadraticCurveTo(20, 0 + wing * 4, 15, 6);
+      cx.fill();
+      cx.restore();
+    }
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // gothic sky
+      const sg = cx.createLinearGradient(0, 0, 0, h * 0.6);
+      sg.addColorStop(0, 'rgba(60,25,80,0.7)');
+      sg.addColorStop(0.5, 'rgba(189,147,249,0.3)');
+      sg.addColorStop(0.8, 'rgba(139,92,246,0.15)');
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = sg;
+      cx.fillRect(0, 0, w, h);
+
+      // moon
+      const moonX = w * 0.85, moonY = h * 0.14, moonR = 60;
+      const moonGlow = cx.createRadialGradient(moonX, moonY, 0, moonX, moonY, moonR * 2.5);
+      moonGlow.addColorStop(0, 'rgba(189,147,249,0.4)');
+      moonGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = moonGlow;
+      cx.fillRect(moonX - moonR * 2.5, moonY - moonR * 2.5, moonR * 5, moonR * 5);
+      const moonBody = cx.createRadialGradient(moonX - 15, moonY - 15, 0, moonX, moonY, moonR);
+      moonBody.addColorStop(0, 'rgba(240,220,255,0.6)');
+      moonBody.addColorStop(0.4, 'rgba(189,147,249,0.4)');
+      moonBody.addColorStop(1, 'rgba(139,92,246,0.15)');
+      cx.fillStyle = moonBody;
+      cx.beginPath();
+      cx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+      cx.fill();
+      // craters
+      cx.fillStyle = 'rgba(160,120,220,0.4)';
+      cx.beginPath();
+      cx.arc(moonX - 18, moonY - 12, 7, 0, Math.PI * 2);
+      cx.fill();
+      cx.beginPath();
+      cx.arc(moonX + 8, moonY + 5, 5, 0, Math.PI * 2);
+      cx.fill();
+
+      // fog
+      for (const f of fogs) {
+        const fx = f.x + Math.sin(tt * f.speed + f.phase) * 80;
+        const grd = cx.createRadialGradient(fx, f.y, 0, fx, f.y, Math.max(f.w, f.h));
+        grd.addColorStop(0, 'rgba(100,80,160,0.3)');
+        grd.addColorStop(0.5, 'rgba(60,50,120,0.15)');
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = grd;
+        cx.fillRect(fx - f.w, f.y - f.h, f.w * 2, f.h * 2);
+      }
+
+      // candles
+      for (const cd of candles) {
+        const flick = 1 + Math.sin(tt * cd.speed + cd.phase) * 0.3;
+        cx.fillStyle = `rgba(255,180,60,${0.7 * flick})`;
+        cx.beginPath();
+        cx.ellipse(cd.x, cd.y, 4 * flick, 7, 0, 0, Math.PI * 2);
+        cx.fill();
+        const gg = cx.createRadialGradient(cd.x, cd.y, 0, cd.x, cd.y, 18);
+        gg.addColorStop(0, `rgba(255,180,60,${0.5 * flick})`);
+        gg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = gg;
+        cx.fillRect(cd.x - 18, cd.y - 18, 36, 36);
+      }
+
+      // bats
+      for (const b of bats) {
+        const cycle = b.speed;
+        const t01 = ((tt + b.phase) % cycle) / cycle;
+        const x = -50 + t01 * (w + 100);
+        const y = b.y + Math.sin(tt * 4 + b.phase) * b.waveAmp;
+        const a = t01 < 0.08 ? t01 / 0.08 : t01 > 0.92 ? (1 - t01) / 0.08 : 1;
+        cx.globalAlpha = Math.max(0, a * 0.7);
+        b.flap += 0.5;
+        drawBat(x, y, b.size, b.flap);
+      }
+      cx.globalAlpha = 1;
+
+      // castle silhouette
+      cx.fillStyle = 'rgba(15,10,25,0.95)';
+      cx.beginPath();
+      cx.moveTo(0, h);
+      cx.lineTo(0, h * 0.85);
+      // castle merlons
+      const cw = w / 24;
+      for (let i = 0; i < 24; i++) {
+        const x = i * cw;
+        if (i % 2 === 0) cx.lineTo(x, h * 0.85);
+        else { cx.lineTo(x, h * 0.82); cx.lineTo(x + cw, h * 0.82); cx.lineTo(x + cw, h * 0.85); }
+      }
+      cx.lineTo(w, h * 0.85);
+      cx.lineTo(w, h);
+      cx.closePath();
+      cx.fill();
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Solarized: warm sun + ocean waves + birds ── */
+function SolarizedBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Wave { y: number; phase: number; speed: number; opacity: number; }
+    interface Bird { x: number; y: number; size: number; speed: number; phase: number; }
+    interface Cloud { x: number; y: number; w: number; h: number; speed: number; phase: number; }
+    let waves: Wave[] = [];
+    let birds: Bird[] = [];
+    let clouds: Cloud[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(551);
+      waves = Array.from({ length: 12 }, (_, i) => ({
+        y: (52 + i * 3.5 + r() * 2.5) / 100 * h,
+        phase: r() * Math.PI * 2,
+        speed: 0.3 + r() * 0.6,
+        opacity: 0.2 + i * 0.06,
+      }));
+      const rb = seededRand(554);
+      birds = Array.from({ length: 4 }, () => ({
+        x: -30, y: (12 + rb() * 28) / 100 * h,
+        size: 16 + rb() * 14,
+        speed: 30 + rb() * 30,
+        phase: rb() * 30,
+      }));
+      const rc = seededRand(555);
+      clouds = Array.from({ length: 6 }, () => ({
+        x: rc() * w, y: (6 + rc() * 22) / 100 * h,
+        w: 80 + rc() * 120, h: 30 + rc() * 35,
+        speed: 8 + rc() * 12,
+        phase: rc() * 30,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // golden atmosphere
+      const sg = cx.createLinearGradient(0, 0, 0, h * 0.65);
+      sg.addColorStop(0, 'rgba(181,137,0,0.4)');
+      sg.addColorStop(0.4, 'rgba(203,75,22,0.25)');
+      sg.addColorStop(0.75, 'rgba(38,139,210,0.15)');
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = sg;
+      cx.fillRect(0, 0, w, h);
+
+      // ocean
+      const og = cx.createLinearGradient(0, h * 0.52, 0, h);
+      og.addColorStop(0, 'rgba(0,0,0,0)');
+      og.addColorStop(0.3, 'rgba(6,182,212,0.15)');
+      og.addColorStop(0.6, 'rgba(38,139,210,0.35)');
+      og.addColorStop(1, 'rgba(38,139,210,0.6)');
+      cx.fillStyle = og;
+      cx.fillRect(0, h * 0.52, w, h * 0.48);
+
+      // clouds
+      for (const cl of clouds) {
+        const x = (cl.x + tt * cl.speed) % (w + 200) - 100;
+        const grd = cx.createRadialGradient(x, cl.y, 0, x, cl.y, Math.max(cl.w, cl.h));
+        grd.addColorStop(0, 'rgba(255,250,220,0.6)');
+        grd.addColorStop(0.5, 'rgba(255,240,200,0.3)');
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = grd;
+        cx.fillRect(x - cl.w, cl.y - cl.h, cl.w * 2, cl.h * 2);
+      }
+
+      // sun
+      const sunX = w * 0.85, sunY = h * 0.16, sunR = 70;
+      const corona = 1 + Math.sin(tt * 0.5) * 0.15;
+      const cg = cx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR * 2 * corona);
+      cg.addColorStop(0, 'rgba(181,137,0,0.6)');
+      cg.addColorStop(0.3, 'rgba(181,137,0,0.3)');
+      cg.addColorStop(0.6, 'rgba(203,75,22,0.12)');
+      cg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = cg;
+      cx.fillRect(sunX - sunR * 2 * corona, sunY - sunR * 2 * corona, sunR * 4 * corona, sunR * 4 * corona);
+      const sg2 = cx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR);
+      sg2.addColorStop(0, 'rgba(255,220,100,0.9)');
+      sg2.addColorStop(0.4, 'rgba(181,137,0,0.7)');
+      sg2.addColorStop(1, 'rgba(181,137,0,0)');
+      cx.fillStyle = sg2;
+      cx.beginPath();
+      cx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+      cx.fill();
+
+      // sun reflection on ocean
+      const refl = cx.createLinearGradient(sunX, h * 0.52, sunX, h);
+      refl.addColorStop(0, 'rgba(181,137,0,0.5)');
+      refl.addColorStop(0.5, 'rgba(203,75,22,0.3)');
+      refl.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = refl;
+      cx.fillRect(sunX - 50, h * 0.52, 100, h * 0.48);
+
+      // waves
+      for (const wv of waves) {
+        cx.strokeStyle = `rgba(38,139,210,${wv.opacity})`;
+        cx.lineWidth = 1.5;
+        cx.beginPath();
+        const off = tt * wv.speed * 20 + wv.phase * 50;
+        for (let x = 0; x <= w; x += 8) {
+          const y = wv.y + Math.sin((x + off) * 0.02) * 3;
+          if (x === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+        }
+        cx.stroke();
+      }
+
+      // birds
+      cx.strokeStyle = 'rgba(88,110,117,0.8)';
+      cx.lineWidth = 1.8;
+      cx.lineCap = 'round';
+      for (const b of birds) {
+        const cycle = b.speed;
+        const t01 = ((tt + b.phase) % cycle) / cycle;
+        const x = -30 + t01 * (w + 60);
+        const y = b.y;
+        const a = t01 < 0.08 ? t01 / 0.08 : t01 > 0.92 ? (1 - t01) / 0.08 : 0.8;
+        cx.globalAlpha = Math.max(0, a);
+        cx.beginPath();
+        cx.moveTo(x, y);
+        cx.quadraticCurveTo(x - b.size * 0.25, y - b.size * 0.2, x - b.size * 0.5, y);
+        cx.moveTo(x, y);
+        cx.quadraticCurveTo(x + b.size * 0.25, y - b.size * 0.2, x + b.size * 0.5, y);
+        cx.stroke();
+      }
+      cx.globalAlpha = 1;
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Lightning: storm with bolts + rain ── */
+function LightningBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Rain { x: number; y: number; len: number; speed: number; angle: number; opacity: number; }
+    interface Bolt { segs: { x: number; y: number }[]; branches: { x: number; y: number }[][]; cycle: number; phase: number; }
+    interface Cloud { x: number; y: number; w: number; h: number; phase: number; speed: number; }
+    let rain: Rain[] = [];
+    let bolts: Bolt[] = [];
+    let clouds: Cloud[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(900);
+      rain = Array.from({ length: 60 }, () => ({
+        x: r() * w * 1.3 - w * 0.15,
+        y: r() * h,
+        len: 14 + r() * 32,
+        speed: 600 + r() * 600,
+        angle: 12 * Math.PI / 180,
+        opacity: 0.2 + r() * 0.5,
+      }));
+      const rb = seededRand(903);
+      bolts = Array.from({ length: 6 }, () => {
+        const startX = (6 + rb() * 88) / 100 * w;
+        const segs: { x: number; y: number }[] = [{ x: startX, y: (3 + rb() * 8) / 100 * h }];
+        let cxp = startX;
+        let cyp = segs[0].y;
+        const n = 7 + Math.floor(rb() * 7);
+        for (let j = 0; j < n; j++) {
+          cxp += (rb() - 0.5) * 30;
+          cyp += (4 + rb() * 8) / 100 * h;
+          cxp = Math.max(20, Math.min(w - 20, cxp));
+          segs.push({ x: cxp, y: cyp });
+        }
+        const branches: { x: number; y: number }[][] = [];
+        const nB = 2 + Math.floor(rb() * 3);
+        for (let bi = 0; bi < nB; bi++) {
+          const bi0 = 1 + Math.floor(rb() * Math.max(1, segs.length - 2));
+          const bs: { x: number; y: number }[] = [{ x: segs[bi0].x, y: segs[bi0].y }];
+          let bx = segs[bi0].x, by = segs[bi0].y;
+          const side = rb() > 0.5 ? 1 : -1;
+          for (let k = 0; k < 3; k++) {
+            bx += side * (10 + rb() * 25);
+            by += (3 + rb() * 7) / 100 * h;
+            bs.push({ x: bx, y: by });
+          }
+          branches.push(bs);
+        }
+        return {
+          segs, branches,
+          cycle: 5 + rb() * 10,
+          phase: rb() * 16,
+        };
+      });
+      const rc = seededRand(902);
+      clouds = Array.from({ length: 10 }, () => ({
+        x: rc() * w, y: rc() * h * 0.25,
+        w: 200 + rc() * 350,
+        h: 50 + rc() * 100,
+        phase: rc() * Math.PI * 2,
+        speed: 0.05 + rc() * 0.1,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // dark stormy sky
+      const sg = cx.createLinearGradient(0, 0, 0, h);
+      sg.addColorStop(0, 'rgba(8,12,28,0.7)');
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = sg;
+      cx.fillRect(0, 0, w, h);
+
+      // determine if any bolt is currently flashing
+      let flashAlpha = 0;
+      for (const b of bolts) {
+        const t01 = ((tt + b.phase) % b.cycle) / b.cycle;
+        if (t01 > 0.74 && t01 < 0.82) {
+          flashAlpha = Math.max(flashAlpha, 1 - Math.abs(t01 - 0.76) * 20);
+        }
+      }
+
+      // clouds
+      for (const cl of clouds) {
+        const cxp = cl.x + Math.sin(tt * cl.speed + cl.phase) * 30;
+        const grd = cx.createRadialGradient(cxp, cl.y, 0, cxp, cl.y, Math.max(cl.w, cl.h));
+        grd.addColorStop(0, `rgba(15,20,40,0.9)`);
+        grd.addColorStop(0.4, 'rgba(12,18,38,0.5)');
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = grd;
+        cx.fillRect(cxp - cl.w, cl.y - cl.h, cl.w * 2, cl.h * 2);
+      }
+
+      // sky flash
+      if (flashAlpha > 0) {
+        cx.fillStyle = `rgba(140,185,255,${0.15 * flashAlpha})`;
+        cx.fillRect(0, 0, w, h);
+      }
+
+      // bolts
+      for (const b of bolts) {
+        const t01 = ((tt + b.phase) % b.cycle) / b.cycle;
+        let alpha = 0;
+        if (t01 > 0.74 && t01 < 0.77) alpha = 1;
+        else if (t01 > 0.77 && t01 < 0.8) alpha = 0.5;
+        if (alpha === 0) continue;
+
+        // wide outer
+        cx.strokeStyle = `rgba(100,160,250,${0.5 * alpha})`;
+        cx.lineWidth = 8;
+        cx.lineCap = 'round';
+        cx.lineJoin = 'round';
+        cx.beginPath();
+        for (let i = 0; i < b.segs.length; i++) {
+          const s = b.segs[i];
+          if (i === 0) cx.moveTo(s.x, s.y); else cx.lineTo(s.x, s.y);
+        }
+        cx.stroke();
+        // main channel
+        cx.strokeStyle = `rgba(190,215,255,${0.95 * alpha})`;
+        cx.lineWidth = 3;
+        cx.beginPath();
+        for (let i = 0; i < b.segs.length; i++) {
+          const s = b.segs[i];
+          if (i === 0) cx.moveTo(s.x, s.y); else cx.lineTo(s.x, s.y);
+        }
+        cx.stroke();
+        // hot white core
+        cx.strokeStyle = `rgba(245,248,255,${alpha})`;
+        cx.lineWidth = 1.2;
+        cx.beginPath();
+        for (let i = 0; i < b.segs.length; i++) {
+          const s = b.segs[i];
+          if (i === 0) cx.moveTo(s.x, s.y); else cx.lineTo(s.x, s.y);
+        }
+        cx.stroke();
+        // branches
+        for (const br of b.branches) {
+          cx.strokeStyle = `rgba(180,210,255,${0.75 * alpha})`;
+          cx.lineWidth = 2;
+          cx.beginPath();
+          for (let i = 0; i < br.length; i++) {
+            const s = br[i];
+            if (i === 0) cx.moveTo(s.x, s.y); else cx.lineTo(s.x, s.y);
+          }
+          cx.stroke();
+        }
+      }
+
+      // rain
+      cx.lineCap = 'butt';
+      for (const r of rain) {
+        r.y += r.speed / 60;
+        if (r.y > h) { r.y = -r.len; r.x = Math.random() * w * 1.3 - w * 0.15; }
+        const dx = Math.sin(r.angle) * r.len;
+        const dy = Math.cos(r.angle) * r.len;
+        const grd = cx.createLinearGradient(r.x, r.y, r.x + dx, r.y + dy);
+        grd.addColorStop(0, 'rgba(180,210,255,0)');
+        grd.addColorStop(1, `rgba(180,210,255,${r.opacity})`);
+        cx.strokeStyle = grd;
+        cx.lineWidth = 1;
+        cx.beginPath();
+        cx.moveTo(r.x, r.y);
+        cx.lineTo(r.x + dx, r.y + dy);
+        cx.stroke();
+      }
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Phoenix: rising fire particles + central glow ── */
+function PhoenixBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Particle { x: number; size: number; speed: number; drift: number; phase: number; color: string; tier: number; }
+    interface Feather { x: number; y: number; size: number; rot: number; speed: number; drift: number; phase: number; color: string; }
+    interface VortexP { angle: number; r: number; size: number; color: string; phase: number; speed: number; }
+    let particles: Particle[] = [];
+    let feathers: Feather[] = [];
+    let vortex: VortexP[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(660);
+      particles = [];
+      for (let i = 0; i < 30; i++) particles.push({
+        x: r() * w, size: 1.5 + r() * 2.5,
+        speed: 10 + r() * 10, drift: (r() - 0.5) * 70,
+        phase: r() * 10, color: '#fde68a', tier: 0,
+      });
+      for (let i = 0; i < 20; i++) particles.push({
+        x: r() * w, size: 3 + r() * 4,
+        speed: 14 + r() * 14, drift: (r() - 0.5) * 90,
+        phase: r() * 12, color: r() > 0.5 ? '#fbbf24' : '#f97316', tier: 1,
+      });
+      for (let i = 0; i < 12; i++) particles.push({
+        x: r() * w, size: 5 + r() * 5,
+        speed: 18 + r() * 20, drift: (r() - 0.5) * 110,
+        phase: r() * 14, color: '#ef4444', tier: 2,
+      });
+      const rf = seededRand(665);
+      feathers = Array.from({ length: 8 }, () => ({
+        x: (20 + rf() * 60) / 100 * w,
+        y: (15 + rf() * 50) / 100 * h,
+        size: 8 + rf() * 16,
+        rot: rf() * Math.PI * 2,
+        speed: 10 + rf() * 14,
+        drift: (rf() - 0.5) * 80,
+        phase: rf() * 12,
+        color: rf() < 0.4 ? '#f59e0b' : rf() < 0.7 ? '#ef4444' : '#fb923c',
+      }));
+      const rv = seededRand(664);
+      vortex = Array.from({ length: 16 }, (_, i) => ({
+        angle: (i / 16) * Math.PI * 2,
+        r: 35 + rv() * 50,
+        size: 2 + rv() * 4,
+        color: rv() > 0.5 ? '#fbbf24' : rv() > 0.3 ? '#f97316' : '#ef4444',
+        phase: rv() * Math.PI * 2,
+        speed: 0.5 + rv() * 0.5,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // intense fire base
+      const heat = 1 + Math.sin(tt * 0.6) * 0.2;
+      const bg = cx.createLinearGradient(0, h, 0, h * 0.35);
+      bg.addColorStop(0, `rgba(180,60,10,${0.5 * heat})`);
+      bg.addColorStop(0.35, `rgba(239,68,68,${0.3 * heat})`);
+      bg.addColorStop(0.65, 'rgba(245,158,11,0.12)');
+      bg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = bg;
+      cx.fillRect(0, 0, w, h);
+
+      // central phoenix glow
+      const coreS = 1 + Math.sin(tt * 0.4) * 0.1;
+      const cgx = w / 2, cgy = h * 0.42;
+      const cg = cx.createRadialGradient(cgx, cgy, 0, cgx, cgy, w * 0.3 * coreS);
+      cg.addColorStop(0, 'rgba(245,158,11,0.25)');
+      cg.addColorStop(0.4, 'rgba(239,68,68,0.1)');
+      cg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = cg;
+      cx.beginPath();
+      cx.arc(cgx, cgy, w * 0.3 * coreS, 0, Math.PI * 2);
+      cx.fill();
+
+      // phoenix bird silhouette - draw stylized
+      cx.save();
+      cx.translate(cgx, cgy + Math.sin(tt * 0.9) * 14);
+      // body
+      const bodyG = cx.createRadialGradient(0, 0, 0, 0, 0, 90);
+      bodyG.addColorStop(0, 'rgba(254,243,199,0.4)');
+      bodyG.addColorStop(0.5, 'rgba(251,191,36,0.3)');
+      bodyG.addColorStop(1, 'rgba(239,68,68,0.05)');
+      cx.fillStyle = bodyG;
+      cx.beginPath();
+      cx.ellipse(0, 0, 35, 85, 0, 0, Math.PI * 2);
+      cx.fill();
+
+      // wings
+      const wingFlap = Math.sin(tt * 1.7) * 0.25;
+      cx.save();
+      cx.rotate(-wingFlap);
+      const wg = cx.createLinearGradient(0, 0, -200, 0);
+      wg.addColorStop(0, 'rgba(239,68,68,0.35)');
+      wg.addColorStop(0.5, 'rgba(249,115,22,0.2)');
+      wg.addColorStop(1, 'rgba(251,191,36,0)');
+      cx.fillStyle = wg;
+      cx.beginPath();
+      cx.moveTo(-20, -10);
+      cx.quadraticCurveTo(-130, -100, -210, -130);
+      cx.quadraticCurveTo(-150, -50, -100, -10);
+      cx.lineTo(-20, -10);
+      cx.fill();
+      cx.restore();
+
+      cx.save();
+      cx.rotate(wingFlap);
+      const wg2 = cx.createLinearGradient(0, 0, 200, 0);
+      wg2.addColorStop(0, 'rgba(239,68,68,0.35)');
+      wg2.addColorStop(0.5, 'rgba(249,115,22,0.2)');
+      wg2.addColorStop(1, 'rgba(251,191,36,0)');
+      cx.fillStyle = wg2;
+      cx.beginPath();
+      cx.moveTo(20, -10);
+      cx.quadraticCurveTo(130, -100, 210, -130);
+      cx.quadraticCurveTo(150, -50, 100, -10);
+      cx.lineTo(20, -10);
+      cx.fill();
+      cx.restore();
+
+      // head
+      cx.fillStyle = 'rgba(251,191,36,0.4)';
+      cx.beginPath();
+      cx.ellipse(0, -100, 14, 18, 0, 0, Math.PI * 2);
+      cx.fill();
+
+      // tail flames
+      cx.fillStyle = 'rgba(220,38,38,0.4)';
+      const tailW = 1 + Math.sin(tt * 1.2) * 0.15;
+      cx.beginPath();
+      cx.moveTo(0, 80);
+      cx.quadraticCurveTo(-50 * tailW, 180, -20, 240);
+      cx.quadraticCurveTo(0, 200, 20, 240);
+      cx.quadraticCurveTo(50 * tailW, 180, 0, 80);
+      cx.fill();
+
+      cx.restore();
+
+      // fire vortex around phoenix
+      for (const v of vortex) {
+        const a = v.angle + tt * 0.5 * v.speed;
+        const x = cgx + Math.cos(a) * v.r;
+        const y = cgy + Math.sin(a) * v.r;
+        const op = 0.5 + 0.5 * Math.sin(tt * v.speed + v.phase);
+        cx.globalAlpha = Math.max(0, op * 0.85);
+        cx.fillStyle = v.color;
+        cx.beginPath();
+        cx.arc(x, y, v.size, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      // floating feathers
+      for (const f of feathers) {
+        const t01 = ((tt + f.phase) / f.speed) % 1;
+        const y = f.y - t01 * h * 0.4;
+        const x = f.x + t01 * f.drift;
+        const a = t01 < 0.15 ? t01 / 0.15 * 0.4 : t01 > 0.85 ? (1 - t01) / 0.15 * 0.15 : 0.3;
+        cx.save();
+        cx.translate(x, y);
+        cx.rotate(f.rot + t01 * Math.PI);
+        cx.globalAlpha = Math.max(0, a);
+        const fg = cx.createLinearGradient(0, -f.size / 2, 0, f.size / 2);
+        fg.addColorStop(0, f.color);
+        fg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = fg;
+        cx.beginPath();
+        cx.ellipse(0, 0, f.size * 0.2, f.size * 0.5, 0, 0, Math.PI * 2);
+        cx.fill();
+        cx.restore();
+      }
+      cx.globalAlpha = 1;
+
+      // rising particles
+      for (const p of particles) {
+        const t01 = ((tt + p.phase) / p.speed) % 1;
+        const y = h - t01 * h * 0.9;
+        const x = p.x + t01 * p.drift;
+        const a = p.tier === 0
+          ? (1 - t01) * 0.9
+          : p.tier === 1
+            ? (t01 < 0.3 ? 0.75 : 0.55 * (1 - t01))
+            : (t01 < 0.4 ? 0.6 : 0.4 * (1 - t01));
+        cx.globalAlpha = Math.max(0, a);
+        cx.fillStyle = p.color;
+        cx.beginPath();
+        cx.arc(x, y, p.size, 0, Math.PI * 2);
+        cx.fill();
+        const gg = cx.createRadialGradient(x, y, 0, x, y, p.size * 5);
+        gg.addColorStop(0, p.color);
+        gg.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.globalAlpha = Math.max(0, a * 0.4);
+        cx.fillStyle = gg;
+        cx.beginPath();
+        cx.arc(x, y, p.size * 5, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── RetroArcade: pixel-art arcade game elements ── */
+function RetroArcadeBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Invader { x: number; y: number; type: number; color: string; cycle: number; phase: number; }
+    interface Ghost { x: number; y: number; color: string; speed: number; dir: number; phase: number; }
+    interface Tet { x: number; y: number; shape: number[][]; color: string; speed: number; rot: number; phase: number; }
+    interface Laser { x: number; y: number; color: string; speed: number; phase: number; cycle: number; }
+    interface Pac { x: number; y: number; }
+    interface Coin { x: number; y: number; speed: number; phase: number; spin: number; }
+    interface Snake { x: number; y: number; }
+    let invaders: Invader[] = [];
+    let ghosts: Ghost[] = [];
+    let tetrominoes: Tet[] = [];
+    let lasers: Laser[] = [];
+    let coins: Coin[] = [];
+    let snake: Snake[] = [];
+    let pacX = -20;
+    let stars: { x: number; y: number; size: number; color: string; phase: number; speed: number }[] = [];
+
+    // Space Invader patterns (8x7 pixel grids)
+    const invaderPixels: [number, number][][] = [
+      // crab
+      [[2,0],[5,0],[0,1],[2,1],[3,1],[4,1],[5,1],[7,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[7,2],[0,3],[1,3],[3,3],[4,3],[6,3],[7,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[7,4],[1,5],[2,5],[5,5],[6,5],[0,6],[2,6],[5,6],[7,6]],
+      // squid
+      [[3,0],[0,1],[2,1],[3,1],[4,1],[6,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[1,4],[2,4],[4,4],[5,4],[0,5],[1,5],[5,5],[6,5],[1,6],[5,6]],
+      // octo
+      [[3,0],[1,1],[3,1],[5,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[0,3],[2,3],[4,3],[6,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[2,5],[4,5],[0,6],[1,6],[5,6],[6,6]],
+    ];
+
+    // Tetris shapes
+    const tetrisShapes: number[][][] = [
+      [[1,1,1,1]],
+      [[1,1],[1,1]],
+      [[0,1,0],[1,1,1]],
+      [[1,0],[1,0],[1,1]],
+      [[0,1],[0,1],[1,1]],
+      [[1,1,0],[0,1,1]],
+      [[0,1,1],[1,1,0]],
+    ];
+    const tetrisColors = ['#00ffff', '#ffff00', '#ff00ff', '#00ff00', '#ff6600', '#ff0000', '#0088ff'];
+    const ghostColors = ['#ff0000', '#ffb8ff', '#00ffff', '#ffb852'];
+
+    function build(w: number, h: number) {
+      const r = seededRand(801);
+      invaders = Array.from({ length: 12 }, (_, i) => ({
+        x: (3 + (i % 6) * 16) / 100 * w + r() * 8,
+        y: (4 + Math.floor(i / 6) * 12) / 100 * h + r() * 5,
+        type: i % 3,
+        color: i % 3 === 0 ? '#00ff88' : i % 3 === 1 ? '#ff00ff' : '#00ffff',
+        cycle: 3.5 + r() * 3,
+        phase: r() * 5,
+      }));
+      const rg = seededRand(802);
+      ghosts = Array.from({ length: 4 }, (_, i) => ({
+        x: (5 + rg() * 85) / 100 * w,
+        y: (45 + rg() * 40) / 100 * h,
+        color: ghostColors[i],
+        speed: 14 + rg() * 12,
+        dir: rg() > 0.5 ? 1 : -1,
+        phase: rg() * 10,
+      }));
+      const rt = seededRand(806);
+      tetrominoes = Array.from({ length: 12 }, () => {
+        const si = Math.floor(rt() * tetrisShapes.length);
+        return {
+          x: rt() * w * 0.92,
+          y: -50,
+          shape: tetrisShapes[si],
+          color: tetrisColors[Math.floor(rt() * tetrisColors.length)],
+          speed: 10 + rt() * 18,
+          rot: Math.floor(rt() * 4) * Math.PI / 2,
+          phase: rt() * 22,
+        };
+      });
+      const rl = seededRand(807);
+      lasers = Array.from({ length: 10 }, () => ({
+        x: (8 + rl() * 84) / 100 * w, y: h,
+        color: rl() < 0.5 ? '#00ff88' : '#ff4444',
+        speed: 100 + rl() * 100,
+        phase: rl() * 14,
+        cycle: 0.5 + rl() * 0.7,
+      }));
+      const rc = seededRand(803);
+      coins = Array.from({ length: 15 }, () => ({
+        x: rc() * w, y: -20,
+        speed: 30 + rc() * 40,
+        phase: rc() * 18,
+        spin: rc() * Math.PI * 2,
+      }));
+      // snake segments
+      snake = [];
+      let sx = w * 0.1, sy = h * 0.4;
+      for (let i = 0; i < 12; i++) {
+        snake.push({ x: sx, y: sy });
+        if (i % 3 === 0) sx += 14;
+        else sy += 12;
+      }
+      const rs = seededRand(800);
+      stars = Array.from({ length: 50 }, () => ({
+        x: rs() * w, y: rs() * h,
+        size: 0.5 + rs() * 1.5,
+        color: rs() < 0.3 ? '#ff88ff' : rs() < 0.6 ? '#88ffff' : '#ffffff',
+        phase: rs() * Math.PI * 2,
+        speed: 0.5 + rs() * 2,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function drawInvader(x: number, y: number, type: number, color: string, scale: number) {
+      const p = 4 * scale;
+      cx.fillStyle = color;
+      cx.globalAlpha = 0.7;
+      for (const [px, py] of invaderPixels[type]) {
+        cx.fillRect(x + px * p, y + py * p, p, p);
+      }
+      cx.globalAlpha = 1;
+    }
+
+    function drawGhost(x: number, y: number, color: string, dir: number) {
+      const sc = 1.8;
+      cx.fillStyle = color;
+      cx.globalAlpha = 0.6;
+      // body
+      cx.beginPath();
+      cx.moveTo(x + 1 * sc, y + 14 * sc);
+      cx.lineTo(x + 1 * sc, y + 5 * sc);
+      cx.quadraticCurveTo(x + 1 * sc, y + 1 * sc, x + 7 * sc, y + 1 * sc);
+      cx.quadraticCurveTo(x + 13 * sc, y + 1 * sc, x + 13 * sc, y + 5 * sc);
+      cx.lineTo(x + 13 * sc, y + 14 * sc);
+      cx.lineTo(x + 11 * sc, y + 12 * sc);
+      cx.lineTo(x + 9 * sc, y + 14 * sc);
+      cx.lineTo(x + 7 * sc, y + 12 * sc);
+      cx.lineTo(x + 5 * sc, y + 14 * sc);
+      cx.lineTo(x + 3 * sc, y + 12 * sc);
+      cx.closePath();
+      cx.fill();
+      cx.globalAlpha = 1;
+      // eyes
+      cx.fillStyle = '#ffffff';
+      cx.fillRect(x + 3 * sc, y + 5 * sc, 3 * sc, 3 * sc);
+      cx.fillRect(x + 8 * sc, y + 5 * sc, 3 * sc, 3 * sc);
+      // pupils
+      cx.fillStyle = '#111111';
+      const px = dir > 0 ? 1 : 0;
+      cx.fillRect(x + (3 + px) * sc + 0.5, y + 6 * sc + 0.5, 1.5 * sc, 1.5 * sc);
+      cx.fillRect(x + (8 + px) * sc + 0.5, y + 6 * sc + 0.5, 1.5 * sc, 1.5 * sc);
+    }
+
+    function drawTetromino(x: number, y: number, shape: number[][], color: string, rot: number) {
+      const size = 7;
+      cx.save();
+      cx.translate(x + shape[0].length * size / 2, y + shape.length * size / 2);
+      cx.rotate(rot);
+      cx.translate(-shape[0].length * size / 2, -shape.length * size / 2);
+      cx.fillStyle = color;
+      cx.strokeStyle = color;
+      cx.globalAlpha = 0.5;
+      for (let r = 0; r < shape.length; r++) {
+        for (let cc = 0; cc < shape[r].length; cc++) {
+          if (shape[r][cc]) {
+            cx.fillRect(cc * size + 1, r * size + 1, size - 2, size - 2);
+            cx.lineWidth = 1;
+            cx.strokeRect(cc * size + 0.5, r * size + 0.5, size - 1, size - 1);
+          }
+        }
+      }
+      cx.globalAlpha = 1;
+      cx.restore();
+    }
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // deep space background
+      const bg = cx.createRadialGradient(w / 2, h * 0.4, 0, w / 2, h * 0.4, w * 0.6);
+      bg.addColorStop(0, 'rgba(20,8,50,0.45)');
+      bg.addColorStop(0.5, 'rgba(4,4,16,0.2)');
+      bg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = bg;
+      cx.beginPath();
+      cx.arc(w / 2, h * 0.4, w * 0.6, 0, Math.PI * 2);
+      cx.fill();
+
+      // ambient neon glow clouds
+      const ng = (x: number, y: number, rad: number, color: string) => {
+        const g = cx.createRadialGradient(x, y, 0, x, y, rad);
+        g.addColorStop(0, color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        cx.fillStyle = g;
+        cx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      };
+      const glow = 1 + Math.sin(tt * 0.5) * 0.15;
+      ng(w * 0.18, h * 0.2, w * 0.15 * glow, 'rgba(255,0,255,0.1)');
+      ng(w * 0.85, h * 0.4, w * 0.18 * glow, 'rgba(0,255,255,0.08)');
+      ng(w * 0.45, h * 0.7, w * 0.13 * glow, 'rgba(0,255,136,0.08)');
+
+      // stars
+      for (const s of stars) {
+        const op = 0.3 + 0.5 * Math.sin(tt * s.speed + s.phase);
+        cx.globalAlpha = Math.max(0, op);
+        cx.fillStyle = s.color;
+        cx.fillRect(s.x, s.y, s.size, s.size);
+      }
+      cx.globalAlpha = 1;
+
+      // pixel grid overlay (subtle)
+      cx.strokeStyle = 'rgba(0,255,100,0.04)';
+      cx.lineWidth = 1;
+      for (let x = 0; x < w; x += 24) {
+        cx.beginPath();
+        cx.moveTo(x, 0);
+        cx.lineTo(x, h);
+        cx.stroke();
+      }
+      for (let y = 0; y < h; y += 24) {
+        cx.beginPath();
+        cx.moveTo(0, y);
+        cx.lineTo(w, y);
+        cx.stroke();
+      }
+
+      // space invaders - march in formation
+      for (const inv of invaders) {
+        const t01 = ((tt + inv.phase) % inv.cycle) / inv.cycle;
+        const xoff = Math.sin(t01 * Math.PI * 2) * 8;
+        drawInvader(inv.x + xoff, inv.y, inv.type, inv.color, 1);
+      }
+
+      // pac-man chomping across
+      pacX = ((tt * 0.08) % 1.1) * w - w * 0.05;
+      const pacY = h * 0.68;
+      const chomp = Math.abs(Math.sin(tt * 8));
+      cx.fillStyle = '#ffff00';
+      cx.globalAlpha = 0.85;
+      cx.beginPath();
+      const mouthAngle = chomp * 0.5;
+      cx.arc(pacX, pacY, 12, mouthAngle, Math.PI * 2 - mouthAngle);
+      cx.lineTo(pacX, pacY);
+      cx.fill();
+      cx.globalAlpha = 1;
+      // dot trail
+      cx.fillStyle = '#ffff00';
+      cx.globalAlpha = 0.3;
+      for (let i = 0; i < 25; i++) {
+        const dx = i * (w / 25);
+        if (dx > pacX + 20) cx.fillRect(dx - 1.5, pacY - 1.5, 3, 3);
+      }
+      cx.globalAlpha = 1;
+
+      // ghosts
+      for (const g of ghosts) {
+        const t01 = ((tt + g.phase) % g.speed) / g.speed;
+        const x = g.x + g.dir * t01 * 200;
+        const op = t01 < 0.06 ? t01 / 0.06 : t01 > 0.94 ? (1 - t01) / 0.06 : 0.55;
+        cx.globalAlpha = Math.max(0, op);
+        drawGhost(x, g.y, g.color, g.dir);
+      }
+      cx.globalAlpha = 1;
+
+      // tetris pieces falling
+      for (const t of tetrominoes) {
+        const t01 = ((tt + t.phase) / t.speed) % 1;
+        const y = -50 + t01 * (h + 100);
+        const op = t01 < 0.05 ? t01 / 0.05 * 0.4 : t01 > 0.95 ? (1 - t01) / 0.05 * 0.4 : 0.4;
+        cx.globalAlpha = Math.max(0, op);
+        drawTetromino(t.x, y, t.shape, t.color, t.rot);
+      }
+      cx.globalAlpha = 1;
+
+      // snake
+      cx.fillStyle = '#88ff00';
+      for (let i = 0; i < snake.length; i++) {
+        const seg = snake[i];
+        const x = seg.x + Math.sin(tt * 0.4) * 30;
+        const y = seg.y + Math.cos(tt * 0.3) * 15;
+        cx.globalAlpha = 0.4 - i * 0.02;
+        cx.fillRect(x, y, 8, 8);
+      }
+      cx.globalAlpha = 1;
+      // apple
+      cx.fillStyle = '#ff0040';
+      cx.globalAlpha = 0.5;
+      const ax = snake[0].x + 80 + Math.sin(tt * 0.4) * 30;
+      const ay = snake[0].y + Math.cos(tt * 0.3) * 15;
+      cx.beginPath();
+      cx.arc(ax, ay, 4, 0, Math.PI * 2);
+      cx.fill();
+      cx.globalAlpha = 1;
+
+      // pong paddles + ball
+      const pongY = h * 0.45;
+      const paddleH = 50;
+      const paddleW = 6;
+      const ballX = w * 0.5 + Math.sin(tt * 1.5) * w * 0.3;
+      const ballY = pongY + paddleH / 2 + Math.sin(tt * 4) * 8;
+      // paddles track ball with lag
+      const leftPY = ballY - paddleH / 2 + Math.sin(tt * 1.4) * 12;
+      const rightPY = ballY - paddleH / 2 + Math.sin(tt * 1.4 + 0.5) * 10;
+      cx.fillStyle = '#ffffff';
+      cx.globalAlpha = 0.3;
+      cx.fillRect(w * 0.02, leftPY, paddleW, paddleH);
+      cx.fillRect(w * 0.96, rightPY, paddleW, paddleH);
+      // ball
+      cx.fillRect(ballX, ballY, 6, 6);
+      // center line dotted
+      cx.globalAlpha = 0.1;
+      for (let yy = 0; yy < h; yy += 18) {
+        cx.fillRect(w / 2 - 1, yy, 2, 8);
+      }
+      cx.globalAlpha = 1;
+
+      // laser shots rising from bottom
+      for (const l of lasers) {
+        const t01 = ((tt + l.phase) / l.cycle) % 1;
+        const y = h - t01 * h;
+        const op = t01 < 0.05 ? t01 / 0.05 * 0.6 : t01 > 0.95 ? (1 - t01) / 0.05 * 0.4 : 0.6;
+        cx.fillStyle = l.color;
+        cx.globalAlpha = Math.max(0, op);
+        cx.fillRect(l.x - 1, y, 2, 14);
+      }
+      cx.globalAlpha = 1;
+
+      // falling coins
+      for (const co of coins) {
+        const t01 = ((tt + co.phase) / co.speed) % 1;
+        const y = -20 + t01 * (h + 40);
+        const op = t01 < 0.05 ? t01 / 0.05 * 0.35 : t01 > 0.95 ? (1 - t01) / 0.05 * 0.15 : 0.3;
+        const spinW = Math.abs(Math.cos(tt * 6 + co.spin)) * 6 + 1;
+        cx.fillStyle = '#ffd700';
+        cx.globalAlpha = Math.max(0, op);
+        cx.beginPath();
+        cx.ellipse(co.x, y, spinW, 5, 0, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      // CRT scanlines overlay
+      cx.fillStyle = 'rgba(0,0,0,0.15)';
+      for (let y = 0; y < h; y += 3) {
+        cx.fillRect(0, y, w, 1);
+      }
+
+      // neon border glow on edges
+      const edgeG = (x: number, y: number, ww: number, hh: number, color: string) => {
+        const g = cx.createLinearGradient(x, y, x + ww, y + hh);
+        g.addColorStop(0, color + '0)');
+        g.addColorStop(0.5, color + '0.15)');
+        g.addColorStop(1, color + '0)');
+        cx.fillStyle = g;
+        cx.fillRect(x, y, ww, hh);
+      };
+      // left edge
+      const lg = cx.createLinearGradient(0, 0, 0, h);
+      lg.addColorStop(0, 'rgba(255,0,255,0)');
+      lg.addColorStop(0.5, 'rgba(255,0,255,0.15)');
+      lg.addColorStop(1, 'rgba(0,255,255,0)');
+      cx.fillStyle = lg;
+      cx.fillRect(0, 0, 2, h);
+      const rg2 = cx.createLinearGradient(0, 0, 0, h);
+      rg2.addColorStop(0, 'rgba(0,255,255,0)');
+      rg2.addColorStop(0.5, 'rgba(0,255,255,0.15)');
+      rg2.addColorStop(1, 'rgba(255,0,255,0)');
+      cx.fillStyle = rg2;
+      cx.fillRect(w - 2, 0, 2, h);
+      const tg = cx.createLinearGradient(0, 0, w, 0);
+      tg.addColorStop(0, 'rgba(255,0,255,0)');
+      tg.addColorStop(0.5, 'rgba(255,0,255,0.1)');
+      tg.addColorStop(1, 'rgba(0,255,255,0)');
+      cx.fillStyle = tg;
+      cx.fillRect(0, 0, w, 2);
+      const bg2 = cx.createLinearGradient(0, 0, w, 0);
+      bg2.addColorStop(0, 'rgba(0,255,136,0)');
+      bg2.addColorStop(0.5, 'rgba(0,255,136,0.12)');
+      bg2.addColorStop(1, 'rgba(255,0,255,0)');
+      cx.fillStyle = bg2;
+      cx.fillRect(0, h - 2, w, 2);
+
+      // CRT vignette
+      const vg = cx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.7);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(0,0,0,0.4)');
+      cx.fillStyle = vg;
+      cx.beginPath();
+      cx.arc(w / 2, h / 2, Math.max(w, h) * 0.7, 0, Math.PI * 2);
+      cx.fill();
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Starfield simple version (full Starfield component lives in StarfieldBg.tsx) ── */
+function StarfieldSimpleBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Star { x: number; y: number; size: number; baseOp: number; phase: number; speed: number; bright: boolean; color: string; }
+    let stars: Star[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(555);
+      stars = Array.from({ length: 200 }, () => ({
+        x: r() * w, y: r() * h,
+        size: 0.4 + r() * 2.5,
+        baseOp: 0.15 + r() * 0.7,
+        phase: r() * Math.PI * 2,
+        speed: 0.5 + r() * 2.5,
+        bright: r() < 0.2,
+        color: r() < 0.3 ? '180,200,255' : r() < 0.5 ? '220,200,255' : '199,210,254',
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // nebula background
+      const n1 = cx.createRadialGradient(w * 0.25, h * 0.35, 0, w * 0.25, h * 0.35, w * 0.4);
+      n1.addColorStop(0, 'rgba(99,102,241,0.12)');
+      n1.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = n1;
+      cx.beginPath();
+      cx.arc(w * 0.25, h * 0.35, w * 0.4, 0, Math.PI * 2);
+      cx.fill();
+      const n2 = cx.createRadialGradient(w * 0.75, h * 0.65, 0, w * 0.75, h * 0.65, w * 0.35);
+      n2.addColorStop(0, 'rgba(139,92,246,0.1)');
+      n2.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = n2;
+      cx.beginPath();
+      cx.arc(w * 0.75, h * 0.65, w * 0.35, 0, Math.PI * 2);
+      cx.fill();
+
+      // stars
+      for (const s of stars) {
+        const op = s.baseOp * (0.4 + 0.6 * Math.sin(tt * s.speed + s.phase));
+        cx.globalAlpha = Math.max(0, op);
+        if (s.bright) {
+          const grd = cx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.size * 4);
+          grd.addColorStop(0, `rgba(${s.color},${op})`);
+          grd.addColorStop(1, 'rgba(0,0,0,0)');
+          cx.fillStyle = grd;
+          cx.beginPath();
+          cx.arc(s.x, s.y, s.size * 4, 0, Math.PI * 2);
+          cx.fill();
+        }
+        cx.fillStyle = `rgb(${s.color})`;
+        cx.beginPath();
+        cx.arc(s.x, s.y, s.size / 2, 0, Math.PI * 2);
+        cx.fill();
+      }
+      cx.globalAlpha = 1;
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
+}
+
+/* ── Light: soft sunlit floating motes + rays ── */
 function LightBg() {
-  const motes = useMemo(() => {
-    const rand = seededRand(888);
-    return Array.from({ length: 30 }, () => ({
-      x: rand() * 100, y: rand() * 100,
-      size: 1 + rand() * 3,
-      dur: 8 + rand() * 15,
-      delay: rand() * 12,
-    }));
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
+
+    interface Mote { x: number; y: number; size: number; phase: number; speed: number; }
+    let motes: Mote[] = [];
+
+    function build(w: number, h: number) {
+      const r = seededRand(888);
+      motes = Array.from({ length: 30 }, () => ({
+        x: r() * w, y: r() * h,
+        size: 1 + r() * 3,
+        phase: r() * Math.PI * 2,
+        speed: 0.3 + r() * 0.5,
+      }));
+    }
+
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+      build(c.width, c.height);
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
+
+      // warm sun glow
+      const sg = cx.createRadialGradient(w / 2, 0, 0, w / 2, 0, h * 0.7);
+      sg.addColorStop(0, 'rgba(250,204,21,0.08)');
+      sg.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = sg;
+      cx.beginPath();
+      cx.arc(w / 2, 0, h * 0.7, 0, Math.PI * 2);
+      cx.fill();
+
+      // soft sunbeams
+      for (let i = 0; i < 7; i++) {
+        const x = (20 + i * 10) / 100 * w;
+        const angle = (-12 + i * 4) * Math.PI / 180;
+        const op = 0.6 + 0.4 * Math.sin(tt * 0.4 + i);
+        cx.save();
+        cx.translate(x, 0);
+        cx.rotate(angle);
+        const rg = cx.createLinearGradient(0, 0, 0, h);
+        rg.addColorStop(0, `rgba(250,204,21,${0.04 * op})`);
+        rg.addColorStop(0.7, 'rgba(0,0,0,0)');
+        cx.fillStyle = rg;
+        cx.fillRect(-3, 0, 6, h);
+        cx.restore();
+      }
+
+      // orb in upper-left
+      const orbS = 1 + Math.sin(tt * 0.3) * 0.15;
+      const og = cx.createRadialGradient(w * 0.3, 0, 0, w * 0.3, 0, w * 0.25 * orbS);
+      og.addColorStop(0, 'rgba(251,191,36,0.12)');
+      og.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = og;
+      cx.beginPath();
+      cx.arc(w * 0.3, 0, w * 0.25 * orbS, 0, Math.PI * 2);
+      cx.fill();
+
+      // floating motes
+      for (const m of motes) {
+        const y = m.y + Math.sin(tt * m.speed + m.phase) * 15;
+        const op = 0.2 + 0.3 * Math.sin(tt * m.speed * 0.5 + m.phase);
+        cx.fillStyle = `rgba(251,191,36,${op * 0.5})`;
+        cx.beginPath();
+        cx.arc(m.x, y, m.size, 0, Math.PI * 2);
+        cx.fill();
+      }
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, []);
 
-  return (
-    <Shell>
-      <div className="absolute inset-0" style={{
-        background: 'radial-gradient(ellipse at 50% 0%, rgba(250,204,21,0.08) 0%, transparent 60%)',
-      }} />
-
-      {Array.from({ length: 7 }).map((_, i) => (
-        <div key={`ray${i}`} className="absolute" style={{
-          top: 0, left: `${20 + i * 10}%`,
-          width: `${3 + (i % 3)}px`, height: '100%',
-          background: `linear-gradient(to bottom, rgba(250,204,21,${0.04 + (i % 3) * 0.015}), transparent 70%)`,
-          transform: `rotate(${-12 + i * 4}deg)`,
-          transformOrigin: 'top center',
-          animation: `lt-ray ${8 + i * 2}s ease-in-out ${i * 1.5}s infinite`,
-        }} />
-      ))}
-
-      <div className="absolute w-[min(400px,40vw)] h-[min(400px,40vh)] -top-[10%] left-[20%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.1), transparent 55%)', filter: 'blur(50px)', animation: 'lt-orb1 20s ease-in-out infinite' }} />
-
-      <svg className="absolute inset-0 w-full h-full">
-        {motes.map((m, i) => (
-          <circle key={`m${i}`} cx={`${m.x}%`} cy={`${m.y}%`} r={m.size}
-            fill="rgba(251,191,36,0.3)" opacity="0.3"
-            style={{ animation: `lt-mote ${m.dur}s ease-in-out ${m.delay}s infinite`, filter: 'blur(0.5px)' }} />
-        ))}
-      </svg>
-
-      <style>{`
-        @keyframes lt-ray { 0%,100%{opacity:0.6;transform:rotate(var(--lt-r,0deg)) scaleX(1)} 50%{opacity:1;transform:rotate(var(--lt-r,0deg)) scaleX(1.3)} }
-        @keyframes lt-orb1 { 0%,100%{transform:scale(1);opacity:0.7} 50%{transform:scale(1.2);opacity:1} }
-        @keyframes lt-mote { 0%{opacity:0.1;transform:translateY(0)} 50%{opacity:0.5;transform:translateY(-15px)} 100%{opacity:0.1;transform:translateY(0)} }
-      `}</style>
-    </Shell>
-  );
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
 }
 
-/* ── Custom: Subtle grid workshop with tool-inspired accents ── */
+/* ── Custom: subtle grid workshop ── */
 function CustomBg() {
-  return (
-    <Shell>
-      <div className="absolute inset-0" style={{
-        background: `
-          linear-gradient(rgba(129,140,248,0.025) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(129,140,248,0.025) 1px, transparent 1px)`,
-        backgroundSize: '40px 40px',
-        maskImage: 'linear-gradient(to bottom, transparent 5%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0.5) 70%, transparent 95%)',
-        WebkitMaskImage: 'linear-gradient(to bottom, transparent 5%, rgba(0,0,0,0.5) 30%, rgba(0,0,0,0.5) 70%, transparent 95%)',
-      }} />
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const c = canvas;
+    const cx = ctx;
+    let raf: number;
 
-      <div className="absolute w-[min(350px,35vw)] h-[min(350px,35vh)] top-[20%] left-[10%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(74,222,128,0.06), transparent 55%)', filter: 'blur(40px)', animation: 'cu-glow 18s ease-in-out infinite' }} />
-      <div className="absolute w-[min(300px,30vw)] h-[min(300px,30vh)] bottom-[15%] right-[15%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.06), transparent 55%)', filter: 'blur(35px)', animation: 'cu-glow 14s ease-in-out 4s infinite' }} />
+    function resize() {
+      c.width = c.offsetWidth;
+      c.height = c.offsetHeight;
+    }
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
 
-      <svg className="absolute inset-0 w-full h-full">
-        {[{x:15,y:25,r:18},{x:82,y:70,r:22},{x:50,y:85,r:15}].map((g, i) => (
-          <circle key={`g${i}`} cx={`${g.x}%`} cy={`${g.y}%`} r={g.r}
-            fill="none" stroke="rgba(129,140,248,0.06)" strokeWidth="1"
-            strokeDasharray="4 6"
-            style={{ animation: `cu-spin ${20 + i * 5}s linear infinite` }} />
-        ))}
-      </svg>
+    function draw(ms: number) {
+      const w = c.width, h = c.height;
+      const tt = ms / 1000;
+      cx.clearRect(0, 0, w, h);
 
-      <style>{`
-        @keyframes cu-glow { 0%,100%{transform:scale(1);opacity:0.6} 50%{transform:scale(1.15);opacity:1} }
-        @keyframes cu-spin { 0%{stroke-dashoffset:0} 100%{stroke-dashoffset:100} }
-      `}</style>
-    </Shell>
-  );
+      // subtle grid
+      cx.strokeStyle = 'rgba(129,140,248,0.04)';
+      cx.lineWidth = 1;
+      for (let x = 0; x < w; x += 40) {
+        cx.beginPath();
+        cx.moveTo(x, h * 0.05);
+        cx.lineTo(x, h * 0.95);
+        cx.stroke();
+      }
+      for (let y = 0; y < h; y += 40) {
+        cx.beginPath();
+        cx.moveTo(0, y);
+        cx.lineTo(w, y);
+        cx.stroke();
+      }
+
+      // pulsing glows
+      const glow1 = 1 + Math.sin(tt * 0.4) * 0.15;
+      const g1 = cx.createRadialGradient(w * 0.25, h * 0.35, 0, w * 0.25, h * 0.35, w * 0.2 * glow1);
+      g1.addColorStop(0, 'rgba(74,222,128,0.08)');
+      g1.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = g1;
+      cx.beginPath();
+      cx.arc(w * 0.25, h * 0.35, w * 0.2 * glow1, 0, Math.PI * 2);
+      cx.fill();
+      const glow2 = 1 + Math.sin(tt * 0.5 + 1) * 0.15;
+      const g2 = cx.createRadialGradient(w * 0.8, h * 0.7, 0, w * 0.8, h * 0.7, w * 0.18 * glow2);
+      g2.addColorStop(0, 'rgba(129,140,248,0.08)');
+      g2.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = g2;
+      cx.beginPath();
+      cx.arc(w * 0.8, h * 0.7, w * 0.18 * glow2, 0, Math.PI * 2);
+      cx.fill();
+
+      // spinning dashed circles
+      const circles = [{ x: 0.15, y: 0.25, r: 70 }, { x: 0.82, y: 0.7, r: 90 }, { x: 0.5, y: 0.85, r: 60 }];
+      cx.strokeStyle = 'rgba(129,140,248,0.08)';
+      cx.lineWidth = 1;
+      for (let i = 0; i < circles.length; i++) {
+        const cir = circles[i];
+        cx.save();
+        cx.translate(cir.x * w, cir.y * h);
+        cx.rotate(tt * 0.1 * (i + 1));
+        cx.setLineDash([4, 6]);
+        cx.beginPath();
+        cx.arc(0, 0, cir.r, 0, Math.PI * 2);
+        cx.stroke();
+        cx.restore();
+      }
+      cx.setLineDash([]);
+
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, []);
+
+  return <canvas ref={canvasRef} className={CANVAS_CLS} style={CANVAS_STYLE} aria-hidden="true" />;
 }

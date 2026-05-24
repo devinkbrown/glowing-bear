@@ -15,6 +15,7 @@ import HelpModal from '@/components/modals/HelpModal';
 import AboutModal from '@/components/modals/AboutModal';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
+import TitleBar from '@/components/layout/TitleBar';
 import MessageView from '@/components/chat/MessageView';
 import TypingIndicator from '@/components/chat/TypingIndicator';
 import InputBar from '@/components/input/InputBar';
@@ -167,7 +168,7 @@ export default function ClientApp() {
 
   return (
     <ErrorBoundary>
-      <div className={`relative flex h-[var(--vh,100dvh)] overflow-hidden ${hasThemedBg ? '' : 'bg-gray-950'}`}
+      <div className={`relative flex flex-col h-[var(--vh,100dvh)] overflow-hidden ${hasThemedBg ? '' : 'bg-gray-950'}`}
         style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {/* Theme backgrounds — rendered first, absolute so content layers on top */}
         {settings.theme === 'starfield' && !settings.bgImage && <StarfieldBg />}
@@ -182,6 +183,12 @@ export default function ClientApp() {
               filter: settings.bgBlur ? `blur(${settings.bgBlur}px)` : undefined,
             }} />
         )}
+
+        {/* Custom titlebar — full width, above sidebar + content */}
+        <TitleBar />
+
+        {/* Body row: sidebar + main content */}
+        <div className="flex flex-1 min-h-0 overflow-hidden relative">
 
         {/* Sidebar */}
         {(sidebarOpen || !isMobile) && (
@@ -250,6 +257,7 @@ export default function ClientApp() {
         <VideoRoom />
         <CallNotification />
 
+        </div>{/* end body row */}
       </div>
     </ErrorBoundary>
   );

@@ -4,7 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'DarkBear',
   description: 'DarkBear IRC client with Ophion LADON media controls',
-  manifest: '/darkbear/manifest.json',
+  manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="apple-touch-icon" href="/darkbear/favicon.svg" />
+        <link rel="apple-touch-icon" href="/favicon.svg" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta httpEquiv="cache-control" content="no-cache, no-store, must-revalidate" />
         <meta httpEquiv="pragma" content="no-cache" />
@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var v='2026-05-17-051919-darkbear-edc3d9a';var k='darkbear_asset_version';if(localStorage.getItem(k)!==v){localStorage.setItem(k,v);if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister()})})}if(window.location.pathname.indexOf('/darkbear')===0&&performance.navigation&&performance.navigation.type!==1){setTimeout(function(){window.location.reload()},50)}}}catch(e){}})()`,
+            __html: `(function(){try{var v='2026-05-17-051919-darkbear-edc3d9a';var k='darkbear_asset_version';if(localStorage.getItem(k)!==v){localStorage.setItem(k,v);if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister()})})}}}catch(e){}})()`,
           }}
         />
       </head>

@@ -1,323 +1,154 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useRef } from 'react';
+
+interface Star {
+  x: number; y: number; size: number;
+  r: number; g: number; b: number;
+  baseOpacity: number; opacity: number;
+  twinkleSpeed: number; twinkleOffset: number;
+  glow: boolean;
+}
 
 function seededRand(seed: number) {
   let s = seed;
-  return () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; };
+  return () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
 }
 
-export default function StarfieldBg() {
-  const stars = useMemo(() => {
-    const rand = seededRand(7);
-    return Array.from({ length: 280 }, () => {
-      const r = rand();
-      const tier = r < 0.55 ? 0 : r < 0.82 ? 1 : r < 0.94 ? 2 : 3;
-      const size = tier === 0 ? 0.4 + rand() * 0.8
-        : tier === 1 ? 1.2 + rand() * 1
-        : tier === 2 ? 2.2 + rand() * 1
-        : 3.2 + rand() * 0.8;
-      const hueRoll = rand();
-      const color = hueRoll < 0.45 ? '#e8eeff'
-        : hueRoll < 0.65 ? '#a0b4ff'
-        : hueRoll < 0.8 ? '#ffd6aa'
-        : hueRoll < 0.92 ? '#c8a0ff'
-        : '#ffe0e0';
-      return {
-        x: rand() * 100, y: rand() * 100, size, color,
-        opacity: tier === 3 ? 0.6 + rand() * 0.35 : tier === 2 ? 0.4 + rand() * 0.4 : 0.1 + rand() * 0.5,
-        delay: rand() * 12,
-        dur: tier === 3 ? 1.5 + rand() * 2.5 : 2 + rand() * 5,
-        glow: tier >= 2 ? `0 0 ${size * 4}px ${color}${tier === 3 ? '88' : '55'}` : undefined,
-      };
-    });
-  }, []);
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
 
-  const milkyWayStars = useMemo(() => {
-    const rand = seededRand(314);
-    return Array.from({ length: 200 }, () => {
-      const t = rand();
-      const cx = 20 + t * 60;
-      const cy = 35 + t * 30;
-      const spread = 8 + rand() * 12;
-      return {
-        x: cx + (rand() - 0.5) * spread * 2,
-        y: cy + (rand() - 0.5) * spread,
-        size: 0.3 + rand() * 0.8,
-        opacity: 0.08 + rand() * 0.25,
-        dur: 3 + rand() * 5,
-        delay: rand() * 10,
+const COLORS = ['#e8eeff', '#a0b4ff', '#ffd6aa', '#c8a0ff', '#ffe0e0'];
+
+export default function StarfieldBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    // Capture non-null references for closures
+    const c = canvas;
+    const cx2d = ctx;
+
+    let raf: number;
+    let stars: Star[] = [];
+
+    const rand = seededRand(7);
+
+    function buildStars(w: number, h: number) {
+      stars = Array.from({ length: 320 }, () => {
+        const r = rand();
+        const tier = r < 0.55 ? 0 : r < 0.82 ? 1 : r < 0.94 ? 2 : 3;
+        const size = tier === 0 ? 0.4 + rand() * 0.8
+          : tier === 1 ? 1.2 + rand()
+          : tier === 2 ? 2.2 + rand()
+          : 3.2 + rand() * 0.8;
+        const hueRoll = rand();
+        const hex = hueRoll < 0.45 ? COLORS[0] : hueRoll < 0.65 ? COLORS[1]
+          : hueRoll < 0.8 ? COLORS[2] : hueRoll < 0.92 ? COLORS[3] : COLORS[4];
+        const [r2, g, b] = hexToRgb(hex);
+        return {
+          x: rand() * w, y: rand() * h, size,
+          r: r2, g, b,
+          baseOpacity: tier === 3 ? 0.6 + rand() * 0.35 : tier === 2 ? 0.4 + rand() * 0.4 : 0.1 + rand() * 0.5,
+          opacity: 0,
+          twinkleSpeed: tier === 3 ? 1.5 + rand() * 2.5 : 2 + rand() * 5,
+          twinkleOffset: rand() * Math.PI * 2,
+          glow: tier >= 2,
+        };
+      });
+    }
+
+    function resize() {
+      if (!canvas) return;
+      c.width = canvas.offsetWidth;
+      c.height = canvas.offsetHeight;
+      buildStars(c.width, c.height);
+    }
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(c);
+
+    function draw(t: number) {
+      const w = c.width;
+      const h = c.height;
+      cx2d.clearRect(0, 0, w, h);
+
+      // Nebula gradients
+      const drawNebula = (cx: number, cy: number, rx: number, ry: number, color: string, alpha: number) => {
+        const grd = cx2d.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry));
+        grd.addColorStop(0, color.replace(')', `, ${alpha})`).replace('rgb', 'rgba'));
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        cx2d.save();
+        cx2d.scale(rx / Math.max(rx, ry), ry / Math.max(rx, ry));
+        cx2d.fillStyle = grd;
+        cx2d.beginPath();
+        cx2d.arc(cx / (rx / Math.max(rx, ry)), cy / (ry / Math.max(rx, ry)), Math.max(rx, ry), 0, Math.PI * 2);
+        cx2d.fill();
+        cx2d.restore();
       };
-    });
+
+      // Milky way band
+      const band = cx2d.createLinearGradient(0, 0, w, h);
+      band.addColorStop(0.15, 'rgba(0,0,0,0)');
+      band.addColorStop(0.35, 'rgba(160,180,255,0.04)');
+      band.addColorStop(0.5, 'rgba(200,180,255,0.06)');
+      band.addColorStop(0.65, 'rgba(160,180,255,0.03)');
+      band.addColorStop(0.85, 'rgba(0,0,0,0)');
+      cx2d.fillStyle = band;
+      cx2d.fillRect(0, 0, w, h);
+
+      // Drifting nebulae
+      const driftA = Math.sin(t / 40000) * 50;
+      const driftB = Math.sin(t / 48000) * 40;
+
+      drawNebula(w * 0.85 + driftA, h * -0.1 + driftA * 0.5, w * 0.4, h * 0.45, 'rgb(129,140,248)', 0.12);
+      drawNebula(w * -0.1 + driftB, h * 1.1 + driftB * 0.5, w * 0.35, h * 0.4, 'rgb(192,132,252)', 0.10);
+      drawNebula(w * 0.55, h * 0.35, w * 0.18, h * 0.25, 'rgb(45,212,191)', 0.06);
+      drawNebula(w * 0.08, h * 0.12, w * 0.25, h * 0.15, 'rgb(255,180,120)', 0.05);
+
+      // Stars
+      for (const s of stars) {
+        s.opacity = s.baseOpacity * (0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t / (s.twinkleSpeed * 1000) + s.twinkleOffset)));
+        if (s.glow) {
+          const grd = cx2d.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.size * 4);
+          grd.addColorStop(0, `rgba(${s.r},${s.g},${s.b},${s.opacity})`);
+          grd.addColorStop(1, 'rgba(0,0,0,0)');
+          cx2d.fillStyle = grd;
+          cx2d.beginPath();
+          cx2d.arc(s.x, s.y, s.size * 4, 0, Math.PI * 2);
+          cx2d.fill();
+        }
+        cx2d.globalAlpha = s.opacity;
+        cx2d.fillStyle = `rgb(${s.r},${s.g},${s.b})`;
+        cx2d.beginPath();
+        cx2d.arc(s.x, s.y, s.size / 2, 0, Math.PI * 2);
+        cx2d.fill();
+      }
+      cx2d.globalAlpha = 1;
+
+      raf = requestAnimationFrame(draw);
+    }
+
+    raf = requestAnimationFrame(draw);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
   }, []);
 
   return (
-    <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-      {/* Milky Way band — diagonal haze */}
-      <div className="absolute inset-0" style={{
-        background: 'linear-gradient(135deg, transparent 15%, rgba(160,180,255,0.04) 30%, rgba(200,180,255,0.06) 45%, rgba(180,190,255,0.05) 55%, rgba(160,180,255,0.03) 70%, transparent 85%)',
-        filter: 'blur(40px)',
-      }} />
-      <div className="absolute inset-0" style={{
-        background: 'linear-gradient(135deg, transparent 20%, rgba(255,220,180,0.02) 40%, rgba(255,200,160,0.03) 50%, rgba(255,220,180,0.02) 60%, transparent 80%)',
-        filter: 'blur(60px)',
-      }} />
-
-      {/* Dense Milky Way star cluster */}
-      {milkyWayStars.map((s, i) => (
-        <div key={`mw${i}`} className="absolute rounded-full bg-white"
-          style={{
-            left: `${s.x}%`, top: `${s.y}%`,
-            width: `${s.size}px`, height: `${s.size}px`,
-            opacity: s.opacity,
-            animation: `sf-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
-          }} />
-      ))}
-
-      {/* Main star field with slow drift */}
-      <div className="absolute inset-0" style={{ animation: 'sf-field-drift 180s linear infinite' }}>
-        {stars.map((s, i) => (
-          <div key={i} className="absolute rounded-full"
-            style={{
-              left: `${s.x}%`, top: `${s.y}%`,
-              width: `${s.size}px`, height: `${s.size}px`,
-              background: s.color, opacity: s.opacity,
-              boxShadow: s.glow,
-              animation: `sf-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
-            }} />
-        ))}
-      </div>
-
-      {/* Nebula clouds — vivid, large */}
-      <div className="absolute w-[800px] h-[800px] sm:w-[1200px] sm:h-[1200px] -top-[300px] -right-[250px] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.14) 0%, rgba(129,140,248,0.04) 35%, transparent 55%)', animation: 'sf-drift-a 40s ease-in-out infinite', filter: 'blur(20px)' }} />
-      <div className="absolute w-[700px] h-[700px] sm:w-[1000px] sm:h-[1000px] -bottom-[350px] -left-[250px] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(192,132,252,0.12) 0%, rgba(192,132,252,0.03) 35%, transparent 55%)', animation: 'sf-drift-b 48s ease-in-out infinite', filter: 'blur(20px)' }} />
-      <div className="absolute w-[500px] h-[500px] top-[25%] left-[50%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(45,212,191,0.08) 0%, transparent 50%)', animation: 'sf-drift-c 35s ease-in-out infinite', filter: 'blur(15px)' }} />
-      {/* Warm nebula wisp */}
-      <div className="absolute w-[600px] h-[300px] top-[10%] left-[5%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(255,180,120,0.06) 0%, transparent 55%)', transform: 'rotate(-25deg)', animation: 'sf-drift-c 55s ease-in-out infinite', filter: 'blur(25px)' }} />
-      <div className="absolute w-[500px] h-[250px] bottom-[12%] right-[3%] rounded-full"
-        style={{ background: 'radial-gradient(ellipse, rgba(192,132,252,0.07) 0%, transparent 55%)', transform: 'rotate(18deg)', animation: 'sf-drift-a 50s ease-in-out infinite', filter: 'blur(25px)' }} />
-      {/* Deep rose cloud */}
-      <div className="absolute w-[400px] h-[400px] top-[50%] left-[25%] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(255,120,150,0.05) 0%, transparent 50%)', animation: 'sf-drift-b 42s ease-in-out infinite', filter: 'blur(20px)' }} />
-
-      {/* Galaxy 1 — spiral with arms */}
-      <div className="absolute" style={{ top: '15%', right: '10%', width: '120px', height: '120px', animation: 'sf-galaxy-spin 100s linear infinite' }}>
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(200,210,255,0.25) 0%, rgba(129,140,248,0.08) 30%, transparent 55%)' }} />
-        <svg className="absolute inset-0" viewBox="0 0 120 120" style={{ opacity: 0.15 }}>
-          <path d="M60 60 Q75 45 82 30 Q87 18 78 14 Q69 12 63 27 Q58 42 60 60" fill="rgba(200,210,255,0.6)" />
-          <path d="M60 60 Q45 75 38 90 Q33 102 42 106 Q51 108 57 93 Q62 78 60 60" fill="rgba(200,210,255,0.6)" />
-          <path d="M60 60 Q75 72 87 78 Q99 82 102 72 Q102 62 87 60 Q72 58 60 60" fill="rgba(180,190,255,0.5)" />
-          <path d="M60 60 Q45 48 33 42 Q21 38 18 48 Q18 58 33 60 Q48 62 60 60" fill="rgba(180,190,255,0.5)" />
-        </svg>
-        <div className="absolute rounded-full" style={{ top: '40%', left: '40%', width: '20%', height: '20%', background: 'radial-gradient(circle, rgba(255,255,255,0.4) 0%, rgba(200,210,255,0.1) 60%, transparent 100%)', boxShadow: '0 0 15px rgba(200,210,255,0.2)' }} />
-      </div>
-
-      {/* Galaxy 2 — smaller, purple tint */}
-      <div className="absolute" style={{ bottom: '22%', left: '6%', width: '75px', height: '75px', animation: 'sf-galaxy-spin 80s linear infinite reverse' }}>
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(192,132,252,0.2) 0%, rgba(192,132,252,0.06) 30%, transparent 55%)' }} />
-        <svg className="absolute inset-0" viewBox="0 0 75 75" style={{ opacity: 0.12 }}>
-          <path d="M37.5 37.5 Q50 28 53 18 Q55 10 49 9 Q43 9 40 18 Q37 28 37.5 37.5" fill="rgba(220,180,255,0.6)" />
-          <path d="M37.5 37.5 Q25 47 22 57 Q20 65 26 66 Q32 66 35 57 Q38 47 37.5 37.5" fill="rgba(220,180,255,0.6)" />
-        </svg>
-        <div className="absolute rounded-full" style={{ top: '40%', left: '40%', width: '20%', height: '20%', background: 'radial-gradient(circle, rgba(255,255,255,0.25), transparent 70%)', boxShadow: '0 0 10px rgba(192,132,252,0.15)' }} />
-      </div>
-
-      {/* Galaxy 3 — tiny deep field */}
-      <div className="absolute" style={{ top: '60%', right: '30%', width: '35px', height: '35px', animation: 'sf-galaxy-spin 150s linear infinite', opacity: 0.5 }}>
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(45,212,191,0.25) 0%, transparent 55%)' }} />
-        <div className="absolute rounded-full" style={{ top: '40%', left: '40%', width: '20%', height: '20%', background: 'rgba(255,255,255,0.15)' }} />
-      </div>
-
-      {/* Supernova 1 — bright indigo with lens flare */}
-      <div className="absolute" style={{ top: '38%', left: '80%' }}>
-        <div className="absolute rounded-full" style={{ width: '70px', height: '70px', top: '-32px', left: '-32px', background: 'radial-gradient(circle, rgba(129,140,248,0.25) 0%, transparent 55%)', animation: 'sf-nova 7s ease-in-out infinite' }} />
-        <div className="absolute" style={{ width: '50px', height: '2px', top: '2px', left: '-22px', background: 'linear-gradient(90deg, transparent, rgba(200,210,255,0.4), rgba(255,255,255,0.8), rgba(200,210,255,0.4), transparent)', animation: 'sf-nova 7s ease-in-out infinite' }} />
-        <div className="absolute" style={{ width: '2px', height: '50px', top: '-22px', left: '2px', background: 'linear-gradient(180deg, transparent, rgba(200,210,255,0.4), rgba(255,255,255,0.8), rgba(200,210,255,0.4), transparent)', animation: 'sf-nova 7s ease-in-out infinite' }} />
-        <div className="absolute" style={{ width: '35px', height: '1px', top: '2.5px', left: '-14.5px', background: 'linear-gradient(90deg, transparent, rgba(200,210,255,0.2), transparent)', transform: 'rotate(45deg)', animation: 'sf-nova 7s ease-in-out infinite' }} />
-        <div className="absolute" style={{ width: '35px', height: '1px', top: '2.5px', left: '-14.5px', background: 'linear-gradient(90deg, transparent, rgba(200,210,255,0.2), transparent)', transform: 'rotate(-45deg)', animation: 'sf-nova 7s ease-in-out infinite' }} />
-        <div className="rounded-full" style={{ width: '6px', height: '6px', background: 'radial-gradient(circle, #fff, rgba(129,140,248,0.5))', boxShadow: '0 0 12px rgba(129,140,248,0.6), 0 0 25px rgba(129,140,248,0.2)' }} />
-      </div>
-
-      {/* Supernova 2 — purple */}
-      <div className="absolute" style={{ top: '68%', left: '32%' }}>
-        <div className="absolute rounded-full" style={{ width: '50px', height: '50px', top: '-22px', left: '-22px', background: 'radial-gradient(circle, rgba(192,132,252,0.2) 0%, transparent 55%)', animation: 'sf-nova 11s ease-in-out 2s infinite' }} />
-        <div className="absolute" style={{ width: '40px', height: '1.5px', top: '2px', left: '-17px', background: 'linear-gradient(90deg, transparent, rgba(220,200,255,0.4), rgba(255,255,255,0.7), rgba(220,200,255,0.4), transparent)', animation: 'sf-nova 11s ease-in-out 2s infinite' }} />
-        <div className="absolute" style={{ width: '1.5px', height: '40px', top: '-17px', left: '2px', background: 'linear-gradient(180deg, transparent, rgba(220,200,255,0.4), rgba(255,255,255,0.7), rgba(220,200,255,0.4), transparent)', animation: 'sf-nova 11s ease-in-out 2s infinite' }} />
-        <div className="rounded-full" style={{ width: '5px', height: '5px', background: 'radial-gradient(circle, #fff, rgba(192,132,252,0.4))', boxShadow: '0 0 10px rgba(192,132,252,0.5)' }} />
-      </div>
-
-      {/* Supernova 3 — teal */}
-      <div className="absolute" style={{ top: '10%', left: '20%' }}>
-        <div className="absolute rounded-full" style={{ width: '45px', height: '45px', top: '-20px', left: '-20px', background: 'radial-gradient(circle, rgba(45,212,191,0.18) 0%, transparent 55%)', animation: 'sf-nova 9s ease-in-out 5s infinite' }} />
-        <div className="absolute" style={{ width: '34px', height: '1.5px', top: '2px', left: '-14px', background: 'linear-gradient(90deg, transparent, rgba(180,240,230,0.35), rgba(255,255,255,0.6), rgba(180,240,230,0.35), transparent)', animation: 'sf-nova 9s ease-in-out 5s infinite' }} />
-        <div className="absolute" style={{ width: '1.5px', height: '34px', top: '-14px', left: '2px', background: 'linear-gradient(180deg, transparent, rgba(180,240,230,0.35), rgba(255,255,255,0.6), rgba(180,240,230,0.35), transparent)', animation: 'sf-nova 9s ease-in-out 5s infinite' }} />
-        <div className="rounded-full" style={{ width: '4px', height: '4px', background: 'radial-gradient(circle, #fff, rgba(45,212,191,0.3))', boxShadow: '0 0 8px rgba(45,212,191,0.4)' }} />
-      </div>
-
-      {/* Supernova 4 — warm amber */}
-      <div className="absolute" style={{ top: '82%', left: '72%' }}>
-        <div className="absolute rounded-full" style={{ width: '40px', height: '40px', top: '-17px', left: '-17px', background: 'radial-gradient(circle, rgba(251,191,36,0.15) 0%, transparent 55%)', animation: 'sf-nova 13s ease-in-out 8s infinite' }} />
-        <div className="absolute" style={{ width: '28px', height: '1.5px', top: '2px', left: '-11px', background: 'linear-gradient(90deg, transparent, rgba(255,230,180,0.3), rgba(255,255,255,0.5), rgba(255,230,180,0.3), transparent)', animation: 'sf-nova 13s ease-in-out 8s infinite' }} />
-        <div className="absolute" style={{ width: '1.5px', height: '28px', top: '-11px', left: '2px', background: 'linear-gradient(180deg, transparent, rgba(255,230,180,0.3), rgba(255,255,255,0.5), rgba(255,230,180,0.3), transparent)', animation: 'sf-nova 13s ease-in-out 8s infinite' }} />
-        <div className="rounded-full" style={{ width: '4px', height: '4px', background: 'radial-gradient(circle, #fff, rgba(251,191,36,0.3))', boxShadow: '0 0 7px rgba(251,191,36,0.4)' }} />
-      </div>
-
-      {/* Supernova 5 — red giant (new) */}
-      <div className="absolute" style={{ top: '50%', left: '55%' }}>
-        <div className="absolute rounded-full" style={{ width: '55px', height: '55px', top: '-25px', left: '-25px', background: 'radial-gradient(circle, rgba(255,100,100,0.15) 0%, transparent 55%)', animation: 'sf-nova 15s ease-in-out 4s infinite' }} />
-        <div className="absolute" style={{ width: '44px', height: '1.5px', top: '2px', left: '-19px', background: 'linear-gradient(90deg, transparent, rgba(255,180,180,0.3), rgba(255,255,255,0.55), rgba(255,180,180,0.3), transparent)', animation: 'sf-nova 15s ease-in-out 4s infinite' }} />
-        <div className="absolute" style={{ width: '1.5px', height: '44px', top: '-19px', left: '2px', background: 'linear-gradient(180deg, transparent, rgba(255,180,180,0.3), rgba(255,255,255,0.55), rgba(255,180,180,0.3), transparent)', animation: 'sf-nova 15s ease-in-out 4s infinite' }} />
-        <div className="rounded-full" style={{ width: '5px', height: '5px', background: 'radial-gradient(circle, #fff, rgba(255,100,100,0.4))', boxShadow: '0 0 10px rgba(255,100,100,0.5)' }} />
-      </div>
-
-      {/* Shooting stars — varied angles and speeds */}
-      <div className="sf-shooter sf-shooter-fast" style={{ top: '6%', left: '12%', animationDelay: '0.5s' }} />
-      <div className="sf-shooter" style={{ top: '25%', left: '60%', animationDelay: '3s' }} />
-      <div className="sf-shooter sf-shooter-long" style={{ top: '45%', left: '85%', animationDelay: '5.5s' }} />
-      <div className="sf-shooter sf-shooter-fast" style={{ top: '70%', left: '15%', animationDelay: '8s' }} />
-      <div className="sf-shooter sf-shooter-long" style={{ top: '18%', left: '38%', animationDelay: '11s' }} />
-      <div className="sf-shooter" style={{ top: '55%', left: '45%', animationDelay: '14s' }} />
-      <div className="sf-shooter sf-shooter-long sf-shooter-fast" style={{ top: '80%', left: '55%', animationDelay: '17s' }} />
-      <div className="sf-shooter" style={{ top: '35%', left: '25%', animationDelay: '20s' }} />
-      <div className="sf-shooter sf-shooter-fast" style={{ top: '15%', left: '75%', animationDelay: '23s' }} />
-      <div className="sf-shooter sf-shooter-long" style={{ top: '90%', left: '30%', animationDelay: '26s' }} />
-      <div className="sf-shooter" style={{ top: '42%', left: '8%', animationDelay: '29s', transform: 'rotate(-50deg)' }} />
-      <div className="sf-shooter sf-shooter-fast" style={{ top: '62%', left: '70%', animationDelay: '32s' }} />
-
-      {/* Star cluster 1 — open cluster */}
-      <div className="absolute" style={{ top: '52%', right: '22%', width: '80px', height: '80px' }}>
-        {Array.from({ length: 20 }).map((_, i) => {
-          const angle = (i / 20) * Math.PI * 2;
-          const r = 5 + (i % 5) * 7;
-          return (
-            <div key={`cl1-${i}`} className="absolute rounded-full bg-white"
-              style={{
-                left: `${40 + Math.cos(angle) * r}px`,
-                top: `${40 + Math.sin(angle) * r}px`,
-                width: `${0.8 + (i % 3) * 0.5}px`,
-                height: `${0.8 + (i % 3) * 0.5}px`,
-                opacity: 0.3 + (i % 4) * 0.15,
-                animation: `sf-twinkle ${2.5 + i * 0.25}s ease-in-out ${i * 0.2}s infinite`,
-              }} />
-          );
-        })}
-      </div>
-
-      {/* Star cluster 2 */}
-      <div className="absolute" style={{ top: '20%', left: '70%', width: '60px', height: '60px' }}>
-        {Array.from({ length: 14 }).map((_, i) => {
-          const angle = (i / 14) * Math.PI * 2 + 0.5;
-          const r = 4 + (i % 4) * 6;
-          return (
-            <div key={`cl2-${i}`} className="absolute rounded-full bg-white"
-              style={{
-                left: `${30 + Math.cos(angle) * r}px`,
-                top: `${30 + Math.sin(angle) * r}px`,
-                width: `${0.7 + (i % 3) * 0.4}px`,
-                height: `${0.7 + (i % 3) * 0.4}px`,
-                opacity: 0.25 + (i % 3) * 0.18,
-                animation: `sf-twinkle ${3 + i * 0.3}s ease-in-out ${i * 0.25}s infinite`,
-              }} />
-          );
-        })}
-      </div>
-
-      {/* Star cluster 3 — tight blue cluster */}
-      <div className="absolute" style={{ top: '75%', left: '45%', width: '45px', height: '45px' }}>
-        {Array.from({ length: 10 }).map((_, i) => {
-          const angle = (i / 10) * Math.PI * 2 + 1;
-          const r = 3 + (i % 3) * 5;
-          return (
-            <div key={`cl3-${i}`} className="absolute rounded-full"
-              style={{
-                left: `${22 + Math.cos(angle) * r}px`,
-                top: `${22 + Math.sin(angle) * r}px`,
-                width: `${0.6 + (i % 3) * 0.4}px`,
-                height: `${0.6 + (i % 3) * 0.4}px`,
-                background: '#a0b4ff',
-                opacity: 0.3 + (i % 3) * 0.15,
-                animation: `sf-twinkle ${2.8 + i * 0.35}s ease-in-out ${i * 0.3}s infinite`,
-              }} />
-          );
-        })}
-      </div>
-
-      {/* Cosmic dust lane — diagonal dark band */}
-      <div className="absolute inset-0 opacity-[0.03]"
-        style={{ background: 'linear-gradient(135deg, transparent 30%, rgba(0,0,0,0.8) 45%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.8) 55%, transparent 70%)' }} />
-
-      {/* Noise grain */}
-      <div className="absolute inset-0 opacity-[0.03]"
-        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")` }} />
-
-      <style>{`
-        @keyframes sf-twinkle {
-          0%, 100% { opacity: inherit; transform: scale(1); }
-          40% { opacity: 0.02; transform: scale(0.3); }
-          60% { opacity: 0.02; transform: scale(0.3); }
-        }
-        @keyframes sf-field-drift {
-          0% { transform: translate(0, 0); }
-          25% { transform: translate(-10px, 6px); }
-          50% { transform: translate(4px, -8px); }
-          75% { transform: translate(8px, 4px); }
-          100% { transform: translate(0, 0); }
-        }
-        @keyframes sf-drift-a {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          30% { transform: translate(-50px, 35px) scale(1.12); }
-          70% { transform: translate(25px, -20px) scale(0.92); }
-        }
-        @keyframes sf-drift-b {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          40% { transform: translate(40px, -28px) scale(1.1); }
-          80% { transform: translate(-18px, 12px) scale(0.94); }
-        }
-        @keyframes sf-drift-c {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50% { transform: translate(-28px, 22px) scale(1.18); }
-        }
-        @keyframes sf-galaxy-spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes sf-nova {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          30% { opacity: 0.2; transform: scale(0.5); }
-          70% { opacity: 0.2; transform: scale(0.5); }
-        }
-        .sf-shooter {
-          position: absolute;
-          width: 90px;
-          height: 2px;
-          background: linear-gradient(90deg, rgba(255,255,255,0.8), rgba(200,210,255,0.3), transparent);
-          transform: rotate(-35deg);
-          animation: sf-shoot 8s ease-in infinite;
-          opacity: 0;
-          border-radius: 1px;
-        }
-        .sf-shooter-long {
-          width: 160px;
-          height: 2.5px;
-          background: linear-gradient(90deg, rgba(255,255,255,0.9), rgba(129,140,248,0.4), transparent);
-        }
-        .sf-shooter-fast {
-          animation-duration: 6s !important;
-        }
-        @keyframes sf-shoot {
-          0% { opacity: 0; transform: rotate(-35deg) translateX(0); }
-          1% { opacity: 0.9; }
-          5% { opacity: 0; transform: rotate(-35deg) translateX(400px); }
-          100% { opacity: 0; }
-        }
-      `}</style>
-    </div>
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ willChange: 'transform', contain: 'strict' }}
+      aria-hidden="true"
+    />
   );
 }

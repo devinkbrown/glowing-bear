@@ -2,13 +2,13 @@
   "name": "DarkBear",
   "short_name": "DarkBear",
   "description": "DarkBear IRC client with Ophion LADON media controls",
-  "start_url": "/darkbear/",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0b10",
   "theme_color": "#0a0b10",
   "icons": [
     {
-      "src": "/darkbear/favicon.svg",
+      "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

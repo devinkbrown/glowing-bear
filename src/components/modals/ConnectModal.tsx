@@ -821,11 +821,11 @@ export default function ConnectModal({ onClose }: Props) {
 
         {/* Nebula clouds — colored to theme accent */}
         <div className="absolute w-[600px] h-[600px] sm:w-[900px] sm:h-[900px] -top-[200px] -right-[200px] rounded-full opacity-[0.06]"
-          style={{ background: `radial-gradient(circle, ${tc.accent}, transparent 50%)`, animation: 'login-float-a 30s ease-in-out infinite' }} />
+          style={{ background: `radial-gradient(circle, ${tc.accent}, transparent 50%)`, animation: 'login-float-a 30s ease-in-out infinite', willChange: 'transform' }} />
         <div className="absolute w-[500px] h-[500px] sm:w-[800px] sm:h-[800px] -bottom-[250px] -left-[200px] rounded-full opacity-[0.04]"
-          style={{ background: `radial-gradient(circle, ${tc.accent}88, transparent 50%)`, animation: 'login-float-b 35s ease-in-out infinite' }} />
+          style={{ background: `radial-gradient(circle, ${tc.accent}88, transparent 50%)`, animation: 'login-float-b 35s ease-in-out infinite', willChange: 'transform' }} />
         <div className="absolute w-[300px] h-[300px] top-[30%] right-[15%] rounded-full opacity-[0.03]"
-          style={{ background: `radial-gradient(circle, ${tc.accent}66, transparent 55%)`, animation: 'login-float-c 22s ease-in-out infinite' }} />
+          style={{ background: `radial-gradient(circle, ${tc.accent}66, transparent 55%)`, animation: 'login-float-c 22s ease-in-out infinite', willChange: 'transform' }} />
 
         {/* Noise grain */}
         <div className="absolute inset-0 opacity-[0.03]"
@@ -1177,11 +1177,9 @@ export default function ConnectModal({ onClose }: Props) {
         .login-card-inner {}
         @media (min-width: 640px) {
           .login-card-inner {
-            background: linear-gradient(160deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 100%);
+            background: linear-gradient(160deg, rgba(10,10,20,0.85) 0%, rgba(6,6,14,0.92) 100%);
             border: 1px solid rgba(255,255,255,0.06);
-            box-shadow: 0 30px 100px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
-            -webkit-backdrop-filter: blur(24px);
-            backdrop-filter: blur(24px);
+            box-shadow: 0 30px 100px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
             border-radius: 20px;
             padding: 28px;
           }
