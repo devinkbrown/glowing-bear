@@ -35,7 +35,7 @@ export default function ThemeBg({ theme }: Props) {
 }
 
 const CANVAS_CLS = 'absolute inset-0 w-full h-full pointer-events-none';
-const CANVAS_STYLE: React.CSSProperties = { willChange: 'transform', opacity: 0.75 };
+const CANVAS_STYLE: React.CSSProperties = { opacity: 0.75 };
 
 /* ── DarkBear: network nodes + edges + data streams + hexagons ── */
 function DarkBearBg() {

@@ -22,6 +22,10 @@ export default function TitleBar() {
     }).catch(() => {});
   }, []);
 
+  const startDrag = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    getTauri().then(({ getCurrentWindow }) => getCurrentWindow().startDragging()).catch(() => {});
+  };
   const minimize = () => getTauri().then(({ getCurrentWindow }) => getCurrentWindow().minimize()).catch(() => {});
   const toggleMax = () => getTauri().then(({ getCurrentWindow }) => getCurrentWindow().toggleMaximize()).catch(() => {});
   const close = () => getTauri().then(({ getCurrentWindow }) => getCurrentWindow().close()).catch(() => {});
@@ -29,13 +33,14 @@ export default function TitleBar() {
   return (
     <div
       data-tauri-drag-region
+      onMouseDown={startDrag}
       className="relative z-[100] flex items-center justify-between h-8 px-3 shrink-0 select-none bg-gray-950 border-b border-white/[0.05]"
     >
       <span data-tauri-drag-region className="text-[10px] font-bold tracking-[0.2em] uppercase text-gray-700 pointer-events-none">
         DarkBear
       </span>
 
-      <div className="flex items-center">
+      <div className="flex items-center" onMouseDown={e => e.stopPropagation()}>
         {/* Minimize */}
         <button
           onClick={minimize}
