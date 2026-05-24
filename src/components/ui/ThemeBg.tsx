@@ -35,7 +35,7 @@ export default function ThemeBg({ theme }: Props) {
 }
 
 const CANVAS_CLS = 'absolute inset-0 w-full h-full pointer-events-none';
-const CANVAS_STYLE: React.CSSProperties = { opacity: 0.75 };
+const CANVAS_STYLE: React.CSSProperties = { willChange: 'transform' };
 
 /* ── DarkBear: network nodes + edges + data streams + hexagons ── */
 function DarkBearBg() {
@@ -125,7 +125,7 @@ function DarkBearBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -275,7 +275,7 @@ function MidnightBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -436,7 +436,7 @@ function ObsidianBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -593,7 +593,7 @@ function NordBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -723,7 +723,7 @@ function GruvboxBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -871,7 +871,7 @@ function RosePineBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -1005,7 +1005,7 @@ function AbyssBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -1140,7 +1140,7 @@ function EmberBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -1266,7 +1266,7 @@ function AuroraBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -1417,7 +1417,7 @@ function CatppuccinBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -1550,7 +1550,7 @@ function TokyoNightBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -1712,7 +1712,7 @@ function DraculaBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -1870,7 +1870,7 @@ function SolarizedBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -2058,7 +2058,7 @@ function LightningBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -2245,7 +2245,7 @@ function PhoenixBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -2596,7 +2596,7 @@ function RetroArcadeBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -2864,7 +2864,7 @@ function StarfieldSimpleBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -2952,7 +2952,7 @@ function LightBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
@@ -3035,7 +3035,7 @@ function CustomBg() {
     let lastMs = 0;
     function draw(ms: number) {
       raf = requestAnimationFrame(draw);
-      if (ms - lastMs < 50) return;
+      if (ms - lastMs < 100) return;
       lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;

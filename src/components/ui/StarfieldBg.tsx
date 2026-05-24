@@ -149,6 +149,7 @@ export default function StarfieldBg() {
     <canvas
       ref={canvasRef}
       className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ willChange: 'transform' }}
       aria-hidden="true"
     />
   );
