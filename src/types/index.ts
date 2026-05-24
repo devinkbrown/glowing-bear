@@ -130,6 +130,7 @@ export interface WeeChatHotlist {
 export interface BufferEntry {
   buffer: WeeChatBuffer;
   lines: WeeChatLine[];
+  lineIds: Set<string>;
   nicks: Map<string, WeeChatNick>;
   nickGroups: Map<string, WeeChatNick[]>;
   unread: number;
@@ -212,6 +213,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   customCSS: '',
   highlightWords: [],
   uploadUrl: 'https://eshmaki.me/upload',
-  tenorApiKey: '',
+  tenorApiKey: 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ',
   animateThemes: true,
 };

@@ -12,6 +12,14 @@ interface Props {
   className?: string;
 }
 
+const WIDTH_MAP: Record<string, string> = {
+  'max-w-sm': '384px',
+  'max-w-md': '448px',
+  'max-w-lg': '512px',
+  'max-w-xl': '576px',
+  'max-w-2xl': '672px',
+};
+
 export default function Modal({ children, onClose, title, width, wide, maxHeight, className = '' }: Props) {
   const resolvedWidth = width ?? (wide ? 'max-w-2xl' : 'max-w-lg');
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -65,7 +73,7 @@ export default function Modal({ children, onClose, title, width, wide, maxHeight
         ref={panelRef}
         className={`relative w-full rounded-2xl border border-white/[0.06] bg-gray-900 overflow-hidden ${className}`}
         style={{
-          maxWidth: resolvedWidth === 'max-w-sm' ? '384px' : resolvedWidth === 'max-w-lg' ? '512px' : resolvedWidth === 'max-w-2xl' ? '672px' : resolvedWidth.replace('max-w-[', '').replace(']', ''),
+          maxWidth: WIDTH_MAP[resolvedWidth] ?? resolvedWidth.replace('max-w-[', '').replace(']', ''),
           maxHeight: maxHeight ?? '85dvh',
           boxShadow: '0 25px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)',
         }}

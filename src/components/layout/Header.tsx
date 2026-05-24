@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '@/stores';
 import { ConnectionState } from '@/types';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useClickOutside } from '@/hooks/useClickOutside';
 import { formatText } from '@/protocol/irc/formatter';
 import { bufferKind, isIrcBuffer, BUFFER_KIND_LABEL } from '@/lib/bufferKind';
 
@@ -51,41 +52,16 @@ export default function Header({ onToggleSidebar, onToggleUserList, onToggleSear
 
   useEffect(() => { setTopicExpanded(false); setCallMenuOpen(false); }, [activeBuffer]);
 
-  useEffect(() => {
-    if (!topicExpanded) return;
-    function onPointerDown(e: Event) {
-      if (topicRef.current && !topicRef.current.contains(e.target as Node)) {
-        setTopicExpanded(false);
-      }
-    }
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('touchstart', onPointerDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('touchstart', onPointerDown);
-    };
-  }, [topicExpanded]);
-
-  useEffect(() => {
-    if (!callMenuOpen) return;
-    function onPointerDown(e: Event) {
-      if (callMenuRef.current && !callMenuRef.current.contains(e.target as Node)) {
-        setCallMenuOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('touchstart', onPointerDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('touchstart', onPointerDown);
-    };
-  }, [callMenuOpen]);
+  const closeTopic = useCallback(() => setTopicExpanded(false), []);
+  const closeCallMenu = useCallback(() => setCallMenuOpen(false), []);
+  useClickOutside(topicRef, topicExpanded, closeTopic);
+  useClickOutside(callMenuRef, callMenuOpen, closeCallMenu);
 
   const canCall = connectionState === ConnectionState.CONNECTED && isIdle && isIrc;
   const showCallBtn = canCall && (isPrivate || isChannel);
 
   return (
-    <header className="flex items-center gap-1.5 sm:gap-3 px-1.5 sm:px-4 h-11 sm:h-12 border-b border-white/[0.04] shrink-0 relative">
+    <header className="flex items-center gap-1.5 sm:gap-3 px-1.5 sm:px-4 h-11 sm:h-12 border-b border-white/[0.05] bg-gray-950/80 backdrop-blur-sm shrink-0 relative">
       {/* Mobile menu */}
       <button onClick={onToggleSidebar}
         className="lg:hidden w-10 h-10 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-100 active:bg-white/[0.06] transition-colors"
@@ -98,7 +74,7 @@ export default function Header({ onToggleSidebar, onToggleUserList, onToggleSear
       {/* Buffer name + topic */}
       <div ref={topicRef} className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-baseline sm:gap-3 justify-center relative">
         <div className="flex items-center gap-1.5">
-          <h2 className="text-[14px] sm:text-[14px] font-semibold text-gray-100 truncate leading-tight">{bufName}</h2>
+          <h2 className="text-[14px] sm:text-[15px] font-bold tracking-tight text-gray-100 truncate leading-tight">{bufName}</h2>
           {!isIrc && (
             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-white/[0.06] text-gray-500 border border-white/[0.06] shrink-0">
               {BUFFER_KIND_LABEL[kind]}
@@ -108,7 +84,8 @@ export default function Header({ onToggleSidebar, onToggleUserList, onToggleSear
             <button
               onClick={() => openChannelInfo(entry?.buffer.localVars['channel'] ?? bufName)}
               className="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 transition-colors shrink-0"
-              title="Channel info (IRCX PROP + ACCESS)">
+              title="Channel info (IRCX PROP + ACCESS)"
+              aria-label="Channel info">
               <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <circle cx="8" cy="8" r="7" /><path d="M8 7v5M8 4.5v.5" />
               </svg>
@@ -125,7 +102,7 @@ export default function Header({ onToggleSidebar, onToggleUserList, onToggleSear
         {title && (
           <button
             onClick={() => setTopicExpanded(!topicExpanded)}
-            className="text-[11px] text-gray-500 sm:text-gray-400 truncate leading-tight sm:text-[12px] max-w-full text-left hover:text-gray-300 transition-colors"
+            className="text-[11px] text-gray-600 sm:text-gray-500 truncate leading-tight sm:text-[11px] max-w-full text-left hover:text-gray-300 transition-colors"
             title={topicExpanded ? 'Collapse topic' : 'Expand topic'}>
             <span dangerouslySetInnerHTML={{ __html: title }} />
           </button>
@@ -161,7 +138,8 @@ export default function Header({ onToggleSidebar, onToggleUserList, onToggleSear
             <button onClick={() => setCallMenuOpen(!callMenuOpen)}
               className={`w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-full transition-all
                 ${callMenuOpen ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.06]'}`}
-              title="LADON media">
+              title="LADON media"
+              aria-label="Call">
               <svg className="w-[14px] h-[14px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
               </svg>
@@ -215,7 +193,8 @@ export default function Header({ onToggleSidebar, onToggleUserList, onToggleSear
         {onToggleSearch && (
           <button onClick={onToggleSearch}
             className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.06] transition-all"
-            title="Search messages (Ctrl+F)">
+            title="Search messages (Ctrl+F)"
+            aria-label="Search messages">
             <svg className="w-[14px] h-[14px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <circle cx="6.5" cy="6.5" r="5" /><path d="M10.5 10.5L14.5 14.5" />
             </svg>
@@ -226,7 +205,7 @@ export default function Header({ onToggleSidebar, onToggleUserList, onToggleSear
           <button onClick={onToggleUserList}
             className={`flex items-center gap-1 h-9 sm:h-7 px-2.5 sm:px-2.5 rounded-full text-[12px] sm:text-[11px] font-medium transition-all
               ${userListOpen
-                ? 'bg-indigo-500/10 text-indigo-300'
+                ? 'bg-[var(--custom-accent,#818cf8)]/10 text-[var(--custom-accent,#818cf8)]'
                 : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.06]'}`}>
             <svg className="w-[15px] h-[15px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <circle cx="6" cy="5" r="2.5" /><path d="M1 14c0-3 2-5.5 5-5.5s5 2.5 5 5.5" />
@@ -242,26 +221,16 @@ export default function Header({ onToggleSidebar, onToggleUserList, onToggleSear
 function IrcxMenu({ onServices, onChannelList, isMobile, ophion }: { onServices: () => void; onChannelList: () => void; isMobile: boolean; ophion: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(e: Event) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('touchstart', onPointerDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('touchstart', onPointerDown);
-    };
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
+  useClickOutside(ref, open, close);
 
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(!open)}
         className={`w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-full transition-all
           ${open ? 'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/[0.08]' : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.06]'}`}
-        title="IRC tools">
+        title="IRC tools"
+        aria-label="IRC tools">
         <svg className="w-[14px] h-[14px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <circle cx="3" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="13" cy="8" r="1.5" />
         </svg>
@@ -306,7 +275,7 @@ function CallMenuItem({ icon, label, onClick }: { icon: 'video' | 'voice'; label
           <rect x="2" y="5" width="15" height="14" rx="2" /><path d="M17 9l5-3v12l-5-3" />
         </svg>
       ) : (
-        <svg className="w-4 h-4 shrink-0 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <svg className="w-4 h-4 shrink-0 text-[var(--custom-accent,#818cf8)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <rect x="9" y="2" width="6" height="11" rx="3" /><path d="M5 10a7 7 0 0014 0" /><path d="M12 17v4M8 21h8" />
         </svg>
       )}

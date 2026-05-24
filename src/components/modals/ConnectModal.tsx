@@ -70,7 +70,7 @@ function CmdLine({ cmd, label }: { cmd: string; label?: string }) {
       <div className="group flex items-center gap-0 rounded-lg bg-white/[0.03] border border-white/[0.05] overflow-hidden">
         <code className="flex-1 text-[12px] text-gray-300 font-mono px-3 py-2.5 leading-relaxed select-all overflow-x-auto guide-no-scrollbar">{cmd}</code>
         <button onClick={copy}
-          className="shrink-0 w-9 self-stretch flex items-center justify-center text-gray-600 hover:text-indigo-300 active:scale-90 transition-all border-l border-white/[0.05]">
+          className="shrink-0 w-9 self-stretch flex items-center justify-center text-gray-600 hover:text-[var(--custom-accent,#818cf8)] active:scale-90 transition-all border-l border-white/[0.05]">
           {copied ? (
             <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 8l3 3 5-6" /></svg>
           ) : (
@@ -104,7 +104,7 @@ function ShellBlock({ lines }: { lines: string[] }) {
         </div>
         <span className="flex-1 text-[9px] text-gray-600 font-mono">shell</span>
         <button onClick={copy}
-          className="text-gray-600 hover:text-indigo-300 active:scale-90 transition-all">
+          className="text-gray-600 hover:text-[var(--custom-accent,#818cf8)] active:scale-90 transition-all">
           {copied ? (
             <svg className="w-3 h-3 text-emerald-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 8l3 3 5-6" /></svg>
           ) : (
@@ -123,7 +123,7 @@ function ShellBlock({ lines }: { lines: string[] }) {
 
 function Callout({ type, children }: { type: 'info' | 'warn' | 'tip'; children: React.ReactNode }) {
   const styles = {
-    info: { bg: 'bg-indigo-500/[0.06]', border: 'border-indigo-500/15', icon: 'text-indigo-400', dot: 'bg-indigo-400' },
+    info: { bg: 'bg-[var(--custom-accent,#818cf8)]/[0.06]', border: 'border-[var(--custom-accent,#818cf8)]/15', icon: 'text-[var(--custom-accent,#818cf8)]', dot: 'bg-[var(--custom-accent,#818cf8)]' },
     warn: { bg: 'bg-amber-500/[0.06]', border: 'border-amber-500/15', icon: 'text-amber-400', dot: 'bg-amber-400' },
     tip: { bg: 'bg-emerald-500/[0.06]', border: 'border-emerald-500/15', icon: 'text-emerald-400', dot: 'bg-emerald-400' },
   }[type];
@@ -138,7 +138,7 @@ function Callout({ type, children }: { type: 'info' | 'warn' | 'tip'; children: 
 
 function StepNumber({ n }: { n: number }) {
   return (
-    <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-500/15 text-indigo-400 text-[10px] font-bold flex items-center justify-center">
+    <span className="shrink-0 w-5 h-5 rounded-full bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] text-[10px] font-bold flex items-center justify-center">
       {n}
     </span>
   );
@@ -172,7 +172,7 @@ function NginxConfig() {
     <div className="relative group rounded-lg bg-[rgba(0,0,0,0.25)] border border-white/[0.04] overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/[0.04]">
         <span className="flex-1 text-[9px] text-gray-600 font-mono">nginx.conf</span>
-        <button onClick={copy} className="text-gray-600 hover:text-indigo-300 active:scale-90 transition-all">
+        <button onClick={copy} className="text-gray-600 hover:text-[var(--custom-accent,#818cf8)] active:scale-90 transition-all">
           {copied ? (
             <svg className="w-3 h-3 text-emerald-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 8l3 3 5-6" /></svg>
           ) : (
@@ -205,7 +205,7 @@ function CaddyConfig() {
     <div className="relative group rounded-lg bg-[rgba(0,0,0,0.25)] border border-white/[0.04] overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/[0.04]">
         <span className="flex-1 text-[9px] text-gray-600 font-mono">Caddyfile</span>
-        <button onClick={copy} className="text-gray-600 hover:text-indigo-300 active:scale-90 transition-all">
+        <button onClick={copy} className="text-gray-600 hover:text-[var(--custom-accent,#818cf8)] active:scale-90 transition-all">
           {copied ? (
             <svg className="w-3 h-3 text-emerald-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 8l3 3 5-6" /></svg>
           ) : (
@@ -623,8 +623,8 @@ function SetupGuide({ port, tls }: { port: number; tls: boolean }) {
     <div className="mt-5 pt-4 border-t border-white/[0.04]">
       <button onClick={() => setOpen(!open)}
         className="group w-full flex items-center gap-3 py-2 text-left">
-        <div className="w-7 h-7 rounded-lg bg-indigo-500/[0.08] flex items-center justify-center shrink-0 group-hover:bg-indigo-500/[0.14] transition-colors">
-          <svg className="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+        <div className="w-7 h-7 rounded-lg bg-[var(--custom-accent,#818cf8)]/[0.08] flex items-center justify-center shrink-0 group-hover:bg-[var(--custom-accent,#818cf8)]/[0.14] transition-colors">
+          <svg className="w-3.5 h-3.5 text-[var(--custom-accent,#818cf8)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
             <path d="M3 3h7l3 3v7a1 1 0 01-1 1H3a1 1 0 01-1-1V4a1 1 0 011-1z" /><path d="M9 3v3h3" /><path d="M6 9h4M6 11.5h2.5" />
           </svg>
         </div>
@@ -647,12 +647,12 @@ function SetupGuide({ port, tls }: { port: number; tls: boolean }) {
                 <button onClick={() => setExpanded(isExpanded ? null : sec.id)}
                   className={`w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl text-left transition-all
                     ${isExpanded ? 'bg-white/[0.035] text-gray-200' : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.02]'}`}>
-                  <span className={`shrink-0 transition-colors ${isExpanded ? 'text-indigo-400' : 'text-gray-600'}`}>
+                  <span className={`shrink-0 transition-colors ${isExpanded ? 'text-[var(--custom-accent,#818cf8)]' : 'text-gray-600'}`}>
                     {sec.icon}
                   </span>
                   <span className="flex-1 text-[13px] font-medium">{sec.title}</span>
                   {sec.badge && !isExpanded && (
-                    <span className="text-[9px] font-semibold uppercase tracking-wider text-indigo-400/60 bg-indigo-500/[0.08] px-2 py-0.5 rounded-full">{sec.badge}</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--custom-accent,#818cf8)]/60 bg-[var(--custom-accent,#818cf8)]/[0.08] px-2 py-0.5 rounded-full">{sec.badge}</span>
                   )}
                   <svg className={`w-2.5 h-2.5 text-gray-600 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
                     viewBox="0 0 8 8" fill="currentColor"><path d="M2 1l4 3-4 3z" /></svg>
@@ -915,9 +915,9 @@ export default function ConnectModal({ onClose }: Props) {
                       <button key={p.name} onClick={() => applyProfile(p.name)}
                         className="group shrink-0 flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-medium rounded-xl
                           bg-white/[0.03] border border-white/[0.06] text-gray-400
-                          hover:bg-indigo-500/8 hover:border-indigo-500/20 hover:text-indigo-300
+                          hover:bg-[var(--custom-accent,#818cf8)]/8 hover:border-[var(--custom-accent,#818cf8)]/20 hover:text-[var(--custom-accent,#818cf8)]
                           active:scale-[0.97] transition-all min-h-[44px]">
-                        <svg className="w-3.5 h-3.5 text-gray-600 group-hover:text-indigo-400/70 transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <svg className="w-3.5 h-3.5 text-gray-600 group-hover:text-[var(--custom-accent,#818cf8)]/70 transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                           <circle cx="8" cy="8" r="6" /><path d="M8 5v6M5 8h6" />
                         </svg>
                         {p.name}
@@ -1084,7 +1084,7 @@ export default function ConnectModal({ onClose }: Props) {
                   <button onClick={doConnect} disabled={!ready}
                     className={`group w-full login-btn-height text-[15px] font-semibold rounded-xl flex items-center justify-center gap-2.5 transition-all relative overflow-hidden
                       ${ready
-                        ? 'bg-indigo-600 text-white shadow-[0_4px_24px_rgba(99,102,241,0.25)] hover:shadow-[0_8px_40px_rgba(99,102,241,0.35)] hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.99] cursor-pointer'
+                        ? 'bg-[var(--custom-accent,#818cf8)] text-white shadow-[0_4px_24px_color-mix(in_srgb,var(--custom-accent,#818cf8)_40%,transparent)] hover:opacity-90 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.99] cursor-pointer'
                         : 'bg-white/[0.04] text-white/20 cursor-not-allowed border border-white/[0.04]'}`}>
                     {ready && !connecting && (
                       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1124,7 +1124,7 @@ export default function ConnectModal({ onClose }: Props) {
                       onKeyDown={e => { if (e.key === 'Enter') doSaveProfile(); if (e.key === 'Escape') { setShowSaveProfile(false); setProfileName(''); } }}
                       className="login-input flex-1 !h-[44px]" />
                     <button onClick={doSaveProfile} disabled={!profileName.trim()}
-                      className="px-4 h-[44px] text-[13px] font-semibold bg-indigo-600/15 text-indigo-300 rounded-xl hover:bg-indigo-600/25 disabled:opacity-30 shrink-0 transition-colors">
+                      className="px-4 h-[44px] text-[13px] font-semibold bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] rounded-xl hover:bg-[var(--custom-accent,#818cf8)]/25 disabled:opacity-30 shrink-0 transition-colors">
                       Save
                     </button>
                     <button onClick={() => { setShowSaveProfile(false); setProfileName(''); }}

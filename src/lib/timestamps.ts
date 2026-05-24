@@ -5,6 +5,7 @@ export type TimestampFormat = '12h' | '24h' | 'off' | 'relative';
  */
 export function formatTimestamp(date: Date, format: TimestampFormat): string {
 	if (format === 'off') return '';
+	if (format === 'relative') return relativeTime(date);
 
 	const h = date.getHours();
 	const m = String(date.getMinutes()).padStart(2, '0');
@@ -13,7 +14,6 @@ export function formatTimestamp(date: Date, format: TimestampFormat): string {
 		return `${String(h).padStart(2, '0')}:${m}`;
 	}
 
-	// 12h
 	const ampm = h >= 12 ? 'PM' : 'AM';
 	const h12 = h % 12 || 12;
 	return `${h12}:${m} ${ampm}`;

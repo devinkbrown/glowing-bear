@@ -13,6 +13,7 @@ export function useKeyboardShortcuts() {
   const nextHighlighted = useStore(s => s.nextHighlighted);
   const setSplitMode = useStore(s => s.setSplitMode);
   const splitMode = useStore(s => s.splitMode);
+  const clearLines = useStore(s => s.clearLines);
   const toggleAudioMute = useStore(s => s.toggleAudioMute);
   const toggleVideoOff = useStore(s => s.toggleVideoOff);
   const toggleScreenShare = useStore(s => s.toggleScreenShare);
@@ -70,6 +71,15 @@ export function useKeyboardShortcuts() {
       if (e.ctrlKey && !e.altKey && !e.metaKey && e.key === '\\') {
         e.preventDefault();
         setSplitMode(splitMode === 'none' ? 'vertical' : 'none');
+        return;
+      }
+
+      // Ctrl+L: clear current buffer's visible messages
+      if (e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'l' || e.key === 'L')) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        e.preventDefault();
+        if (activeBuffer) clearLines(activeBuffer);
         return;
       }
 
@@ -162,5 +172,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [setActive, getSorted, activeBuffer, openModal, toggleSidebar, toggleUserList, nextHighlighted, setSplitMode, splitMode, toggleAudioMute, toggleVideoOff, toggleScreenShare, hangup, rejectCall]);
+  }, [setActive, getSorted, activeBuffer, openModal, toggleSidebar, toggleUserList, nextHighlighted, setSplitMode, splitMode, clearLines, toggleAudioMute, toggleVideoOff, toggleScreenShare, hangup, rejectCall]);
 }

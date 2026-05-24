@@ -90,7 +90,7 @@ export default function BufferSwitcher({ onClose }: Props) {
             <button key={item.id} onClick={() => pick(item.id)}
               onMouseEnter={() => setSelected(i)}
               className={`w-full text-left px-4 py-3.5 sm:py-2.5 flex items-center gap-3 text-[15px] sm:text-[13px] transition-colors
-                ${i === selected ? 'bg-indigo-500/10 text-indigo-200' : 'text-gray-400 hover:bg-white/[0.02]'}`}>
+                ${i === selected ? 'bg-[var(--custom-accent,#818cf8)]/10 text-gray-100' : 'text-gray-400 hover:bg-white/[0.02]'}`}>
               <BufTypeGlyph type={item.type} fullName={item.fullName} />
               <span className="truncate flex-1">{item.name}</span>
               {item.highlighted > 0 && (

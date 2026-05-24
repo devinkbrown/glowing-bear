@@ -38,7 +38,9 @@ export default function ThemeBg({ theme }: Props) {
 }
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
-  <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-75" aria-hidden="true">
+  <div className="theme-bg-shell absolute inset-0 pointer-events-none overflow-hidden opacity-75" aria-hidden="true"
+    style={{ contain: 'layout style', willChange: 'transform' }}>
+    <style>{`@media (prefers-reduced-motion: reduce) { .theme-bg-shell * { animation: none !important; } }`}</style>
     {children}
   </div>
 );
@@ -47,7 +49,7 @@ const Shell = ({ children }: { children: React.ReactNode }) => (
 function DarkBearBg() {
   const nodes = useMemo(() => {
     const rand = seededRand(42);
-    return Array.from({ length: 45 }, (_, i) => ({
+    return Array.from({ length: 28 }, (_, i) => ({
       x: rand() * 90 + 5, y: rand() * 90 + 5,
       size: rand() < 0.15 ? (4 + rand() * 4) : (1.5 + rand() * 2.5),
       opacity: 0.15 + rand() * 0.45,
@@ -75,7 +77,7 @@ function DarkBearBg() {
 
   const streams = useMemo(() => {
     const rand = seededRand(200);
-    return Array.from({ length: 10 }, () => {
+    return Array.from({ length: 5 }, () => {
       const vertical = rand() > 0.5;
       return {
         x: rand() * 100, y: rand() * 100,
@@ -88,7 +90,7 @@ function DarkBearBg() {
 
   const hexes = useMemo(() => {
     const rand = seededRand(150);
-    return Array.from({ length: 8 }, () => ({
+    return Array.from({ length: 6 }, () => ({
       x: rand() * 90 + 5, y: rand() * 90 + 5,
       size: 12 + rand() * 24,
       opacity: 0.04 + rand() * 0.06,
@@ -220,7 +222,7 @@ function DarkBearBg() {
 function MidnightBg() {
   const starsNear = useMemo(() => {
     const rand = seededRand(99);
-    return Array.from({ length: 70 }, () => ({
+    return Array.from({ length: 35 }, () => ({
       x: rand() * 100, y: rand() * 100,
       size: 1.4 + rand() * 1.8,
       opacity: 0.35 + rand() * 0.55,
@@ -231,7 +233,7 @@ function MidnightBg() {
   }, []);
   const starsMid = useMemo(() => {
     const rand = seededRand(200);
-    return Array.from({ length: 80 }, () => ({
+    return Array.from({ length: 40 }, () => ({
       x: rand() * 100, y: rand() * 100,
       size: 0.8 + rand() * 1.1,
       opacity: 0.25 + rand() * 0.45,
@@ -242,7 +244,7 @@ function MidnightBg() {
   }, []);
   const starsFar = useMemo(() => {
     const rand = seededRand(301);
-    return Array.from({ length: 80 }, () => ({
+    return Array.from({ length: 40 }, () => ({
       x: rand() * 100, y: rand() * 100,
       size: 0.3 + rand() * 0.7,
       opacity: 0.15 + rand() * 0.25,
@@ -252,7 +254,7 @@ function MidnightBg() {
   }, []);
   const milkyWayStars = useMemo(() => {
     const rand = seededRand(402);
-    return Array.from({ length: 85 }, () => ({
+    return Array.from({ length: 45 }, () => ({
       x: 15 + rand() * 70,
       y: rand() * 85,
       size: 0.3 + rand() * 0.9,
@@ -296,7 +298,7 @@ function MidnightBg() {
   ];
   return (
     <Shell>
-      {/* Milky Way diagonal haze - DRAMATICALLY MORE VISIBLE */}
+      {/* Milky Way diagonal haze */}
       <div className="absolute inset-0" style={{
         background: 'linear-gradient(135deg, transparent 15%, rgba(120,140,230,0.25) 30%, rgba(100,120,210,0.35) 50%, rgba(120,140,230,0.25) 70%, transparent 85%)',
         filter: 'blur(18px)',
@@ -330,7 +332,7 @@ function MidnightBg() {
             boxShadow: s.size > 2 ? `0 0 ${s.size * 4}px rgba(139,156,248,0.6)` : undefined,
             animation: `mn-twinkle-fast ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
       ))}
-      {/* Nebula breathing clouds - MASSIVELY MORE VISIBLE */}
+      {/* Nebula breathing clouds */}
       {nebulae.map((n, i) => (
         <div key={`nb${i}`} className="absolute rounded-full"
           style={{ left: `${n.x}%`, top: `${n.y}%`, width: `${n.w}px`, height: `${n.h}px`,
@@ -340,18 +342,18 @@ function MidnightBg() {
       ))}
       {/* Crescent moon upper-right */}
       <div className="absolute" style={{ top: '6%', right: '8%', width: '52px', height: '52px' }}>
-        {/* Outer glow halo - BRIGHTER */}
+        {/* Outer glow halo */}
         <div className="absolute rounded-full" style={{
           top: '-30%', left: '-30%', width: '160%', height: '160%',
           background: 'radial-gradient(circle, rgba(180,200,255,0.3), transparent 55%)',
           filter: 'blur(8px)', animation: 'mn-moon-glow 9s ease-in-out infinite',
         }} />
         <svg viewBox="0 0 52 52" className="w-full h-full">
-          {/* Full circle - BRIGHTER */}
+          {/* Full circle */}
           <circle cx="26" cy="26" r="22" fill="rgba(210,220,255,0.5)" />
           {/* Inner shadow cutout to make crescent */}
           <circle cx="34" cy="22" r="19" fill="rgba(8,8,22,0.92)" />
-          {/* Soft inner edge - BRIGHTER */}
+          {/* Soft inner edge */}
           <circle cx="26" cy="26" r="22" fill="none" stroke="rgba(180,200,255,0.3)" strokeWidth="1" />
         </svg>
       </div>
@@ -362,7 +364,7 @@ function MidnightBg() {
             stroke="rgba(139,156,248,0.4)" strokeWidth="1.2"
             style={{ animation: `mn-line ${l.dur}s ease-in-out ${l.delay}s infinite` }} />
         ))}
-        {/* Constellation node dots - BRIGHTER */}
+        {/* Constellation node dots */}
         {[
           [12,18],[22,10],[30,20],[65,30],[75,30],[70,25],[70,35],
           [8,62],[14,55],[20,63],[26,56],[32,64],[48,15],[56,22],[62,16],[82,42],[90,50],
@@ -371,7 +373,7 @@ function MidnightBg() {
             fill="rgba(180,196,255,0.6)"
             style={{ animation: `mn-twinkle ${8 + i * 1.1}s ease-in-out ${i * 0.7}s infinite` }} />
         ))}
-        {/* Shooting stars - MORE VISIBLE TRAILS */}
+        {/* Shooting stars */}
         {shooters.map((s, i) => (
           <g key={`sh${i}`} style={{ animation: `mn-shoot ${s.dur}s ease-in ${s.delay}s infinite`, opacity: 0 }}>
             <line
@@ -388,7 +390,7 @@ function MidnightBg() {
           </g>
         ))}
       </svg>
-      {/* Faint horizon warm glow - SLIGHTLY MORE VISIBLE */}
+      {/* Horizon warm glow */}
       <div className="absolute bottom-0 left-0 right-0 h-[18%]"
         style={{ background: 'linear-gradient(to top, rgba(80,60,120,0.2), transparent)', filter: 'blur(4px)' }} />
       <style>{`
@@ -406,137 +408,157 @@ function MidnightBg() {
 
 /* ── Obsidian: Crystal facets, light sweeps, geometric reflections ── */
 function ObsidianBg() {
-  const facets = useMemo(() => {
+  const shards = useMemo(() => {
     const rand = seededRand(44);
-    return Array.from({ length: 22 }, () => ({
-      x: rand() * 95, y: rand() * 95,
-      size: 35 + rand() * 90,
-      rot: rand() * 360,
-      dur: 5 + rand() * 9,
-      delay: rand() * 7,
-      colorIdx: Math.floor(rand() * 3),
-    }));
+    return Array.from({ length: 9 }, (_, i) => {
+      const cx = 8 + rand() * 84;
+      const cy = 5 + rand() * 85;
+      const w = 60 + rand() * 180;
+      const h = 40 + rand() * 120;
+      const rot = -30 + rand() * 60;
+      const pts: string[] = [];
+      const n = 4 + Math.floor(rand() * 3);
+      for (let j = 0; j < n; j++) {
+        const a = (j / n) * Math.PI * 2 - Math.PI / 2;
+        const r = 38 + rand() * 12;
+        pts.push(`${50 + Math.cos(a) * r}% ${50 + Math.sin(a) * r}%`);
+      }
+      return { cx, cy, w, h, rot, clip: `polygon(${pts.join(', ')})`,
+        dur: 14 + rand() * 18, delay: rand() * 12, layer: i < 3 ? 0 : i < 6 ? 1 : 2,
+        edgeAngle: rand() * 360 };
+    });
   }, []);
-  const cracks = useMemo(() => {
+
+  const glints = useMemo(() => {
     const rand = seededRand(144);
-    return Array.from({ length: 8 }, () => ({
-      x1: 10 + rand() * 80, y1: 10 + rand() * 80,
-      x2: 15 + rand() * 75, y2: 15 + rand() * 75,
-      dur: 4 + rand() * 6, delay: rand() * 8,
-    }));
-  }, []);
-  const shatterParticles = useMemo(() => {
-    const rand = seededRand(244);
-    return Array.from({ length: 28 }, () => ({
+    return Array.from({ length: 14 }, () => ({
       x: rand() * 100, y: rand() * 100,
-      size: 1 + rand() * 3,
-      dur: 2 + rand() * 4, delay: rand() * 10,
+      size: 1 + rand() * 2.5,
+      dur: 3 + rand() * 6, delay: rand() * 14,
     }));
   }, []);
-  const diamonds = useMemo(() => {
+
+  const veins = useMemo(() => {
+    const rand = seededRand(244);
+    return Array.from({ length: 5 }, () => {
+      const segs: { x: number; y: number }[] = [];
+      let x = rand() * 100, y = rand() * 100;
+      const n = 4 + Math.floor(rand() * 4);
+      for (let j = 0; j < n; j++) {
+        segs.push({ x, y });
+        x += (rand() - 0.5) * 30;
+        y += 8 + rand() * 15;
+        x = Math.max(2, Math.min(98, x));
+        y = Math.min(98, y);
+      }
+      return { segs, dur: 8 + rand() * 10, delay: rand() * 16, opacity: 0.15 + rand() * 0.2 };
+    });
+  }, []);
+
+  const motes = useMemo(() => {
     const rand = seededRand(344);
-    return Array.from({ length: 5 }, () => ({
-      x: 10 + rand() * 80, y: 10 + rand() * 80,
-      size: 30 + rand() * 55,
-      dur: 12 + rand() * 18, delay: rand() * 8,
+    return Array.from({ length: 18 }, () => ({
+      x: rand() * 100, dur: 12 + rand() * 20, delay: rand() * 16,
+      drift: (rand() - 0.5) * 40, size: 1 + rand() * 2, color: Math.floor(rand() * 3),
     }));
   }, []);
-  const sweepAngles = [-22, -12, -4, 6, 16, 26];
-  const sweepColors = [
-    ['167,139,250', '255,255,255', '167,139,250'],
-    ['180,160,255', '240,230,255', '180,160,255'],
-    ['120,100,220', '200,190,255', '120,100,220'],
-    ['167,139,250', '210,200,255', '167,139,250'],
-    ['200,180,255', '255,255,255', '200,180,255'],
-    ['130,110,230', '190,180,255', '130,110,230'],
-  ];
+
+  const moteColors = ['rgba(167,139,250,0.6)', 'rgba(200,180,255,0.5)', 'rgba(130,100,230,0.55)'];
+
   return (
     <Shell>
-      {/* 6 diagonal prismatic light sweeps - DRAMATICALLY MORE VISIBLE */}
-      {sweepAngles.map((angle, i) => (
-        <div key={`sw${i}`} className="absolute"
-          style={{ width: '260%', height: '80px', top: `${10 + i * 16}%`, left: '-80%',
-            background: `linear-gradient(90deg, transparent 15%, rgba(${sweepColors[i][0]},0.25) 38%, rgba(${sweepColors[i][1]},${0.4 + i * 0.05}) 50%, rgba(${sweepColors[i][2]},0.25) 62%, transparent 85%)`,
-            transform: `rotate(${angle}deg)`,
-            animation: `ob-sweep ${5.5 + i * 2.2}s ease-in-out ${i * 1.3}s infinite` }} />
+      {/* Deep volcanic glass base gradient */}
+      <div className="absolute inset-0"
+        style={{ background: 'radial-gradient(ellipse at 35% 25%, rgba(30,20,60,0.6) 0%, transparent 50%), radial-gradient(ellipse at 70% 75%, rgba(20,15,50,0.5) 0%, transparent 45%)' }} />
+
+      {/* Glass shard planes — fractured obsidian with iridescent edge catches */}
+      {shards.map((s, i) => (
+        <div key={`sh${i}`} className="absolute"
+          style={{
+            left: `${s.cx - s.w / 6}%`, top: `${s.cy - s.h / 6}%`,
+            width: `${s.w}px`, height: `${s.h}px`,
+            transform: `rotate(${s.rot}deg)`,
+            clipPath: s.clip,
+            background: s.layer === 0
+              ? `linear-gradient(${s.edgeAngle}deg, transparent 30%, rgba(120,90,200,0.08) 48%, rgba(180,160,240,0.12) 52%, transparent 70%)`
+              : s.layer === 1
+              ? `linear-gradient(${s.edgeAngle}deg, transparent 25%, rgba(100,70,190,0.06) 45%, rgba(160,140,230,0.1) 55%, transparent 75%)`
+              : `linear-gradient(${s.edgeAngle}deg, transparent 35%, rgba(90,60,180,0.05) 48%, rgba(140,120,220,0.08) 52%, transparent 65%)`,
+            animation: `ob-shard ${s.dur}s ease-in-out ${s.delay}s infinite`,
+            opacity: 0.7,
+          }} />
       ))}
-      {/* Crystal facets with pentagon clip-path and inner shine - MUCH BRIGHTER */}
-      {facets.map((f, i) => {
-        const faceColors = ['rgba(167,139,250,', 'rgba(200,180,255,', 'rgba(130,100,230,'];
-        const baseOpacity = 0.2 + (i % 4) * 0.15;
-        return (
-          <div key={`f${i}`} className="absolute"
-            style={{ left: `${f.x}%`, top: `${f.y}%`, width: `${f.size}px`, height: `${f.size}px`,
-              transform: `rotate(${f.rot}deg)`,
-              clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)',
-              animation: `ob-facet ${f.dur}s ease-in-out ${f.delay}s infinite`,
-              background: `linear-gradient(${120 + f.rot * 0.3}deg, transparent 20%, ${faceColors[f.colorIdx]}${baseOpacity}) 48%, rgba(255,255,255,${baseOpacity * 0.8}) 54%, ${faceColors[f.colorIdx]}${baseOpacity * 0.6}) 62%, transparent 78%)` }} />
-        );
-      })}
-      {/* Spinning wireframe diamonds - GLOWING OUTLINES */}
+
+      {/* Slow prismatic sweep — single elegant light band crossing the surface */}
+      <div className="absolute" style={{width:'200%', height:'120px', top:'30%', left:'-50%',
+        background: 'linear-gradient(90deg, transparent 20%, rgba(140,110,230,0.06) 40%, rgba(200,180,255,0.14) 48%, rgba(255,255,255,0.08) 50%, rgba(180,160,240,0.12) 52%, rgba(120,90,210,0.06) 60%, transparent 80%)',
+        transform: 'rotate(-8deg)',
+        animation: 'ob-sweep 20s ease-in-out infinite' }} />
+      <div className="absolute" style={{width:'200%', height:'80px', top:'60%', left:'-50%',
+        background: 'linear-gradient(90deg, transparent 25%, rgba(130,100,220,0.05) 42%, rgba(180,160,240,0.1) 49%, rgba(220,210,255,0.06) 51%, rgba(150,120,230,0.08) 58%, transparent 75%)',
+        transform: 'rotate(5deg)',
+        animation: 'ob-sweep 26s ease-in-out 8s infinite' }} />
+
+      {/* Fracture veins — thin lines of trapped light between glass planes */}
       <svg className="absolute inset-0 w-full h-full">
-        {diamonds.map((d, i) => (
-          <g key={`dia${i}`} style={{ animation: `ob-spin ${d.dur}s linear ${d.delay}s infinite`, transformOrigin: `${d.x}% ${d.y}%` }}>
-            <rect
-              x={`calc(${d.x}% - ${d.size / 2}px)`}
-              y={`calc(${d.y}% - ${d.size / 2}px)`}
-              width={d.size} height={d.size}
-              fill="none" stroke="rgba(167,139,250,0.4)" strokeWidth="1.5"
-              transform={`rotate(45, ${d.x * 10}, ${d.y * 10})`}
-              style={{ filter: 'drop-shadow(0 0 4px rgba(167,139,250,0.6))' }} />
-          </g>
-        ))}
-        {/* Crack lines with glow - BRIGHT VEINS OF LIGHT */}
-        {cracks.map((c, i) => (
-          <g key={`cr${i}`}>
-            <line x1={`${c.x1}%`} y1={`${c.y1}%`} x2={`${c.x2}%`} y2={`${c.y2}%`}
-              stroke="rgba(130,100,220,0.6)" strokeWidth="3"
-              style={{ filter: 'drop-shadow(0 0 6px rgba(167,139,250,0.8))', animation: `ob-crack ${c.dur}s ease-in-out ${c.delay}s infinite` }} />
-            <line x1={`${c.x1}%`} y1={`${c.y1}%`} x2={`${c.x2}%`} y2={`${c.y2}%`}
-              stroke="rgba(200,180,255,0.3)" strokeWidth="1.5" />
-          </g>
-        ))}
-        {/* Prismatic refraction beams from focal point - CLEARLY VISIBLE */}
-        {[0, 35, 65, 110, 155, 200, 245, 300].map((a, i) => {
-          const rad = a * Math.PI / 180;
-          const len = 25 + i * 3;
+        {veins.map((v, i) => {
+          const d = v.segs.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x},${s.y}`).join(' ');
           return (
-            <line key={`rb${i}`}
-              x1="70%" y1="28%"
-              x2={`calc(70% + ${Math.cos(rad) * len}px)`}
-              y2={`calc(28% + ${Math.sin(rad) * len}px)`}
-              stroke={`rgba(${[
-                '167,139,250','180,160,255','140,120,240','200,180,255',
-                '160,140,245','190,170,255','150,130,235','210,190,255',
-              ][i]},0.35)`}
-              strokeWidth="1.5"
-              style={{ animation: `ob-refract ${6 + i * 0.8}s ease-in-out ${i * 0.5}s infinite` }} />
+            <g key={`v${i}`}>
+              <path d={d} fill="none" stroke={`rgba(167,139,250,${v.opacity})`} strokeWidth="1.5"
+                strokeLinecap="round" strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+                style={{ animation: `ob-vein ${v.dur}s ease-in-out ${v.delay}s infinite` }} />
+              <path d={d} fill="none" stroke={`rgba(200,180,255,${v.opacity * 0.4})`} strokeWidth="4"
+                strokeLinecap="round" strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+                style={{ animation: `ob-vein ${v.dur}s ease-in-out ${v.delay}s infinite` }} />
+            </g>
           );
         })}
       </svg>
-      {/* Shatter particles - CLEARLY VISIBLE */}
-      {shatterParticles.map((p, i) => (
-        <div key={`sp${i}`} className="absolute rounded-sm"
-          style={{ left: `${p.x}%`, top: `${p.y}%`, width: `${p.size}px`, height: `${p.size * 0.6}px`,
-            background: i % 3 === 0 ? 'rgba(200,180,255,0.8)' : i % 3 === 1 ? 'rgba(255,255,255,0.7)' : 'rgba(167,139,250,0.8)',
-            transform: `rotate(${i * 37}deg)`,
-            boxShadow: '0 0 4px rgba(167,139,250,0.6)',
-            animation: `ob-shatter ${p.dur}s ease-in-out ${p.delay}s infinite` }} />
+
+      {/* Glint sparks — tiny points where light catches fracture edges */}
+      {glints.map((g, i) => (
+        <div key={`gl${i}`} className="absolute"
+          style={{
+            left: `${g.x}%`, top: `${g.y}%`,
+            width: `${g.size}px`, height: `${g.size}px`,
+            borderRadius: '50%',
+            background: 'rgba(220,210,255,0.9)',
+            boxShadow: '0 0 6px rgba(167,139,250,0.8), 0 0 12px rgba(167,139,250,0.3)',
+            animation: `ob-glint ${g.dur}s ease-in-out ${g.delay}s infinite`,
+          }} />
       ))}
-      {/* Breathing center glow - VISIBLY PULSING */}
-      <div className="absolute w-[min(550px,45vw)] h-[min(550px,45vw)] top-[42%] left-[50%] -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(167,139,250,0.3), transparent 50%)', filter: 'blur(30px)', animation: 'ob-center-glow 16s ease-in-out infinite' }} />
-      <div className="absolute w-[min(300px,25vw)] h-[min(300px,25vw)] top-[42%] left-[50%] -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(220,215,240,0.25), transparent 50%)', filter: 'blur(15px)', animation: 'ob-center-silver 16s ease-in-out 8s infinite' }} />
+
+      {/* Rising volcanic glass motes — slowly ascending dust */}
+      {motes.map((m, i) => (
+        <div key={`m${i}`} className="absolute"
+          style={{
+            left: `${m.x}%`, bottom: '-3%',
+            width: `${m.size}px`, height: `${m.size}px`,
+            borderRadius: '50%',
+            background: moteColors[m.color],
+            ['--ob-drift' as string]: `${m.drift}px`,
+            animation: `ob-mote ${m.dur}s linear ${m.delay}s infinite`,
+          }} />
+      ))}
+
+      {/* Deep ambient core glow */}
+      <div className="absolute rounded-full"
+        style={{width:'min(500px,50vw)', height:'min(500px,50vw)',
+          top:'45%', left:'50%',
+          background: 'radial-gradient(circle, rgba(120,90,200,0.15), rgba(80,50,160,0.06) 40%, transparent 65%)',
+          transform: 'translate(-50%, -50%)',
+          animation: 'ob-core 20s ease-in-out infinite' }} />
+
       <style>{`
-        @keyframes ob-sweep       { 0%,100%{transform:rotate(var(--ob-ang,0deg)) translateX(-28%);opacity:0.8} 50%{transform:rotate(var(--ob-ang,0deg)) translateX(28%);opacity:1} }
-        @keyframes ob-facet       { 0%,100%{opacity:0.6} 50%{opacity:1} }
-        @keyframes ob-crack       { 0%,100%{opacity:0.7} 50%{opacity:1.0} }
-        @keyframes ob-spin        { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
-        @keyframes ob-refract     { 0%,100%{opacity:0.5} 50%{opacity:1} }
-        @keyframes ob-shatter     { 0%,100%{opacity:0;transform:rotate(var(--rot,0deg)) scale(0.5)} 40%{opacity:0.8;transform:rotate(var(--rot,0deg)) scale(1.2)} 60%{opacity:0.8} }
-        @keyframes ob-center-glow { 0%,100%{opacity:1;transform:translate(-50%,-50%) scale(1)} 50%{opacity:0.6;transform:translate(-50%,-50%) scale(1.4)} }
-        @keyframes ob-center-silver{ 0%,100%{opacity:0.3} 50%{opacity:1} }
+        @keyframes ob-shard  { 0%,100%{opacity:0.5;transform:rotate(var(--r,0deg))} 50%{opacity:0.9;transform:rotate(var(--r,0deg))} }
+        @keyframes ob-sweep  { 0%,100%{transform:rotate(var(--ob-ang,0deg)) translateX(-35%);opacity:0.6} 50%{transform:rotate(var(--ob-ang,0deg)) translateX(35%);opacity:1} }
+        @keyframes ob-vein   { 0%,100%{opacity:0.3} 40%{opacity:1} 60%{opacity:1} }
+        @keyframes ob-glint  { 0%,100%{opacity:0;transform:scale(0.5)} 15%{opacity:1;transform:scale(1.2)} 25%{opacity:0.8;transform:scale(1)} 35%{opacity:0;transform:scale(0.5)} }
+        @keyframes ob-mote   { 0%{opacity:0;transform:translateY(0) translateX(0)} 8%{opacity:0.7} 85%{opacity:0.3} 100%{opacity:0;transform:translateY(-110vh) translateX(var(--ob-drift))} }
+        @keyframes ob-core   { 0%,100%{opacity:0.8;transform:translate(-50%,-50%) scale(1)} 50%{opacity:1;transform:translate(-50%,-50%) scale(1.15)} }
       `}</style>
     </Shell>
   );
@@ -546,7 +568,7 @@ function ObsidianBg() {
 function NordBg() {
   const frost = useMemo(() => {
     const rand = seededRand(22);
-    return Array.from({ length: 52 }, () => ({
+    return Array.from({ length: 30 }, () => ({
       x: rand() * 100, y: rand() * 70,
       size: 0.8 + rand() * 2.5,
       dur: 4 + rand() * 7,
@@ -556,7 +578,7 @@ function NordBg() {
   }, []);
   const snowflakes = useMemo(() => {
     const rand = seededRand(122);
-    return Array.from({ length: 44 }, () => ({
+    return Array.from({ length: 25 }, () => ({
       x: rand() * 100,
       size: 2 + rand() * 4,
       dur: 8 + rand() * 14,
@@ -586,7 +608,7 @@ function NordBg() {
   ];
   return (
     <Shell>
-      {/* Mountain silhouette - CLEARLY VISIBLE DARK SHAPES */}
+      {/* Mountain silhouette */}
       <svg className="absolute bottom-0 left-0 right-0 w-full" viewBox="0 0 1000 180" preserveAspectRatio="none" style={{ height: '22%' }}>
         <defs>
           <linearGradient id="nd-mountain-edge" x1="0" y1="0" x2="0" y2="1">
@@ -594,17 +616,17 @@ function NordBg() {
             <stop offset="100%" stopColor="#2e3440" stopOpacity="0.3" />
           </linearGradient>
         </defs>
-        {/* Back range - MORE VISIBLE */}
+        {/* Back range */}
         <path d="M0,180 L0,120 L80,60 L160,90 L260,30 L360,80 L440,40 L520,85 L620,25 L720,75 L800,45 L880,80 L960,50 L1000,70 L1000,180 Z"
           fill="rgba(36,40,59,0.8)" />
-        {/* Blue edge highlight - BRIGHT AGAINST AURORA */}
+        {/* Blue edge highlight */}
         <path d="M0,120 L80,60 L160,90 L260,30 L360,80 L440,40 L520,85 L620,25 L720,75 L800,45 L880,80 L960,50 L1000,70"
           fill="none" stroke="url(#nd-mountain-edge)" strokeWidth="2" />
-        {/* Front range - CLEARLY DARK SILHOUETTE */}
+        {/* Front range */}
         <path d="M0,180 L0,145 L60,100 L130,125 L200,85 L300,110 L390,70 L480,105 L560,80 L650,115 L730,88 L820,120 L900,95 L970,115 L1000,100 L1000,180 Z"
           fill="rgba(28,32,48,0.9)" />
       </svg>
-      {/* Aurora bands - DOMINANT VISUAL WITH HIGH OPACITY */}
+      {/* Aurora bands */}
       {auroraBands.map((band, i) => (
         <div key={i} className="absolute left-0 right-0"
           style={{ top: band.top, height: band.h,
@@ -612,7 +634,7 @@ function NordBg() {
             animation: `nd-wave ${band.dur} ease-in-out ${band.delay} infinite`,
             filter: 'blur(28px)' }} />
       ))}
-      {/* 12 vertical curtain columns - BRIGHT ENOUGH TO CLEARLY SEE */}
+      {/* Vertical curtain columns */}
       {Array.from({ length: 12 }, (_, i) => (
         <div key={`col${i}`} className="absolute top-0"
           style={{ left: `${2 + i * 8}%`, width: '5%', height: '58%',
@@ -620,7 +642,7 @@ function NordBg() {
             animation: `nd-col ${3.5 + i * 1.1}s ease-in-out ${i * 0.7}s infinite`,
             filter: 'blur(10px)' }} />
       ))}
-      {/* Frost particles - CLEARLY VISIBLE SPARKLES */}
+      {/* Frost particles */}
       {frost.map((f, i) => (
         <div key={`fr${i}`} className="absolute rounded-full"
           style={{ left: `${f.x}%`, top: `${f.y}%`, width: `${f.size}px`, height: `${f.size}px`,
@@ -629,7 +651,7 @@ function NordBg() {
             boxShadow: `0 0 4px ${['#88c0d0', '#81a1c1', '#8fbcbb'][f.color]}`,
             animation: `nd-frost ${f.dur}s ease-in-out ${f.delay}s infinite` }} />
       ))}
-      {/* Falling snowflakes - OBVIOUS WHITE DOTS */}
+      {/* Falling snowflakes */}
       {snowflakes.map((s, i) => (
         <div key={`snow${i}`} className="absolute rounded-full opacity-0"
           style={{ left: `${s.x}%`, top: '-3%', width: `${s.size}px`, height: `${s.size}px`,
@@ -638,7 +660,7 @@ function NordBg() {
             animation: `nd-snow ${s.dur}s linear ${s.delay}s infinite`,
             ['--snow-drift' as string]: `${s.drift}px` }} />
       ))}
-      {/* Ice crystal hexagons - VISIBLE FROST PATTERNS */}
+      {/* Ice crystal hexagons */}
       <svg className="absolute inset-0 w-full h-full">
         {hexCrystals.map((h, i) => (
           <g key={`hx${i}`}
@@ -650,7 +672,7 @@ function NordBg() {
               style={{ filter: 'drop-shadow(0 0 3px rgba(136,192,208,0.7))' }} />
           </g>
         ))}
-        {/* Northern star with cross-flare - BRIGHT GUIDE STAR */}
+        {/* Northern star with cross-flare */}
         <g style={{ animation: 'nd-star 5s ease-in-out infinite', transformOrigin: '82% 5%' }}>
           <circle cx="82%" cy="5%" r="3" fill="rgba(236,239,244,0.9)" />
           <line x1="82%" y1="1%" x2="82%" y2="9%" stroke="rgba(236,239,244,0.7)" strokeWidth="1.2" />
@@ -659,7 +681,7 @@ function NordBg() {
           <line x1="84.8%" y1="2.2%" x2="79.2%" y2="7.8%" stroke="rgba(236,239,244,0.5)" strokeWidth="1" />
         </g>
       </svg>
-      {/* Subtle grid lines - SLIGHTLY MORE VISIBLE */}
+      {/* Subtle grid lines */}
       <div className="absolute inset-0 opacity-[0.08]"
         style={{ background: 'repeating-linear-gradient(90deg, transparent, transparent 80px, rgba(136,192,208,0.3) 80px, rgba(136,192,208,0.3) 81px)' }} />
       <style>{`
@@ -678,10 +700,10 @@ function NordBg() {
 function GruvboxBg() {
   const embers = useMemo(() => {
     const rand = seededRand(73);
-    return Array.from({ length: 78 }, (_, i) => ({
+    return Array.from({ length: 40 }, (_, i) => ({
       x: rand() * 100,
-      size: i < 20 ? (0.6 + rand() * 1.2) : i < 55 ? (1.5 + rand() * 2.5) : (3 + rand() * 4.5),
-      dur: i < 20 ? (1.2 + rand() * 1.8) : i < 55 ? (2.5 + rand() * 4) : (4 + rand() * 6),
+      size: i < 10 ? (0.6 + rand() * 1.2) : i < 28 ? (1.5 + rand() * 2.5) : (3 + rand() * 4.5),
+      dur: i < 10 ? (1.2 + rand() * 1.8) : i < 28 ? (2.5 + rand() * 4) : (4 + rand() * 6),
       delay: rand() * 10,
       drift: (rand() - 0.5) * 80,
       color: rand() > 0.55 ? '#d79921' : rand() > 0.3 ? '#d65d0e' : '#cc241d',
@@ -700,7 +722,7 @@ function GruvboxBg() {
   const lavaPoolPositions = [18, 50, 80];
   return (
     <Shell>
-      {/* 4 layered heat glow zones - BRIGHT ORANGE GLOW */}
+      {/* Heat glow zones */}
       <div className="absolute bottom-0 left-0 right-0 h-[62%]"
         style={{ background: 'linear-gradient(to top, rgba(215,153,33,0.5), rgba(214,93,14,0.3) 45%, transparent)', animation: 'gv-glow 4s ease-in-out infinite' }} />
       <div className="absolute bottom-0 left-[5%] right-[5%] h-[45%]"
@@ -709,17 +731,17 @@ function GruvboxBg() {
         style={{ background: 'radial-gradient(ellipse at bottom, rgba(204,36,29,0.5), transparent 55%)', animation: 'gv-glow 4.5s ease-in-out 2.4s infinite' }} />
       <div className="absolute bottom-0 left-[35%] right-[35%] h-[20%]"
         style={{ background: 'radial-gradient(ellipse at bottom, rgba(255,180,50,0.4), transparent 50%)', animation: 'gv-glow 3.5s ease-in-out 3.6s infinite' }} />
-      {/* Glowing coal bed strip - VISIBLY PULSING */}
+      {/* Coal bed strip */}
       <div className="absolute bottom-0 left-0 right-0 h-[3px]"
         style={{ background: 'linear-gradient(90deg, transparent 5%, rgba(215,153,33,0.8) 20%, rgba(255,200,60,0.9) 50%, rgba(215,153,33,0.8) 80%, transparent 95%)', filter: 'blur(1px)', animation: 'gv-coal 3s ease-in-out infinite' }} />
-      {/* Molten lava pools - BRIGHT GLOWING POOLS */}
+      {/* Molten lava pools */}
       {lavaPoolPositions.map((pos, i) => (
         <div key={`pool${i}`} className="absolute bottom-0"
           style={{ left: `${pos - 12}%`, width: '24%', height: '6%',
             background: `radial-gradient(ellipse at center bottom, rgba(255,${160 - i * 20},30,0.7), rgba(214,93,14,0.4) 50%, transparent 75%)`,
             filter: 'blur(3px)', animation: `gv-pool ${4 + i * 1.5}s ease-in-out ${i * 1.2}s infinite` }} />
       ))}
-      {/* 8 lava crack lines - CLEARLY GLOWING VEINS */}
+      {/* Lava crack lines */}
       {[8, 18, 30, 43, 55, 67, 78, 90].map((x, i) => (
         <div key={`c${i}`} className="absolute bottom-0"
           style={{ left: `${x}%`, width: '2px', height: `${12 + i * 5}%`,
@@ -728,11 +750,11 @@ function GruvboxBg() {
             boxShadow: `0 0 8px rgba(215,153,33,0.6)`,
             animation: `gv-crack ${2.5 + i * 1.1}s ease-in-out ${i * 0.55}s infinite` }} />
       ))}
-      {/* Heat distortion shimmer - MORE VISIBLE */}
+      {/* Heat distortion shimmer */}
       <div className="absolute bottom-0 left-0 right-0 h-[30%]"
         style={{ animation: 'gv-shimmer 1.8s ease-in-out infinite', filter: 'blur(2px)',
           background: 'linear-gradient(to top, rgba(215,100,14,0.15), transparent)' }} />
-      {/* 5 smoke wisps - VISIBLE SMOKE COLUMNS */}
+      {/* Smoke wisps */}
       {[12, 28, 46, 62, 80].map((x, i) => (
         <div key={`sm${i}`} className="absolute"
           style={{ left: `${x}%`, bottom: '8%', width: `${30 + i * 8}px`, height: '20%',
@@ -740,7 +762,7 @@ function GruvboxBg() {
             filter: 'blur(12px)',
             animation: `gv-smoke ${6 + i * 2}s ease-out ${i * 1.4}s infinite` }} />
       ))}
-      {/* Embers: tiny fast, medium, large cinders - VISIBLE SPARKS */}
+      {/* Embers */}
       {embers.map((e, i) => (
         <div key={`em${i}`} className="absolute rounded-full"
           style={{ left: `${e.x}%`, bottom: '0',
@@ -750,7 +772,7 @@ function GruvboxBg() {
             ['--gv-drift' as string]: `${e.drift}px`,
             animation: `gv-rise ${e.dur}s ease-out ${e.delay}s infinite` }} />
       ))}
-      {/* Ash particles drifting down - VISIBLE ASH */}
+      {/* Ash particles */}
       {ash.map((a, i) => (
         <div key={`ash${i}`} className="absolute rounded-full opacity-0"
           style={{ left: `${a.x}%`, top: '-2%', width: `${a.size}px`, height: `${a.size}px`,
@@ -776,7 +798,7 @@ function GruvboxBg() {
 function RosePineBg() {
   const petalsRound = useMemo(() => {
     const rand = seededRand(55);
-    return Array.from({ length: 18 }, () => ({
+    return Array.from({ length: 10 }, () => ({
       x: rand() * 112 - 6, size: 10 + rand() * 12,
       dur: 8 + rand() * 12, delay: rand() * 16,
       drift: (rand() - 0.5) * 90,
@@ -785,7 +807,7 @@ function RosePineBg() {
   }, []);
   const petalsElong = useMemo(() => {
     const rand = seededRand(155);
-    return Array.from({ length: 14 }, () => ({
+    return Array.from({ length: 8 }, () => ({
       x: rand() * 112 - 6, size: 7 + rand() * 10,
       dur: 9 + rand() * 11, delay: rand() * 18,
       drift: (rand() - 0.5) * 120,
@@ -794,7 +816,7 @@ function RosePineBg() {
   }, []);
   const petalsSmall = useMemo(() => {
     const rand = seededRand(255);
-    return Array.from({ length: 12 }, () => ({
+    return Array.from({ length: 7 }, () => ({
       x: rand() * 112 - 6, size: 4 + rand() * 6,
       dur: 6 + rand() * 10, delay: rand() * 14,
       drift: (rand() - 0.5) * 70,
@@ -803,7 +825,7 @@ function RosePineBg() {
   }, []);
   const fireflies = useMemo(() => {
     const rand = seededRand(56);
-    return Array.from({ length: 20 }, () => ({
+    return Array.from({ length: 12 }, () => ({
       x: rand() * 100, y: rand() * 95,
       dur: 5 + rand() * 9,
       delay: rand() * 12,
@@ -812,7 +834,7 @@ function RosePineBg() {
   }, []);
   const windParticles = useMemo(() => {
     const rand = seededRand(356);
-    return Array.from({ length: 15 }, () => ({
+    return Array.from({ length: 8 }, () => ({
       y: 5 + rand() * 85, size: 1.5 + rand() * 2.5,
       dur: 4 + rand() * 6, delay: rand() * 10,
       opacity: 0.3 + rand() * 0.4,
@@ -829,7 +851,7 @@ function RosePineBg() {
   const glowColors = ['rgba(246,193,119,', 'rgba(235,111,146,', 'rgba(196,167,231,'];
   return (
     <Shell>
-      {/* 5 fog/mist layers - SOFT BUT VISIBLE */}
+      {/* Fog/mist layers */}
       <div className="absolute w-[min(650px,50vw)] h-[min(400px,30vw)] top-[18%] right-[-12%] rounded-full"
         style={{ background: 'radial-gradient(ellipse, rgba(235,111,146,0.25), transparent 50%)', filter: 'blur(30px)', animation: 'rp-drift-a 22s ease-in-out infinite' }} />
       <div className="absolute w-[min(520px,42vw)] h-[min(350px,28vw)] bottom-[8%] left-[-12%] rounded-full"
@@ -840,7 +862,7 @@ function RosePineBg() {
         style={{ background: 'radial-gradient(ellipse, rgba(235,111,146,0.2), transparent 50%)', filter: 'blur(20px)', animation: 'rp-drift-a 40s ease-in-out 10s infinite reverse' }} />
       <div className="absolute w-[min(300px,24vw)] h-[min(200px,16vw)] bottom-[25%] right-[10%] rounded-full"
         style={{ background: 'radial-gradient(ellipse, rgba(196,167,231,0.2), transparent 50%)', filter: 'blur(18px)', animation: 'rp-drift-b 30s ease-in-out 4s infinite reverse' }} />
-      {/* Moonbeam diagonal shaft - VISIBLE LIGHT CAST */}
+      {/* Moonbeam diagonal shaft */}
       <div className="absolute" style={{
         top: '-10%', left: '-5%', width: '60%', height: '80%',
         background: 'linear-gradient(135deg, rgba(246,193,119,0.2) 0%, rgba(235,111,146,0.15) 30%, transparent 60%)',
@@ -849,7 +871,7 @@ function RosePineBg() {
       }} />
       {/* SVG: branch silhouettes + flower blooms + dew drops */}
       <svg className="absolute inset-0 w-full h-full">
-        {/* Branch/vine silhouettes framing edges - CLEARLY DARK AGAINST BACKGROUND */}
+        {/* Branch/vine silhouettes */}
         <path d="M0,40 Q15,20 25,35 Q35,50 50,30 Q60,15 70,25 Q80,35 90,20"
           fill="none" stroke="rgba(40,30,45,0.7)" strokeWidth="2" />
         <path d="M0,60 Q10,45 20,55 Q30,65 45,48 Q55,32 65,42"
@@ -858,7 +880,7 @@ function RosePineBg() {
           fill="none" stroke="rgba(40,30,45,0.65)" strokeWidth="1.8" />
         <path d="M0,85 Q12,75 22,82 Q32,89 42,78"
           fill="none" stroke="rgba(40,30,45,0.5)" strokeWidth="1.3" />
-        {/* Flower bloom clusters - SOFT BUT VISIBLE PINK/PURPLE GLOWS */}
+        {/* Flower bloom clusters */}
         {[
           [20, 28], [48, 22], [70, 18], [85, 24], [10, 52], [62, 38],
         ].map(([cx, cy], i) => (
@@ -875,7 +897,7 @@ function RosePineBg() {
               fill={i % 3 === 0 ? 'rgba(246,193,119,0.8)' : 'rgba(235,111,146,0.8)'} />
           </g>
         ))}
-        {/* Dew drops on branches - MORE VISIBLE */}
+        {/* Dew drops */}
         {dewDrops.map((d, i) => (
           <circle key={`dew${i}`} cx={`${d.x}%`} cy={`${d.y}%`} r={d.size}
             fill="rgba(255,255,255,0.3)"
@@ -883,7 +905,7 @@ function RosePineBg() {
             style={{ animation: `rp-dew ${d.dur}s ease-in-out ${d.delay}s infinite` }} />
         ))}
       </svg>
-      {/* Round petals - CLEARLY VISIBLE FALLING */}
+      {/* Round petals */}
       {petalsRound.map((p, i) => (
         <div key={`pr${i}`} className="absolute opacity-0"
           style={{ left: `${p.x}%`, top: '-4%',
@@ -913,16 +935,16 @@ function RosePineBg() {
             animation: `rp-fall ${p.dur}s ease-in-out ${p.delay}s infinite`,
             ['--rp-drift' as string]: `${p.drift}px` }} />
       ))}
-      {/* Fireflies with glow halos - MORE VISIBLE GLOWING INSECTS */}
+      {/* Fireflies */}
       {fireflies.map((f, i) => (
         <div key={`ff${i}`} className="absolute"
           style={{ left: `${f.x}%`, top: `${f.y}%`, animation: `rp-fly ${f.dur}s ease-in-out ${f.delay}s infinite`, opacity: 0 }}>
-          {/* Outer diffuse halo - BRIGHTER */}
+          {/* Outer halo */}
           <div className="absolute rounded-full"
             style={{ top: '-6px', left: '-6px', width: '14px', height: '14px',
               background: `radial-gradient(circle, ${glowColors[f.glowColor]}0.4), transparent 70%)`,
               filter: 'blur(4px)' }} />
-          {/* Core dot - BRIGHTER */}
+          {/* Core dot */}
           <div className="absolute rounded-full"
             style={{ width: '3px', height: '3px',
               background: f.glowColor === 0 ? '#f6c177' : f.glowColor === 1 ? '#eb6f92' : '#c4a7e7',
@@ -955,9 +977,9 @@ function RosePineBg() {
 function AbyssBg() {
   const orbs = useMemo(() => {
     const rand = seededRand(88);
-    return Array.from({ length: 36 }, (_, i) => ({
+    return Array.from({ length: 20 }, (_, i) => ({
       x: rand() * 100, y: rand() * 100,
-      size: i < 12 ? (3 + rand() * 6) : i < 28 ? (6 + rand() * 12) : (14 + rand() * 10),
+      size: i < 7 ? (3 + rand() * 6) : i < 16 ? (6 + rand() * 12) : (14 + rand() * 10),
       dur: 4 + rand() * 9,
       delay: rand() * 12,
       color: rand() > 0.5 ? '#2dd4bf' : rand() > 0.3 ? '#22d3ee' : '#34d399',
@@ -965,7 +987,7 @@ function AbyssBg() {
   }, []);
   const bubbles = useMemo(() => {
     const rand = seededRand(89);
-    return Array.from({ length: 30 }, () => ({
+    return Array.from({ length: 18 }, () => ({
       x: rand() * 100,
       size: 2 + rand() * 7,
       dur: 5 + rand() * 10,
@@ -975,7 +997,7 @@ function AbyssBg() {
   }, []);
   const marineSnow = useMemo(() => {
     const rand = seededRand(189);
-    return Array.from({ length: 42 }, () => ({
+    return Array.from({ length: 24 }, () => ({
       x: rand() * 100,
       size: 0.8 + rand() * 2,
       dur: 14 + rand() * 22,
@@ -1008,14 +1030,14 @@ function AbyssBg() {
   ];
   return (
     <Shell>
-      {/* 3-layer depth gradient - MORE VISIBLE DEPTH */}
+      {/* Depth gradient */}
       <div className="absolute inset-0"
         style={{ background: 'linear-gradient(180deg, rgba(45,212,191,0.15) 0%, rgba(34,211,238,0.25) 35%, rgba(20,150,140,0.35) 65%, rgba(10,80,80,0.45) 100%)' }} />
-      {/* Water surface caustic ripple pattern at top - MORE VISIBLE */}
+      {/* Surface caustic ripples */}
       <div className="absolute top-0 left-0 right-0 h-[12%]"
         style={{ background: 'repeating-linear-gradient(80deg, transparent, transparent 18px, rgba(45,212,191,0.2) 18px, rgba(45,212,191,0.2) 19px), repeating-linear-gradient(-80deg, transparent, transparent 22px, rgba(34,211,238,0.15) 22px, rgba(34,211,238,0.15) 23px)',
           filter: 'blur(1px)', animation: 'ab-surface 4s ease-in-out infinite' }} />
-      {/* Caustic light lines - VISIBLY SHIMMERING */}
+      {/* Caustic light lines */}
       {causticLines.map((c, i) => (
         <div key={`cl${i}`} className="absolute left-[-5%] right-[-5%]"
           style={{ top: `${c.top}%`, height: '2px',
@@ -1023,10 +1045,10 @@ function AbyssBg() {
             filter: 'blur(1.5px)',
             animation: `ab-caustic ${c.dur}s ease-in-out ${c.delay}s infinite` }} />
       ))}
-      {/* Bioluminescent orbs - CLEARLY VISIBLE GLOWING CREATURES */}
+      {/* Bioluminescent orbs */}
       {orbs.map((o, i) => (
         <div key={`o${i}`} className="absolute" style={{ left: `${o.x}%`, top: `${o.y}%`, opacity: 0, animation: `ab-glow ${o.dur}s ease-in-out ${o.delay}s infinite` }}>
-          {/* Outer diffuse - BRIGHTER */}
+          {/* Outer diffuse */}
           <div className="absolute rounded-full"
             style={{ top: `-${o.size * 0.8}px`, left: `-${o.size * 0.8}px`,
               width: `${o.size * 3.6}px`, height: `${o.size * 3.6}px`,
@@ -1039,7 +1061,7 @@ function AbyssBg() {
               boxShadow: `0 0 ${o.size * 3}px ${o.color}, 0 0 ${o.size * 6}px ${o.color}80` }} />
         </div>
       ))}
-      {/* Rising bubbles - OBVIOUS FLOATING BUBBLES */}
+      {/* Rising bubbles */}
       {bubbles.map((b, i) => (
         <div key={`b${i}`} className="absolute rounded-full opacity-0"
           style={{ left: `${b.x}%`, bottom: '-4%',
@@ -1049,7 +1071,7 @@ function AbyssBg() {
             ['--ab-drift' as string]: `${b.drift}px`,
             animation: `ab-bubble ${b.dur}s ease-out ${b.delay}s infinite` }} />
       ))}
-      {/* Marine snow - OBVIOUS WHITE PARTICLES */}
+      {/* Marine snow */}
       {marineSnow.map((m, i) => (
         <div key={`ms${i}`} className="absolute rounded-full opacity-0"
           style={{ left: `${m.x}%`, top: '-2%',
@@ -1058,7 +1080,7 @@ function AbyssBg() {
             ['--ab-snow-drift' as string]: `${m.drift}px`,
             animation: `ab-snow ${m.dur}s linear ${m.delay}s infinite` }} />
       ))}
-      {/* Jellyfish - CLEARLY VISIBLE BIOLUMINESCENT SHAPES */}
+      {/* Jellyfish */}
       {jellies.map((j, i) => (
         <div key={`jf${i}`} className="absolute"
           style={{ left: `${j.x}%`, top: `${j.y}%`, width: `${j.size * 2}px`, height: `${j.size * 2.5}px`,
@@ -1071,11 +1093,11 @@ function AbyssBg() {
                 <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0" />
               </radialGradient>
             </defs>
-            {/* Dome - GLOWING */}
+            {/* Dome */}
             <ellipse cx="30" cy="28" rx="24" ry="20" fill={`url(#jf-grad-${i})`} stroke="rgba(45,212,191,0.8)" strokeWidth="1.2" />
-            {/* Inner highlight - BRIGHTER */}
+            {/* Inner highlight */}
             <ellipse cx="30" cy="26" rx="16" ry="12" fill="rgba(45,212,191,0.3)" />
-            {/* Tentacles - MORE VISIBLE */}
+            {/* Tentacles */}
             <path d="M18,46 Q14,56 17,66 Q19,72 16,78" fill="none" stroke="rgba(45,212,191,0.6)" strokeWidth="1.5">
               <animate attributeName="d" values="M18,46 Q14,56 17,66 Q19,72 16,78;M18,46 Q22,56 19,66 Q17,72 20,78;M18,46 Q14,56 17,66 Q19,72 16,78" dur="3s" repeatCount="indefinite" />
             </path>
@@ -1093,14 +1115,14 @@ function AbyssBg() {
       ))}
       {/* SVG: kelp/seaweed + sonar pings */}
       <svg className="absolute inset-0 w-full h-full">
-        {/* 5 kelp silhouettes - CLEARLY DARK SHAPES */}
+        {/* Kelp silhouettes */}
         {[5, 18, 35, 62, 82].map((kx, i) => (
           <g key={`kelp${i}`} style={{ animation: `ab-sway ${4 + i * 0.8}s ease-in-out ${i * 0.6}s infinite`, transformOrigin: `${kx}% 100%` }}>
             <path d={`M${kx * 10},1000 Q${kx * 10 - 15},${950 - i * 30} ${kx * 10 + 10},${900 - i * 25} Q${kx * 10 - 8},${850 - i * 20} ${kx * 10 + 5},${800 - i * 35}`}
               fill="none" stroke={`rgba(20,120,100,${0.6 + i * 0.1})`} strokeWidth={3 + (i % 2)} />
           </g>
         ))}
-        {/* Sonar pings - VISIBLY PULSING RINGS */}
+        {/* Sonar pings */}
         {sonars.map((s, i) => (
           <g key={`sonar${i}`}>
             <circle cx={`${s.x}%`} cy={`${s.y}%`} r="0"
@@ -1133,7 +1155,7 @@ function AbyssBg() {
 function EmberBg() {
   const sparksSmall = useMemo(() => {
     const rand = seededRand(661);
-    return Array.from({ length: 50 }, () => ({
+    return Array.from({ length: 28 }, () => ({
       x: rand() * 100,
       size: 2 + rand() * 3,
       dur: 1.2 + rand() * 1.8,
@@ -1143,7 +1165,7 @@ function EmberBg() {
   }, []);
   const sparksMed = useMemo(() => {
     const rand = seededRand(662);
-    return Array.from({ length: 35 }, () => ({
+    return Array.from({ length: 20 }, () => ({
       x: rand() * 100,
       size: 4 + rand() * 4,
       dur: 2 + rand() * 2.5,
@@ -1154,7 +1176,7 @@ function EmberBg() {
   }, []);
   const sparksLarge = useMemo(() => {
     const rand = seededRand(663);
-    return Array.from({ length: 25 }, () => ({
+    return Array.from({ length: 14 }, () => ({
       x: rand() * 100,
       size: 6 + rand() * 4,
       dur: 3 + rand() * 4,
@@ -1312,7 +1334,7 @@ function EmberBg() {
 function AuroraBg() {
   const stars = useMemo(() => {
     const rand = seededRand(771);
-    return Array.from({ length: 120 }, () => ({
+    return Array.from({ length: 60 }, () => ({
       x: rand() * 100, y: rand() * 70,
       size: 0.8 + rand() * 2,
       opacity: 0.3 + rand() * 0.7,
@@ -1322,7 +1344,7 @@ function AuroraBg() {
   }, []);
   const particles = useMemo(() => {
     const rand = seededRand(772);
-    return Array.from({ length: 40 }, () => ({
+    return Array.from({ length: 20 }, () => ({
       x: rand() * 100, y: rand() * 60,
       size: 2 + rand() * 4,
       dur: 3 + rand() * 6,
@@ -1364,7 +1386,7 @@ function AuroraBg() {
             boxShadow: `0 0 4px ${i % 4 === 0 ? '#c4b5fd' : '#e2e8f0'}`,
             animation: `au-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
       ))}
-      {/* VIVID aurora curtain bands - THE MAIN EVENT */}
+      {/* Aurora curtain bands */}
       {[
         { c1: '#a78bfa', c2: '#34d399', top: '-10%', h: '70%', dur: '9s', delay: '0s', blur: 25 },
         { c1: '#06b6d4', c2: '#a78bfa', top: '-5%',  h: '60%', dur: '13s', delay: '2s', blur: 30 },
@@ -1435,7 +1457,7 @@ function CatppuccinBg() {
   const orbs = useMemo(() => {
     const rand = seededRand(331);
     const palette = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1', '#fab387', '#f38ba8', '#94e2d5', '#b4befe'];
-    return Array.from({ length: 40 }, (_, i) => ({
+    return Array.from({ length: 22 }, (_, i) => ({
       x: rand() * 100, y: rand() * 100,
       size: 80 + rand() * 350,
       dur: 12 + rand() * 22,
@@ -1456,7 +1478,7 @@ function CatppuccinBg() {
   }, []);
   const sparkles = useMemo(() => {
     const rand = seededRand(333);
-    return Array.from({ length: 35 }, () => ({
+    return Array.from({ length: 20 }, () => ({
       x: rand() * 100, y: rand() * 100,
       dur: 3 + rand() * 5,
       delay: rand() * 9,
@@ -1466,7 +1488,7 @@ function CatppuccinBg() {
   const confetti = useMemo(() => {
     const rand = seededRand(334);
     const palette = ['#cba6f7', '#f5c2e7', '#89b4fa', '#a6e3a1', '#fab387', '#f38ba8'];
-    return Array.from({ length: 25 }, () => ({
+    return Array.from({ length: 14 }, () => ({
       x: rand() * 100,
       size: 6 + rand() * 8,
       dur: 10 + rand() * 14,
@@ -1513,7 +1535,7 @@ function CatppuccinBg() {
             animation: `cp-float ${b.dur}s ease-in-out ${b.delay}s infinite`,
             filter: 'blur(4px)' }} />
       ))}
-      {/* LARGE visible lava lamp blobs */}
+      {/* Lava lamp blobs */}
       {blobs.map((bl, i) => (
         <div key={`blob${i}`} className="absolute"
           style={{ left: `${bl.x}%`, top: `${bl.y}%`, width: `${bl.w}px`, height: `${bl.h}px`,
@@ -1584,8 +1606,8 @@ function CatppuccinBg() {
 function TokyoNightBg() {
   const buildings = useMemo(() => {
     const rand = seededRand(779);
-    return Array.from({ length: 40 }, (_, i) => ({
-      x: i * 2.5 + rand() * 1.5,
+    return Array.from({ length: 20 }, (_, i) => ({
+      x: i * 5 + rand() * 3,
       w: 2.5 + rand() * 5,
       h: 15 + rand() * 50,
       windows: Math.floor(4 + rand() * 10),
@@ -1595,7 +1617,7 @@ function TokyoNightBg() {
   }, []);
   const rain = useMemo(() => {
     const rand = seededRand(780);
-    return Array.from({ length: 80 }, () => ({
+    return Array.from({ length: 40 }, () => ({
       x: rand() * 110,
       dur: 0.4 + rand() * 0.8,
       delay: rand() * 3,
@@ -1665,7 +1687,7 @@ function TokyoNightBg() {
       <div className="absolute left-0 right-0" style={{ bottom: '20%', height: '15%',
         background: 'linear-gradient(180deg, transparent, rgba(100,90,140,0.3) 50%, transparent)',
         filter: 'blur(8px)' }} />
-      {/* BRIGHT neon sign glows */}
+      {/* Neon sign glows */}
       {neons.map((n, i) => (
         <div key={`nn${i}`} className="absolute rounded-full"
           style={{ left: `${n.x}%`, top: `${n.y}%`, width: `${n.w}px`, height: `${n.h}px`,
@@ -1677,7 +1699,7 @@ function TokyoNightBg() {
       {/* Dark street ground */}
       <div className="absolute bottom-0 left-0 right-0 h-[15%]"
         style={{ background: 'linear-gradient(180deg, rgba(25,25,40,0.9), rgba(15,15,25,0.95))' }} />
-      {/* VISIBLE building silhouettes with bright windows */}
+      {/* Building silhouettes */}
       {buildings.map((b, i) => (
         <div key={`bld${i}`} className="absolute bottom-[15%]"
           style={{ left: `${b.x}%`, width: `${b.w}%`, height: `${b.h}%`,
@@ -1802,7 +1824,7 @@ function DraculaBg() {
       {/* Deep gothic sky */}
       <div className="absolute top-0 left-0 right-0 h-[60%]"
         style={{ background: 'linear-gradient(180deg, rgba(60,25,80,0.7), rgba(189,147,249,0.3) 50%, rgba(139,92,246,0.15) 80%, transparent)' }} />
-      {/* BRIGHT moon with visible halo */}
+      {/* Moon with halo */}
       <div className="absolute" style={{ top: '8%', right: '15%', width: '140px', height: '140px' }}>
         <div className="absolute rounded-full"
           style={{ top: '-30%', left: '-30%', width: '160%', height: '160%',
@@ -1827,7 +1849,7 @@ function DraculaBg() {
           style={{ top: '35%', left: '55%', width: '8px', height: '8px',
             background: 'rgba(140,90,190,0.25)', boxShadow: 'inset 0 0 3px rgba(0,0,0,0.2)' }} />
       </div>
-      {/* VISIBLE blood drip streaks */}
+      {/* Blood drip streaks */}
       {bloodDrops.map((bd, i) => (
         <div key={`bd${i}`} className="absolute top-0"
           style={{ left: `${bd.x}%`, width: '4px', height: '0%',
@@ -1846,7 +1868,7 @@ function DraculaBg() {
       {/* Bright lightning flashes */}
       <div className="absolute inset-0" style={{ animation: 'dr-lightning 10s ease-in-out infinite' }} />
       <div className="absolute inset-0" style={{ animation: 'dr-lightning2 10s ease-in-out 0.2s infinite' }} />
-      {/* BRIGHT candle flames */}
+      {/* Candle flames */}
       {candles.map((c, i) => (
         <div key={`ca${i}`} className="absolute rounded-full"
           style={{ left: `${c.x}%`, top: `${c.y}%`, width: '8px', height: '12px',
@@ -1862,7 +1884,7 @@ function DraculaBg() {
             filter: 'blur(8px)', borderRadius: '50%',
             animation: `dr-tendril ${t.dur}s ease-in-out ${t.delay}s infinite` }} />
       ))}
-      {/* VISIBLE flying bats */}
+      {/* Flying bats */}
       {bats.map((bat, i) => (
         <svg key={`bat${i}`} className="absolute" viewBox="0 0 30 12"
           style={{ width: `${bat.size}px`, top: `${bat.top}%`, left: '-8%', opacity: 0,
@@ -1876,13 +1898,13 @@ function DraculaBg() {
           </path>
         </svg>
       ))}
-      {/* CLEARLY VISIBLE castle and graveyard silhouettes */}
+      {/* Castle and graveyard silhouettes */}
       <svg className="absolute bottom-0 left-0 w-full" style={{ height: '28%' }} viewBox="0 0 1000 140" preserveAspectRatio="none">
-        {Array.from({ length: 45 }, (_, i) => (
-          <rect key={`f${i}`} x={i * 22} y={85} width={5} height={55} fill="rgba(25,15,35,0.9)" />
+        {Array.from({ length: 25 }, (_, i) => (
+          <rect key={`f${i}`} x={i * 40} y={85} width={5} height={55} fill="rgba(25,15,35,0.9)" />
         ))}
-        {Array.from({ length: 45 }, (_, i) => (
-          <polygon key={`fp${i}`} points={`${i * 22},85 ${i * 22 + 2.5},72 ${i * 22 + 5},85`} fill="rgba(25,15,35,0.9)" />
+        {Array.from({ length: 25 }, (_, i) => (
+          <polygon key={`fp${i}`} points={`${i * 40},85 ${i * 40 + 2.5},72 ${i * 40 + 5},85`} fill="rgba(25,15,35,0.9)" />
         ))}
         <rect x={100} y={60} width={25} height={35} rx={4} fill="rgba(35,25,50,0.85)" />
         <line x1={112} y1={64} x2={112} y2={78} stroke="rgba(120,100,160,0.6)" strokeWidth="2" />
@@ -1959,7 +1981,7 @@ function SolarizedBg() {
   const rayAngles = [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5, 180, 202.5, 225, 247.5, 270, 292.5, 315, 337.5];
   return (
     <Shell>
-      {/* BRIGHT golden atmosphere */}
+      {/* Golden atmosphere */}
       <div className="absolute top-0 left-0 right-0 h-[65%]"
         style={{ background: 'linear-gradient(180deg, rgba(181,137,0,0.4), rgba(203,75,22,0.25) 40%, rgba(38,139,210,0.15) 75%, transparent)' }} />
       {/* Warm horizon glow */}
@@ -1977,7 +1999,7 @@ function SolarizedBg() {
             filter: 'blur(10px)', borderRadius: '50%',
             animation: `sl-cloud ${cl.dur}s linear ${cl.delay}s infinite` }} />
       ))}
-      {/* BRILLIANT sun with corona and rays */}
+      {/* Sun with corona and rays */}
       <div className="absolute" style={{ top: '8%', right: '10%', width: '180px', height: '180px' }}>
         <div className="absolute inset-0 rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(181,137,0,0.7) 0%, rgba(181,137,0,0.4) 30%, rgba(203,75,22,0.15) 60%, transparent)',
@@ -2005,7 +2027,7 @@ function SolarizedBg() {
       <div className="absolute left-0 right-0" style={{ bottom: '46%', height: '3px',
         background: 'linear-gradient(90deg, transparent 5%, rgba(181,137,0,0.6) 15%, rgba(203,75,22,0.8) 50%, rgba(181,137,0,0.6) 85%, transparent 95%)',
         filter: 'blur(1px)' }} />
-      {/* VISIBLE ocean waves */}
+      {/* Ocean waves */}
       {waves.map((w, i) => (
         <div key={`w${i}`} className="absolute left-[-15%] right-[-15%]"
           style={{ bottom: `${100 - w.y}%`, height: `${2 + i * 0.6}px`,
@@ -2018,7 +2040,7 @@ function SolarizedBg() {
           background: 'linear-gradient(to bottom, rgba(181,137,0,0.6) 0%, rgba(203,75,22,0.4) 30%, rgba(181,137,0,0.2) 60%, transparent)',
           animation: 'sl-sunrefl 3s ease-in-out infinite' }} />
       </div>
-      {/* BRIGHT lens flares */}
+      {/* Lens flares */}
       <div className="absolute" style={{ top: '22%', right: '28%', width: '70px', height: '14px',
         background: 'linear-gradient(90deg, transparent, rgba(181,137,0,0.6), transparent)',
         borderRadius: '50%', animation: 'sl-flare 5s ease-in-out infinite' }} />
@@ -2044,7 +2066,7 @@ function SolarizedBg() {
             boxShadow: '0 0 10px rgba(181,137,0,0.5)',
             animation: `sl-wind ${wp.dur}s ease-in-out ${wp.delay}s infinite` }} />
       ))}
-      {/* VISIBLE bird silhouettes */}
+      {/* Bird silhouettes */}
       {birds.map((bird, i) => (
         <svg key={`bird${i}`} className="absolute" viewBox="0 0 24 12"
           style={{ width: `${22 * bird.scale}px`, top: `${bird.y}%`, left: '-8%',
@@ -2073,7 +2095,7 @@ function SolarizedBg() {
 function LightningBg() {
   const rain = useMemo(() => {
     const rand = seededRand(900);
-    return Array.from({ length: 180 }, () => {
+    return Array.from({ length: 60 }, () => {
       const windLayer = rand();
       const angle = 8 + rand() * 12 + (windLayer > 0.7 ? rand() * 8 : 0);
       return {
@@ -2222,18 +2244,6 @@ function LightningBg() {
       {/* Lightning bolts via SVG */}
       <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
         <defs>
-          <filter id="ln-glow">
-            <feGaussianBlur stdDeviation="0.6" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <filter id="ln-glow-wide">
-            <feGaussianBlur stdDeviation="1.8" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <filter id="ln-glow-ultra">
-            <feGaussianBlur stdDeviation="3" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
         </defs>
         {bolts.map((bolt, bi) => {
           const mainD = bolt.segs.map((s, si) => `${si === 0 ? 'M' : 'L'}${s.x},${s.y}`).join(' ');
@@ -2244,22 +2254,19 @@ function LightningBg() {
             <g key={`b${bi}`}>
               {/* Ultra-wide atmospheric scatter */}
               <path d={mainD} fill="none" stroke={`rgba(70,120,220,${0.3 * bolt.intensity})`} strokeWidth="6"
-                strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow-ultra)"
-                opacity="0" vectorEffect="non-scaling-stroke">
+                strokeLinecap="round" strokeLinejoin="round"                opacity="0" vectorEffect="non-scaling-stroke">
                 <animate attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
               {/* Wide outer glow */}
               <path d={mainD} fill="none" stroke={`rgba(100,160,250,${0.5 * bolt.intensity})`} strokeWidth="3.5"
-                strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow-wide)"
-                opacity="0" vectorEffect="non-scaling-stroke">
+                strokeLinecap="round" strokeLinejoin="round"                opacity="0" vectorEffect="non-scaling-stroke">
                 <animate attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
               {/* Main channel */}
               <path d={mainD} fill="none" stroke={`rgba(190,215,255,${0.95 * bolt.intensity})`} strokeWidth="1.6"
-                strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow)"
-                opacity="0" vectorEffect="non-scaling-stroke">
+                strokeLinecap="round" strokeLinejoin="round"                opacity="0" vectorEffect="non-scaling-stroke">
                 <animate attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
@@ -2277,14 +2284,12 @@ function LightningBg() {
                 return (
                   <g key={`br${bri}`}>
                     <path d={brD} fill="none" stroke={`rgba(120,170,250,${0.55 * bolt.intensity})`} strokeWidth="2"
-                      strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow-wide)"
-                      opacity="0" vectorEffect="non-scaling-stroke">
+                      strokeLinecap="round" strokeLinejoin="round"                      opacity="0" vectorEffect="non-scaling-stroke">
                       <animate attributeName="opacity" values={vals} keyTimes={times}
                         dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
                     </path>
                     <path d={brD} fill="none" stroke={`rgba(180,210,255,${0.75 * bolt.intensity})`} strokeWidth="1"
-                      strokeLinecap="round" strokeLinejoin="round" filter="url(#ln-glow)"
-                      opacity="0" vectorEffect="non-scaling-stroke">
+                      strokeLinecap="round" strokeLinejoin="round"                      opacity="0" vectorEffect="non-scaling-stroke">
                       <animate attributeName="opacity" values={vals} keyTimes={times}
                         dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
                     </path>
@@ -2299,7 +2304,7 @@ function LightningBg() {
               })}
               {/* Ground strike illumination — wide spread */}
               <ellipse cx={endPt.x} cy={endPt.y + 3}
-                rx="14" ry="5" fill={`rgba(100,160,250,${0.5 * bolt.intensity})`} filter="url(#ln-glow-wide)" opacity="0">
+                rx="14" ry="5" fill={`rgba(100,160,250,${0.5 * bolt.intensity})`} opacity="0">
                 <animate attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </ellipse>
@@ -2404,7 +2409,7 @@ function LightningBg() {
 function PhoenixBg() {
   const embersSmall = useMemo(() => {
     const rand = seededRand(660);
-    return Array.from({ length: 55 }, () => ({
+    return Array.from({ length: 30 }, () => ({
       x: rand() * 100,
       size: 1.5 + rand() * 2.5,
       dur: 1.5 + rand() * 2,
@@ -2414,7 +2419,7 @@ function PhoenixBg() {
   }, []);
   const embersMed = useMemo(() => {
     const rand = seededRand(661);
-    return Array.from({ length: 40 }, () => ({
+    return Array.from({ length: 20 }, () => ({
       x: rand() * 100,
       size: 3 + rand() * 4,
       dur: 2.5 + rand() * 3,
@@ -2425,7 +2430,7 @@ function PhoenixBg() {
   }, []);
   const embersLarge = useMemo(() => {
     const rand = seededRand(662);
-    return Array.from({ length: 20 }, () => ({
+    return Array.from({ length: 12 }, () => ({
       x: rand() * 100,
       size: 5 + rand() * 5,
       dur: 3.5 + rand() * 4,
@@ -2444,8 +2449,8 @@ function PhoenixBg() {
   }, []);
   const vortex = useMemo(() => {
     const rand = seededRand(664);
-    return Array.from({ length: 28 }, (_, i) => ({
-      angle: (i / 28) * 360,
+    return Array.from({ length: 16 }, (_, i) => ({
+      angle: (i / 16) * 360,
       r: 35 + rand() * 40,
       size: 2 + rand() * 4,
       dur: 2.5 + rand() * 3,
@@ -2455,7 +2460,7 @@ function PhoenixBg() {
   }, []);
   const feathers = useMemo(() => {
     const rand = seededRand(665);
-    return Array.from({ length: 14 }, () => ({
+    return Array.from({ length: 8 }, () => ({
       x: 20 + rand() * 60,
       y: 15 + rand() * 50,
       size: 8 + rand() * 16,
@@ -2468,7 +2473,7 @@ function PhoenixBg() {
   }, []);
   const sparks = useMemo(() => {
     const rand = seededRand(666);
-    return Array.from({ length: 30 }, () => ({
+    return Array.from({ length: 16 }, () => ({
       x: 30 + rand() * 40,
       y: 25 + rand() * 35,
       dur: 1.2 + rand() * 2.5,
@@ -2551,23 +2556,15 @@ function PhoenixBg() {
             <stop offset="70%" stopColor="#f59e0b" stopOpacity="0.14" />
             <stop offset="100%" stopColor="#ef4444" stopOpacity="0.06" />
           </radialGradient>
-          <filter id="ph-glow">
-            <feGaussianBlur stdDeviation="5" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <filter id="ph-glow-wide">
-            <feGaussianBlur stdDeviation="12" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
         </defs>
 
         {/* Outer glow aura around the whole bird */}
-        <g filter="url(#ph-glow-wide)" style={{ animation: 'ph-float 7s ease-in-out infinite' }}>
+        <g style={{ animation: 'ph-float 7s ease-in-out infinite' }}>
           <ellipse cx="500" cy="440" rx="160" ry="200" fill="rgba(245,158,11,0.06)" />
         </g>
 
         {/* Main phoenix group */}
-        <g filter="url(#ph-glow)" style={{ animation: 'ph-float 7s ease-in-out infinite' }}>
+        <g style={{ animation: 'ph-float 7s ease-in-out infinite' }}>
 
           {/* Tail — long sweeping fire plumes (7 streams) */}
           <path d="M500 620 Q475 720 430 850 Q455 790 465 730 Q485 670 500 620Z" fill="url(#ph-fg)" style={{ animation: 'ph-t1 3s ease-in-out infinite' }} />
@@ -2764,7 +2761,7 @@ function PhoenixBg() {
 function RetroArcadeBg() {
   const starsBack = useMemo(() => {
     const rand = seededRand(800);
-    return Array.from({ length: 60 }, () => ({
+    return Array.from({ length: 30 }, () => ({
       x: rand() * 100, y: rand() * 100,
       size: 0.5 + rand() * 1,
       dur: 2 + rand() * 4,
@@ -2773,7 +2770,7 @@ function RetroArcadeBg() {
   }, []);
   const starsFront = useMemo(() => {
     const rand = seededRand(799);
-    return Array.from({ length: 40 }, () => ({
+    return Array.from({ length: 20 }, () => ({
       x: rand() * 100, y: rand() * 100,
       size: 1 + rand() * 2,
       dur: 1 + rand() * 2.5,
@@ -2785,9 +2782,9 @@ function RetroArcadeBg() {
   const invaders = useMemo(() => {
     const rand = seededRand(801);
     const types: ('crab' | 'squid' | 'octo')[] = ['crab', 'squid', 'octo'];
-    return Array.from({ length: 24 }, (_, i) => ({
-      x: 3 + (i % 8) * 12 + rand() * 3,
-      y: 4 + Math.floor(i / 8) * 9 + rand() * 2,
+    return Array.from({ length: 12 }, (_, i) => ({
+      x: 3 + (i % 6) * 16 + rand() * 3,
+      y: 4 + Math.floor(i / 6) * 12 + rand() * 2,
       type: types[i % 3],
       dur: 3.5 + rand() * 3.5,
       delay: rand() * 5,
@@ -2967,14 +2964,6 @@ function RetroArcadeBg() {
       {/* SVG layer — invaders, pac-man, pong, maze, snake, spaceship */}
       <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
         <defs>
-          <filter id="rc-neon">
-            <feGaussianBlur stdDeviation="0.25" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <filter id="rc-glow-wide">
-            <feGaussianBlur stdDeviation="0.6" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
         </defs>
 
         {/* Space Invaders — 3 rows of 8 */}
@@ -2986,8 +2975,7 @@ function RetroArcadeBg() {
             ? [[3,0],[0,1],[2,1],[3,1],[4,1],[6,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[1,4],[2,4],[4,4],[5,4],[0,5],[1,5],[5,5],[6,5],[1,6],[5,6]]
             : [[3,0],[1,1],[3,1],[5,1],[0,2],[1,2],[2,2],[3,2],[4,2],[5,2],[6,2],[0,3],[2,3],[4,3],[6,3],[0,4],[1,4],[2,4],[3,4],[4,4],[5,4],[6,4],[2,5],[4,5],[0,6],[1,6],[5,6],[6,6]];
           return (
-            <g key={`inv${i}`} filter="url(#rc-neon)"
-              style={{ animation: `rc-invader ${inv.dur}s ease-in-out ${inv.delay}s infinite` }}>
+            <g key={`inv${i}`}              style={{ animation: `rc-invader ${inv.dur}s ease-in-out ${inv.delay}s infinite` }}>
               {pixels.map(([px, py], pi) => (
                 <rect key={pi} x={inv.x + px * p} y={inv.y + py * p}
                   width={p} height={p} fill={inv.color} opacity="0.45" />
@@ -2997,7 +2985,7 @@ function RetroArcadeBg() {
         })}
 
         {/* Player spaceship at bottom */}
-        <g filter="url(#rc-neon)" style={{ animation: 'rc-ship 10s ease-in-out infinite' }}>
+        <g style={{ animation: 'rc-ship 10s ease-in-out infinite' }}>
           {/* Ship body */}
           {[[3,0],[2,1],[3,1],[4,1],[1,2],[2,2],[3,2],[4,2],[5,2],[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]].map(([px,py], pi) => (
             <rect key={`sh${pi}`} x={46 + px * 0.6} y={92 + py * 0.6}
@@ -3006,7 +2994,7 @@ function RetroArcadeBg() {
         </g>
 
         {/* Pac-Man chomping across */}
-        <g style={{ animation: 'rc-pacmove 14s linear infinite' }} filter="url(#rc-neon)">
+        <g style={{ animation: 'rc-pacmove 14s linear infinite' }}>
           <circle cx="0" cy="68" r="2.2" fill="#ffff00" opacity="0.5" />
           <path d="M0 68 L2.2 66.5 L2.2 69.5Z" fill="rgba(4,6,16,0.95)"
             style={{ animation: 'rc-chomp 0.25s step-end infinite' }} />
@@ -3043,7 +3031,7 @@ function RetroArcadeBg() {
         ))}
 
         {/* Snake game */}
-        <g filter="url(#rc-neon)" style={{ animation: `rc-snakemove ${snake.dur}s ease-in-out ${snake.delay}s infinite` }}>
+        <g style={{ animation: `rc-snakemove ${snake.dur}s ease-in-out ${snake.delay}s infinite` }}>
           {snake.segs.map((seg, i) => (
             <rect key={`sn${i}`} x={seg.x} y={seg.y} width="1.2" height="1.2"
               fill={i === 0 ? '#88ff00' : '#44cc00'} opacity={0.3 - i * 0.015}
@@ -3367,7 +3355,7 @@ function RetroArcadeBg() {
 function StarfieldBg() {
   const stars = useMemo(() => {
     const rand = seededRand(555);
-    return Array.from({ length: 180 }, () => ({
+    return Array.from({ length: 60 }, () => ({
       x: rand() * 100, y: rand() * 100,
       size: 0.4 + rand() * 2.8,
       opacity: 0.15 + rand() * 0.65,

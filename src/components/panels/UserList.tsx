@@ -1,18 +1,19 @@
 'use client';
 
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { useStore } from '@/stores';
+import { useClickOutside } from '@/hooks/useClickOutside';
 import { nickColor } from '@/lib/nickcolor';
 import type { WeeChatNick } from '@/types';
 
 const TIER_ORDER = ['Owner', 'Admin', 'Op', 'Halfop', 'Voice', 'Regular'];
 
 const TIER_ICONS: Record<string, { icon: string; label: string }> = {
-  'Owner': { icon: '👑', label: 'Owner' },
-  'Admin': { icon: '⚡', label: 'Admin' },
-  'Op': { icon: '🛡️', label: 'Op' },
-  'Halfop': { icon: '🔰', label: 'Half-Op' },
-  'Voice': { icon: '🎙️', label: 'Voice' },
+  'Owner': { icon: 'crown', label: 'Owner' },
+  'Admin': { icon: 'bolt', label: 'Admin' },
+  'Op': { icon: 'shield', label: 'Op' },
+  'Halfop': { icon: 'halfshield', label: 'Half-Op' },
+  'Voice': { icon: 'mic', label: 'Voice' },
   'Regular': { icon: '', label: 'Regular' },
 };
 
@@ -89,20 +90,8 @@ export default function UserList({ mobile, onClose }: Props) {
     });
   };
 
-  useEffect(() => {
-    if (!actionPopup) return;
-    function onPointerDown(e: Event) {
-      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
-        setActionPopup(null);
-      }
-    }
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('touchstart', onPointerDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('touchstart', onPointerDown);
-    };
-  }, [actionPopup]);
+  const closePopup = useCallback(() => setActionPopup(null), []);
+  useClickOutside(popupRef, !!actionPopup, closePopup);
 
   const handleNickClick = useCallback((nick: string, e: React.MouseEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -207,7 +196,7 @@ export default function UserList({ mobile, onClose }: Props) {
                 <svg className={`w-[9px] h-[9px] sm:w-[8px] sm:h-[8px] shrink-0 transition-transform duration-150 ${isCollapsed ? '-rotate-90' : ''}`}
                   style={{ color: accent }}
                   viewBox="0 0 8 8" fill="currentColor"><path d="M1 2l3 3.5L7 2z" /></svg>
-                {tierInfo?.icon && <span className="text-[10px] sm:text-[9px] leading-none">{tierInfo.icon}</span>}
+                {tierInfo?.icon && <TierIcon icon={tierInfo.icon} accent={accent} />}
                 <span className="text-[11px] sm:text-[10px] font-bold uppercase tracking-[0.08em] flex-1 text-left"
                   style={{ color: accent }}>
                   {label}
@@ -254,7 +243,7 @@ export default function UserList({ mobile, onClose }: Props) {
                           style={color ? { color } : undefined}>
                           {nick.name}
                           {nickIsBot && (
-                            <span className="inline-flex px-1 py-px rounded text-[7px] sm:text-[6px] font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 leading-none shrink-0">
+                            <span className="inline-flex px-1 py-px rounded text-[7px] sm:text-[6px] font-bold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/20 leading-none shrink-0">
                               BOT
                             </span>
                           )}
@@ -327,7 +316,7 @@ export default function UserList({ mobile, onClose }: Props) {
                 <>
                   <div className="h-px bg-white/[0.04] mx-3 my-1" />
                   <PopupBtn icon="video" label="LADON Video" onClick={() => doAction('video')} accent="emerald" />
-                  <PopupBtn icon="voice" label="LADON Voice" onClick={() => doAction('voice')} accent="indigo" />
+                  <PopupBtn icon="voice" label="LADON Voice" onClick={() => doAction('voice')} accent="custom" />
                 </>
               )}
               {isOper && (
@@ -352,6 +341,38 @@ export default function UserList({ mobile, onClose }: Props) {
   );
 }
 
+function TierIcon({ icon, accent }: { icon: string; accent: string }) {
+  const style = { color: accent };
+  const cls = "w-[9px] h-[9px] sm:w-[8px] sm:h-[8px] shrink-0";
+  if (icon === 'crown') return (
+    <svg className={cls} style={style} viewBox="0 0 16 16" fill="currentColor">
+      <path d="M2 12h12l1-7-4 3-3-5-3 5-4-3z" />
+    </svg>
+  );
+  if (icon === 'bolt') return (
+    <svg className={cls} style={style} viewBox="0 0 16 16" fill="currentColor">
+      <path d="M9 1L3 9h5l-1 6 6-8H8z" />
+    </svg>
+  );
+  if (icon === 'shield') return (
+    <svg className={cls} style={style} viewBox="0 0 16 16" fill="currentColor">
+      <path d="M8 1L2 4v4c0 3 2.5 5.5 6 7 3.5-1.5 6-4 6-7V4z" />
+    </svg>
+  );
+  if (icon === 'halfshield') return (
+    <svg className={cls} style={style} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M8 1L2 4v4c0 3 2.5 5.5 6 7V1z" fill="currentColor" stroke="none" />
+      <path d="M8 1l6 3v4c0 3-2.5 5.5-6 7" />
+    </svg>
+  );
+  if (icon === 'mic') return (
+    <svg className={cls} style={style} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <rect x="5" y="1" width="6" height="9" rx="3" /><path d="M3 8a5 5 0 0010 0M8 13v2" />
+    </svg>
+  );
+  return null;
+}
+
 function tierAccent(label: string): string {
   switch (label) {
     case 'Owner': return '#f87171';
@@ -364,7 +385,7 @@ function tierAccent(label: string): string {
 }
 
 function PopupBtn({ icon, label, onClick, danger, accent }: { icon: string; label: string; onClick: () => void; danger?: boolean; accent?: string }) {
-  const accentClass = accent === 'emerald' ? 'text-emerald-400' : accent === 'indigo' ? 'text-indigo-400' : '';
+  const accentClass = accent === 'emerald' ? 'text-emerald-400' : accent === 'custom' ? 'text-[var(--custom-accent,#818cf8)]' : '';
   return (
     <button onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-2.5 sm:py-2 text-[13px] sm:text-[12px] transition-all rounded-lg mx-0

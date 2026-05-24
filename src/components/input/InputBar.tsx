@@ -35,13 +35,16 @@ export default function InputBar() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [pastePreview, setPastePreview] = useState<{ file: File; dataUrl: string } | null>(null);
+  const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const drafts = useRef<Map<string, string>>(new Map());
   const lastSubmitTime = useRef(0);
   const textRef = useRef(text);
   textRef.current = text;
 
+  // Persist drafts across buffer switches
   useEffect(() => {
     if (!activeBuffer) return;
     return () => {
@@ -57,6 +60,30 @@ export default function InputBar() {
       inputRef.current?.focus();
     }
   }, [activeBuffer]);
+
+  // Auto-resize textarea — smooth, no flash
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = '0';
+    const next = Math.min(Math.max(el.scrollHeight, 44), 160);
+    el.style.height = `${next}px`;
+  }, [text]);
+
+  // On focus, ensure the input area is visible above the iOS keyboard
+  const handleFocus = useCallback(() => {
+    setFocused(true);
+    setTimeout(() => {
+      wrapperRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    }, 300);
+    setTimeout(() => {
+      wrapperRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    }, 600);
+  }, []);
+
+  const handleBlur = useCallback(() => {
+    setFocused(false);
+  }, []);
 
   const uploadFile = useCallback(async (file: File): Promise<string | null> => {
     if (!uploadUrl) { setUploadError('No upload URL configured — set one in Settings'); return null; }
@@ -177,16 +204,10 @@ export default function InputBar() {
     }
   }, [text, submit, complete, cycleCompletion, resetCompletion, completionActive, activeBuffer, history, historyIdx]);
 
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = '44px';
-    const next = Math.min(Math.max(el.scrollHeight, 44), 140);
-    el.style.height = `${next}px`;
-  }, [text]);
+  const hasText = text.trim().length > 0;
 
   return (
-    <div className="px-2 sm:px-3 pb-2 sm:pb-3 pt-1.5 sm:pt-1 shrink-0 relative"
+    <div ref={wrapperRef} className="shrink-0 relative input-bar-wrapper border-t border-white/[0.05]"
       style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
       {/* Paste preview */}
       {pastePreview && (
@@ -199,7 +220,7 @@ export default function InputBar() {
               <p className="text-[11px] text-gray-500 mb-2 sm:mb-3 truncate">{pastePreview.file.name} ({(pastePreview.file.size / 1024).toFixed(0)} KB)</p>
               <div className="flex gap-2">
                 <button onClick={confirmPasteUpload} disabled={uploading}
-                  className="px-4 py-2 sm:px-3 sm:py-1 rounded-lg text-[12px] sm:text-[11px] font-medium bg-indigo-600 text-white hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-40 transition-colors">
+                  className="px-4 py-2 sm:px-3 sm:py-1 rounded-lg text-[12px] sm:text-[11px] font-medium bg-[var(--custom-accent,#818cf8)] text-white hover:opacity-85 active:opacity-70 disabled:opacity-40 transition-all">
                   {uploading ? 'Uploading...' : 'Upload'}
                 </button>
                 <button onClick={() => setPastePreview(null)}
@@ -230,67 +251,80 @@ export default function InputBar() {
         />
       )}
 
-      <div className="flex items-end gap-1 sm:gap-1">
-        {/* Text input */}
-        <textarea
-          ref={inputRef}
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          placeholder={activeBuffer ? inputPlaceholder(buffers.get(activeBuffer)) : ''}
-          disabled={!activeBuffer}
-          rows={1}
-          enterKeyHint="send"
-          autoComplete="off"
-          autoCorrect="on"
-          spellCheck
-          className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-2xl sm:rounded-xl text-[15px] sm:text-[13px] text-gray-200 px-4 sm:px-4 py-2.5 outline-none
-            focus:border-indigo-500/25 transition-all resize-none placeholder:text-gray-600 disabled:opacity-20"
-          style={{ minHeight: '44px', maxHeight: '140px' }}
-        />
+      {/* Input row */}
+      <div className="px-2 sm:px-3 pt-2 pb-1.5">
+        <div className={`flex items-end gap-1.5 rounded-2xl sm:rounded-xl transition-all duration-200
+          ${focused ? 'bg-white/[0.04] ring-1 ring-[var(--custom-accent,#818cf8)]/20' : 'bg-white/[0.02]'}
+          border ${focused ? 'border-[var(--custom-accent,#818cf8)]/30' : 'border-white/[0.06]'}
+          px-2 sm:px-3 py-1.5`}>
 
-        {/* Upload button */}
-        <button onClick={() => fileRef.current?.click()} disabled={!activeBuffer || !uploadUrl}
-          className="w-11 h-11 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl sm:rounded-lg text-gray-500 hover:text-gray-300 active:bg-white/[0.06] transition-all shrink-0
-            disabled:opacity-20 disabled:cursor-default"
-          title={uploadUrl ? 'Upload file' : 'Set upload URL in Settings'}>
-          <svg className="w-[18px] h-[18px] sm:w-[16px] sm:h-[16px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 10v2.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5V10" />
-            <path d="M8 2v8M5 5l3-3 3 3" />
-          </svg>
-        </button>
-        <input ref={fileRef} type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip" className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = ''; }} />
+          {/* Text input */}
+          <textarea
+            ref={inputRef}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            placeholder={activeBuffer ? inputPlaceholder(buffers.get(activeBuffer)) : ''}
+            disabled={!activeBuffer}
+            rows={1}
+            enterKeyHint="send"
+            autoComplete="off"
+            autoCorrect="on"
+            spellCheck
+            className="flex-1 bg-transparent text-[15px] sm:text-[14px] text-gray-200 py-2 outline-none
+              resize-none placeholder:text-gray-500 disabled:opacity-20 leading-[1.45]"
+            style={{ minHeight: '44px', maxHeight: '160px' }}
+          />
 
-        {/* GIF button */}
-        <button onClick={() => setShowGif(!showGif)} disabled={!activeBuffer}
-          className={`w-11 h-11 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl sm:rounded-lg transition-all shrink-0
-            ${showGif ? 'text-indigo-400 bg-indigo-500/10' : 'text-gray-500 hover:text-gray-300 active:bg-white/[0.06]'}
-            disabled:opacity-20 disabled:cursor-default`}
-          title="GIF">
-          <span className="text-[12px] sm:text-[11px] font-bold tracking-tight">GIF</span>
-        </button>
+          {/* Action buttons — inside the input container */}
+          <div className="flex items-center gap-0.5 pb-1.5 shrink-0">
+            {/* Upload */}
+            <button onClick={() => fileRef.current?.click()} disabled={!activeBuffer || !uploadUrl}
+              className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-300
+                active:bg-white/[0.08] transition-colors disabled:opacity-20 disabled:cursor-default"
+              title={uploadUrl ? 'Upload file' : 'Set upload URL in Settings'}
+              aria-label="Upload file">
+              <svg className="w-[17px] h-[17px] sm:w-[15px] sm:h-[15px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 10v2.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5V10" />
+                <path d="M8 2v8M5 5l3-3 3 3" />
+              </svg>
+            </button>
+            <input ref={fileRef} type="file" accept="image/*,video/*,audio/*,.pdf,.txt,.zip" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = ''; }} />
 
-        {/* Upload indicator */}
-        {uploading && (
-          <div className="w-11 h-11 sm:w-10 sm:h-10 flex items-center justify-center shrink-0">
-            <span className="w-5 h-5 sm:w-4 sm:h-4 border-2 border-gray-600 border-t-indigo-400 rounded-full animate-spin" />
+            {/* GIF */}
+            <button onClick={() => setShowGif(!showGif)} disabled={!activeBuffer}
+              className={`w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg transition-colors
+                ${showGif ? 'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10' : 'text-gray-500 hover:text-gray-300 active:bg-white/[0.08]'}
+                disabled:opacity-20 disabled:cursor-default`}
+              title="GIF"
+              aria-label="GIF picker">
+              <span className="text-[11px] sm:text-[10px] font-bold tracking-tight">GIF</span>
+            </button>
+
+            {/* Send / uploading */}
+            {uploading ? (
+              <div className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center">
+                <span className="w-4 h-4 border-2 border-gray-600 border-t-[var(--custom-accent,#818cf8)] rounded-full animate-spin" />
+              </div>
+            ) : (
+              <button onClick={submit} disabled={!hasText || !activeBuffer}
+                className={`w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl sm:rounded-lg transition-all duration-150
+                  ${hasText
+                    ? 'bg-[var(--custom-accent,#818cf8)] text-white hover:opacity-85 active:scale-90 shadow-sm shadow-black/30'
+                    : 'bg-transparent text-gray-700 cursor-default'
+                  }`}
+                aria-label="Send">
+                <svg className="w-[17px] h-[17px] sm:w-[15px] sm:h-[15px]" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M1.7 1.4a.8.8 0 0 1 .9-.1l11.5 6a.8.8 0 0 1 0 1.4l-11.5 6a.8.8 0 0 1-1.1-.9L3.1 9H7a.8.8 0 0 0 0-1.6H3.1L1.5 2.3a.8.8 0 0 1 .2-.9z" />
+                </svg>
+              </button>
+            )}
           </div>
-        )}
-
-        {/* Send button */}
-        {!uploading && (
-          <button onClick={submit} disabled={!text.trim() || !activeBuffer}
-            className="w-11 h-11 sm:w-10 sm:h-10 flex items-center justify-center rounded-2xl sm:rounded-xl transition-all shrink-0
-              bg-indigo-600 text-white hover:bg-indigo-500 active:scale-90
-              disabled:bg-transparent disabled:text-gray-800 disabled:cursor-default"
-            aria-label="Send">
-            <svg className="w-[20px] h-[20px] sm:w-[18px] sm:h-[18px]" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M1.7 1.4a.8.8 0 0 1 .9-.1l11.5 6a.8.8 0 0 1 0 1.4l-11.5 6a.8.8 0 0 1-1.1-.9L3.1 9H7a.8.8 0 0 0 0-1.6H3.1L1.5 2.3a.8.8 0 0 1 .2-.9z" />
-            </svg>
-          </button>
-        )}
+        </div>
       </div>
     </div>
   );

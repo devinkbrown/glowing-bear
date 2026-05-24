@@ -24,6 +24,7 @@ function makeEntry(buffer: WeeChatBuffer): BufferEntry {
   return {
     buffer,
     lines: [],
+    lineIds: new Set(),
     nicks: new Map(),
     nickGroups: new Map(),
     unread: 0,
@@ -122,9 +123,14 @@ export interface BuffersSlice {
   removeIgnore: (nick: string) => void;
   nextHighlighted: (forward?: boolean) => string | null;
   clearBuffers: () => void;
+  clearLines: (pointer: string) => void;
 }
 
-export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice> = (set, get) => ({
+export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice> = (set, get) => {
+  // Memoize getSorted — re-sort only when buffers Map or pinnedBuffers Set reference changes
+  let _sortedCache: { buffers: Map<string, BufferEntry>; pinned: Set<string>; result: BufferEntry[] } | null = null;
+
+  return {
   buffers: new Map(),
   activeBuffer: null,
   pinnedBuffers: loadSet('db-pinned'),
@@ -136,11 +142,16 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
 
   getSorted: () => {
     const { buffers, pinnedBuffers } = get();
+    if (_sortedCache && _sortedCache.buffers === buffers && _sortedCache.pinned === pinnedBuffers) {
+      return _sortedCache.result;
+    }
     const all = Array.from(buffers.values()).sort((a, b) => a.buffer.number - b.buffer.number);
     const getFullName = (e: BufferEntry) => e.buffer.fullName || e.buffer.name;
     const pinned = all.filter(e => pinnedBuffers.has(getFullName(e)));
     const rest = all.filter(e => !pinnedBuffers.has(getFullName(e)));
-    return [...pinned, ...rest];
+    const result = [...pinned, ...rest];
+    _sortedCache = { buffers, pinned: pinnedBuffers, result };
+    return result;
   },
 
   getTotalHighlights: () => {
@@ -223,8 +234,8 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
       // Suppress ignored nicks
       if (line.nick && state.ignoredNicks.has(line.nick.toLowerCase())) return state;
 
-      // Deduplicate: skip if a line with this ID already exists
-      if (!line.id.startsWith('_opt_') && entry.lines.some(l => l.id === line.id)) return state;
+      // Deduplicate: O(1) set lookup instead of O(n) array scan
+      if (!line.id.startsWith('_opt_') && entry.lineIds.has(line.id)) return state;
 
       // Content-based dedup: skip if a recent line has identical nick+message
       // (catches cases where same message arrives with different pointer IDs)
@@ -253,13 +264,18 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
       }
 
       let newLines = [...base, line];
+      let newLineIds: Set<string>;
       if (newLines.length > MAX_LINES) {
-        const dropped = newLines.slice(0, newLines.length - MAX_LINES);
         newLines = newLines.slice(-MAX_LINES);
+        // Rebuild the set from the trimmed array to prevent unbounded growth
+        newLineIds = new Set(newLines.map(l => l.id));
         if (msgIndex.size > MAX_LINES) {
           const keep = new Set(newLines.map(l => l.msgid).filter(Boolean));
           msgIndex = new Map([...msgIndex].filter(([k]) => keep.has(k)));
         }
+      } else {
+        newLineIds = new Set(entry.lineIds);
+        if (!line.id.startsWith('_opt_')) newLineIds.add(line.id);
       }
 
       // Client-side highlight words
@@ -282,7 +298,7 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
       }
 
       const next = new Map(state.buffers);
-      next.set(pointer, { ...entry, lines: newLines, msgIndex, unread, highlighted });
+      next.set(pointer, { ...entry, lines: newLines, lineIds: newLineIds, msgIndex, unread, highlighted });
       return { buffers: next };
     });
   },
@@ -292,7 +308,8 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
       const entry = state.buffers.get(pointer);
       if (!entry) return state;
 
-      const existingIds = new Set(entry.lines.map(l => l.id));
+      // Use lineIds for O(1) ID lookup; also keep content-based dedup
+      const existingIds = entry.lineIds;
       const existingContent = new Set<string>();
       for (const l of entry.lines) {
         if (l.id.startsWith('_opt_') || !l.nick || !l.message) continue;
@@ -323,9 +340,11 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
         newLines = [...entry.lines, ...fresh];
         if (newLines.length > MAX_LINES) newLines = newLines.slice(-MAX_LINES);
       }
+      // Rebuild lineIds from the final array (handles trimming)
+      const newLineIds = new Set(newLines.map(l => l.id));
 
       const next = new Map(state.buffers);
-      next.set(pointer, { ...entry, lines: newLines });
+      next.set(pointer, { ...entry, lines: newLines, lineIds: newLineIds });
       return { buffers: next };
     });
   },
@@ -572,4 +591,13 @@ export const createBuffersSlice: StateCreator<BuffersSlice, [], [], BuffersSlice
   },
 
   clearBuffers: () => set({ buffers: new Map(), activeBuffer: null }),
-});
+
+  clearLines: (pointer) => set(state => {
+    const entry = state.buffers.get(pointer);
+    if (!entry) return state;
+    const next = new Map(state.buffers);
+    next.set(pointer, { ...entry, lines: [], lineIds: new Set(), msgIndex: new Map(), unread: 0, highlighted: 0 });
+    return { buffers: next };
+  }),
+  }; // end return
+}; // end createBuffersSlice

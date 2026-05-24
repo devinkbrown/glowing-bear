@@ -12,15 +12,15 @@ html {
 html, body {
   height: 100dvh;
   height: -webkit-fill-available;
-  height: var(--vh, 100dvh);
   overflow: hidden;
   position: fixed;
   width: 100%;
   top: 0;
   left: 0;
-  /* iOS: prevent rubber-band bounce on the document itself */
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
+  /* Ensure the layout tracks the visual viewport on iOS when keyboard opens */
+  max-height: 100dvh;
 }
 body {
   -webkit-font-smoothing: antialiased;
@@ -176,9 +176,15 @@ body { font-family: var(--app-font); }
 .msg-area {
   font-family: var(--app-font);
   font-size: var(--app-font-size, 14px);
-  line-height: 1.6;
+  line-height: 1.65;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Subtle top fade for scroll context */
+.msg-area-fade-top {
+  mask-image: linear-gradient(to bottom, transparent 0%, black 40px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 40px);
 }
 
 /* ── Message row layout ──────────────────────────────────────────────── */
@@ -188,17 +194,27 @@ body { font-family: var(--app-font); }
   padding: 1px 12px;
 }
 .msg-row.msg-gap {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 .msg-row.msg-system {
   min-height: auto;
 }
 
+@media (min-width: 640px) {
+  .msg-system .msg-body::before {
+    content: '—';
+    margin-right: 6px;
+    opacity: 0.25;
+    font-size: 9px;
+    font-weight: 400;
+  }
+}
+
 /* Highlight bar */
 .msg-highlight {
-  background: rgba(245, 158, 11, 0.04);
-  border-left: 2px solid rgba(245, 158, 11, 0.4);
-  padding-left: 10px;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.07) 0%, rgba(245, 158, 11, 0.015) 60%);
+  border-left: 3px solid rgba(245, 158, 11, 0.5);
+  padding-left: 9px;
 }
 
 /* Timestamp — hidden on mobile */
@@ -225,7 +241,17 @@ body { font-family: var(--app-font); }
 /* Desktop: show columns */
 @media (min-width: 640px) {
   .msg-row {
-    padding: 1px 8px 1px 4px;
+    padding: 2px 10px 2px 6px;
+    transition: background 0.08s;
+  }
+  .msg-row:not(.msg-highlight):hover {
+    background: rgba(255,255,255,0.02);
+    border-radius: 4px;
+  }
+  .msg-row:hover .msg-ts.invisible {
+    visibility: visible;
+    opacity: 0.45;
+    transition: opacity 0.12s ease;
   }
   .msg-ts {
     display: block;
@@ -241,20 +267,27 @@ body { font-family: var(--app-font); }
   }
   .msg-nick {
     display: block;
-    width: 100px;
+    width: 112px;
     flex-shrink: 0;
     text-align: right;
     font-weight: 600;
     font-size: 13px;
-    padding-right: 8px;
+    padding-right: 10px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    border-right: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+    transition: opacity 0.1s;
+  }
+  .msg-nick:hover {
+    opacity: 0.7;
   }
   .msg-nick-spacer {
     display: block;
-    width: 100px;
+    width: 112px;
     flex-shrink: 0;
+    border-right: 1px solid rgba(255,255,255,0.05);
   }
 }
 
@@ -271,20 +304,22 @@ body { font-family: var(--app-font); }
 }
 .irc-link:hover {
   border-color: var(--custom-accent, #818cf8);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--custom-accent, #818cf8) 35%, transparent);
 }
 
 /* ── Inline images ─────────────────────────────────────────────────────── */
 .irc-inline-image {
   max-height: 220px;
   max-width: min(100%, 420px);
-  border-radius: 8px;
+  border-radius: 10px;
   display: block;
   margin-top: 6px;
-  border: 1px solid rgba(255,255,255,0.04);
-  transition: transform 0.15s ease;
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: transform 0.18s ease, border-color 0.18s ease;
 }
 .irc-inline-image:hover {
-  transform: scale(1.02);
+  transform: scale(1.015);
+  border-color: rgba(255,255,255,0.1);
 }
 @media (max-width: 639px) {
   .irc-inline-image { max-height: 160px; max-width: 100%; }
@@ -346,7 +381,7 @@ body { font-family: var(--app-font); }
 
 /* ── Selection ─────────────────────────────────────────────────────────── */
 ::selection {
-  background: rgba(99, 102, 241, 0.3);
+  background: rgba(129, 140, 248, 0.28);
   color: inherit;
 }
 
@@ -419,9 +454,9 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --color-gray-200: #d0d5e8;
   --color-gray-300: #b0b8d0;
   --color-gray-400: #8a92b0;
-  --color-gray-500: #6a7298;
-  --color-gray-600: #1e1e3a;
-  --color-gray-700: #14142e;
+  --color-gray-500: #717898;
+  --color-gray-600: #505578;
+  --color-gray-700: #2a2e4a;
   --color-gray-800: #0e0e24;
   --color-gray-900: #07071a;
   --color-gray-950: #000005;
@@ -450,9 +485,9 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --color-gray-200: #d4d4d4;
   --color-gray-300: #b4b4b4;
   --color-gray-400: #909090;
-  --color-gray-500: #686868;
-  --color-gray-600: #444444;
-  --color-gray-700: #2c2c2c;
+  --color-gray-500: #707070;
+  --color-gray-600: #565656;
+  --color-gray-700: #3a3a3a;
   --color-gray-800: #171717;
   --color-gray-900: #0f0f0f;
   --color-gray-950: #070707;
@@ -510,9 +545,9 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --color-gray-200: #b0e0e0;
   --color-gray-300: #88c8c8;
   --color-gray-400: #60a8a8;
-  --color-gray-500: #408080;
-  --color-gray-600: #285858;
-  --color-gray-700: #1a3a3a;
+  --color-gray-500: #4c8888;
+  --color-gray-600: #346868;
+  --color-gray-700: #1e4040;
   --color-gray-800: #0e2020;
   --color-gray-900: #071212;
   --color-gray-950: #03080a;
@@ -525,9 +560,9 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --color-gray-200: #e0c0a0;
   --color-gray-300: #c8a080;
   --color-gray-400: #a88060;
-  --color-gray-500: #806040;
-  --color-gray-600: #4a3020;
-  --color-gray-700: #2c1810;
+  --color-gray-500: #8c6c48;
+  --color-gray-600: #5c3e28;
+  --color-gray-700: #341c10;
   --color-gray-800: #1a0e08;
   --color-gray-900: #100804;
   --color-gray-950: #080402;
@@ -540,9 +575,9 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --color-gray-200: #d0c0ee;
   --color-gray-300: #b4a0d4;
   --color-gray-400: #9480b8;
-  --color-gray-500: #6e5894;
-  --color-gray-600: #4c3870;
-  --color-gray-700: #342450;
+  --color-gray-500: #7460a0;
+  --color-gray-600: #5c4880;
+  --color-gray-700: #3c2c58;
   --color-gray-800: #1c122e;
   --color-gray-900: #0e0719;
   --color-gray-950: #07030c;
@@ -615,9 +650,9 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --color-gray-200: #b8c4dc;
   --color-gray-300: #90a0c0;
   --color-gray-400: #6880a8;
-  --color-gray-500: #4c6088;
-  --color-gray-600: #344468;
-  --color-gray-700: #1e2a44;
+  --color-gray-500: #587096;
+  --color-gray-600: #425478;
+  --color-gray-700: #263248;
   --color-gray-800: #0c1222;
   --color-gray-900: #070910;
   --color-gray-950: #030408;
@@ -631,9 +666,9 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --color-gray-200: #c8cce8;
   --color-gray-300: #a0a8c8;
   --color-gray-400: #7880a8;
-  --color-gray-500: #585e84;
-  --color-gray-600: #383c5c;
-  --color-gray-700: #222440;
+  --color-gray-500: #626888;
+  --color-gray-600: #484e6e;
+  --color-gray-700: #2a2e4a;
   --color-gray-800: #0f1124;
   --color-gray-900: #090a15;
   --color-gray-950: #030408;
@@ -651,8 +686,8 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --color-gray-300: #d4b080;
   --color-gray-400: #b08850;
   --color-gray-500: #8a6438;
-  --color-gray-600: #604428;
-  --color-gray-700: #3a2818;
+  --color-gray-600: #704e30;
+  --color-gray-700: #402c18;
   --color-gray-800: #190e07;
   --color-gray-900: #0e0904;
   --color-gray-950: #0a0503;
@@ -666,9 +701,9 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   --color-gray-200: #a0d0a0;
   --color-gray-300: #70a870;
   --color-gray-400: #508050;
-  --color-gray-500: #386038;
-  --color-gray-600: #1e3a1e;
-  --color-gray-700: #142814;
+  --color-gray-500: #487848;
+  --color-gray-600: #2e5030;
+  --color-gray-700: #183018;
   --color-gray-800: #091009;
   --color-gray-900: #060b06;
   --color-gray-950: #040609;
@@ -680,14 +715,24 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   ::-webkit-scrollbar { width: 2px; height: 2px; }
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
 
-  /* Prevent iOS zoom on input focus */
+  /* Prevent iOS zoom on input focus — 16px is the threshold */
   input, select, textarea { font-size: 16px !important; }
   input[type="range"] { font-size: inherit !important; }
 
-  /* Momentum scrolling for overflow containers */
+  /* Momentum scrolling + contained overscroll for chat area */
   .msg-area {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
+    /* GPU-accelerated scrolling layer on both iOS and Android */
+    transform: translateZ(0);
+    /* Prevent scroll chaining to the body/nav */
+    touch-action: pan-y;
+  }
+
+  /* Input bar: stay composited so keyboard resize doesn't cause repaints */
+  .input-bar-wrapper {
+    transform: translateZ(0);
+    backface-visibility: hidden;
   }
 
   /* Mobile message rows — tighter horizontal padding */
@@ -706,9 +751,28 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   }
 }
 
-/* ── iOS / WebKit fixes ────────────────────────────────────────────────── */
+/* ── Scroll anchoring ─────────────────────────────────────────────────── */
 
-/* iOS Safari: prevent elastic overscroll bounce on scrollable containers */
+/* Let the browser automatically keep the bottom anchor in view when new
+   content is appended above the fold — eliminates manual scroll-to-bottom
+   timing issues on both iOS and Android. */
+.scroll-smooth-container {
+  overflow-anchor: none;
+}
+.scroll-anchor {
+  overflow-anchor: auto;
+  height: 1px;
+}
+
+/* Input bar: no flicker when keyboard opens/closes */
+.input-bar-wrapper {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* ── iOS / WebKit / Android fixes ─────────────────────────────────────── */
+
+/* Prevent elastic overscroll bounce on scrollable containers */
 .msg-area,
 .overflow-y-auto {
   overscroll-behavior-y: contain;

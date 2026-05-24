@@ -112,7 +112,7 @@ export default function UserProfileCard({ onClose }: { onClose: () => void }) {
             <div className="flex items-center gap-2">
               <h3 className="text-[16px] font-semibold text-gray-100 truncate">{nick}</h3>
               {isBot && (
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/20">
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/20">
                   BOT
                 </span>
               )}

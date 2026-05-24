@@ -42,7 +42,7 @@ const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'Alt+↑/↓', action: 'Switch buffers' },
   { keys: 'Alt+A', action: 'Jump to activity' },
   { keys: 'Ctrl+K', action: 'Buffer switcher' },
-  { keys: 'Ctrl+/', action: 'Toggle user list' },
+  { keys: 'Ctrl+U', action: 'Toggle user list' },
   { keys: 'Escape', action: 'Close panel/modal' },
   { keys: 'Ctrl+L', action: 'Clear buffer' },
   { keys: 'Tab', action: 'Nick completion' },
@@ -128,9 +128,9 @@ export default function SettingsModal({ onClose }: Props) {
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`px-2.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider transition-colors relative whitespace-nowrap
-                ${tab === t.id ? 'text-indigo-300' : 'text-gray-600 hover:text-gray-400'}`}>
+                ${tab === t.id ? 'text-[var(--custom-accent,#818cf8)]' : 'text-gray-600 hover:text-gray-400'}`}>
               {t.label}
-              {tab === t.id && <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-indigo-500 rounded-full" />}
+              {tab === t.id && <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-[var(--custom-accent,#818cf8)] rounded-full" />}
             </button>
           ))}
         </div>
@@ -149,7 +149,7 @@ export default function SettingsModal({ onClose }: Props) {
                     </svg>
                     <input type="text" value={themeFilter} onChange={e => setThemeFilter(e.target.value)}
                       placeholder="Filter themes..."
-                      className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-300 text-[12px] pl-8 pr-3 py-1.5 outline-none focus:border-indigo-500/30 transition-colors placeholder:text-gray-700" />
+                      className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-300 text-[12px] pl-8 pr-3 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700" />
                   </div>
                 )}
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -246,7 +246,7 @@ export default function SettingsModal({ onClose }: Props) {
               <Section label="Background Image" desc="Set a custom wallpaper behind the chat">
                 <input type="text" value={settings.bgImage} placeholder="https://example.com/image.jpg"
                   onChange={e => updateSettings({ bgImage: e.target.value })}
-                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-2 outline-none focus:border-indigo-500/30 transition-colors placeholder:text-gray-700" />
+                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-2 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700" />
                 {settings.bgImage && (
                   <div className="grid grid-cols-2 gap-4 mt-2.5">
                     <Slider label="Opacity" value={settings.bgOpacity} unit="%" min={0} max={100}
@@ -292,7 +292,7 @@ export default function SettingsModal({ onClose }: Props) {
                 <input type="text" value={settings.highlightWords.join(', ')}
                   onChange={e => updateSettings({ highlightWords: e.target.value.split(',').map(w => w.trim()).filter(Boolean) })}
                   placeholder="your-nick, keyword, ..."
-                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-2 outline-none focus:border-indigo-500/30 transition-colors placeholder:text-gray-700" />
+                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-2 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700" />
                 <p className="text-[10px] text-gray-600 mt-1">Comma-separated. Case-insensitive matching.</p>
               </Section>
             </>
@@ -343,7 +343,7 @@ export default function SettingsModal({ onClose }: Props) {
                         <span className="text-[12px] text-gray-300 font-medium flex-1 truncate">{p.name}</span>
                         <span className="text-[10px] text-gray-600 font-mono truncate max-w-[120px]">{p.relay.host}:{p.relay.port}</span>
                         <button onClick={() => loadProfile(p.name)}
-                          className="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors px-1.5">
+                          className="text-[10px] font-semibold text-[var(--custom-accent,#818cf8)] hover:opacity-80 transition-opacity px-1.5">
                           Load
                         </button>
                         <button onClick={() => { if (confirm(`Delete profile "${p.name}"?`)) deleteProfile(p.name); }}
@@ -357,10 +357,10 @@ export default function SettingsModal({ onClose }: Props) {
                 <div className="flex gap-2">
                   <input type="text" value={profileName} onChange={e => setProfileName(e.target.value)}
                     placeholder="Profile name"
-                    className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-1.5 outline-none focus:border-indigo-500/30 transition-colors placeholder:text-gray-700" />
+                    className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700" />
                   <button onClick={() => { if (profileName.trim()) { saveProfile(profileName.trim()); setProfileName(''); } }}
                     disabled={!profileName.trim()}
-                    className="px-3 py-1.5 text-[11px] font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/15 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                    className="px-3 py-1.5 text-[11px] font-semibold text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10 border border-[var(--custom-accent,#818cf8)]/20 rounded-lg hover:bg-[var(--custom-accent,#818cf8)]/15 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
                     Save Current
                   </button>
                 </div>
@@ -385,7 +385,7 @@ export default function SettingsModal({ onClose }: Props) {
               <Section label="Custom CSS" desc="Inject your own styles into the client">
                 <textarea value={settings.customCSS} onChange={e => updateSettings({ customCSS: e.target.value })}
                   placeholder="/* Override any DarkBear style */&#10;.sidebar { backdrop-filter: blur(20px); }" rows={5} spellCheck={false}
-                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl text-gray-200 text-[11px] font-mono px-3 py-2.5 outline-none focus:border-indigo-500/30 transition-colors placeholder:text-gray-700 resize-y leading-relaxed" />
+                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl text-gray-200 text-[11px] font-mono px-3 py-2.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700 resize-y leading-relaxed" />
               </Section>
 
               <Section label="Keyboard Shortcuts" desc="Built-in key bindings">
@@ -445,7 +445,7 @@ function Toggle({ label, desc, on, onChange }: { label: string; desc: string; on
         <p className="text-[10px] text-gray-600 leading-snug mt-0.5">{desc}</p>
       </div>
       <span className={`relative w-9 h-[20px] rounded-full transition-all shrink-0
-        ${on ? 'bg-indigo-600 shadow-[0_0_8px_rgba(99,102,241,0.25)]' : 'bg-white/[0.06]'}`}>
+        ${on ? 'bg-[var(--custom-accent,#818cf8)] shadow-[0_0_8px_var(--custom-accent,#818cf8)]/25' : 'bg-white/[0.06]'}`}>
         <span className={`absolute top-[2px] left-[2px] block w-[16px] h-[16px] rounded-full bg-white shadow-sm transition-transform duration-150
           ${on ? 'translate-x-[16px]' : ''}`} />
       </span>
@@ -458,7 +458,7 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
     <button onClick={onClick}
       className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all
         ${active
-          ? 'bg-indigo-500/12 text-indigo-200 ring-1 ring-indigo-500/30 shadow-sm'
+          ? 'bg-[var(--custom-accent,#818cf8)]/12 text-gray-100 ring-1 ring-[var(--custom-accent,#818cf8)]/30 shadow-sm'
           : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'}`}>
       {children}
     </button>
@@ -477,7 +477,7 @@ function Slider({ label, value, unit, min, max, step, onChange }: {
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={e => onChange(Number(e.target.value))}
-        className="w-full accent-indigo-500 h-1.5 rounded-full cursor-pointer" />
+        className="w-full h-1.5 rounded-full cursor-pointer" style={{ accentColor: 'var(--custom-accent, #818cf8)' } as React.CSSProperties} />
     </div>
   );
 }
@@ -491,7 +491,7 @@ function InputField({ label, value, placeholder, type, onChange }: {
       <label className="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500 mb-1 block">{label}</label>
       <input type={type ?? 'text'} value={value} placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
-        className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-2 outline-none focus:border-indigo-500/30 transition-colors placeholder:text-gray-700" />
+        className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-2 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700" />
     </div>
   );
 }

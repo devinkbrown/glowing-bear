@@ -42,9 +42,9 @@ export default function TypingIndicator() {
   return (
     <div className="px-3 sm:px-4 py-1 text-[11px] text-gray-600 flex items-center gap-2 animate-fade-in">
       <span className="flex gap-[3px]">
-        <span className="w-[4px] h-[4px] rounded-full bg-indigo-400/50 animate-bounce" style={{ animationDelay: '0ms' }} />
-        <span className="w-[4px] h-[4px] rounded-full bg-indigo-400/50 animate-bounce" style={{ animationDelay: '150ms' }} />
-        <span className="w-[4px] h-[4px] rounded-full bg-indigo-400/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+        <span className="w-[4px] h-[4px] rounded-full bg-[var(--custom-accent,#818cf8)]/50 animate-bounce" style={{ animationDelay: '0ms' }} />
+        <span className="w-[4px] h-[4px] rounded-full bg-[var(--custom-accent,#818cf8)]/50 animate-bounce" style={{ animationDelay: '150ms' }} />
+        <span className="w-[4px] h-[4px] rounded-full bg-[var(--custom-accent,#818cf8)]/50 animate-bounce" style={{ animationDelay: '300ms' }} />
       </span>
       <span className="truncate">{text}</span>
     </div>

@@ -112,18 +112,19 @@ export default function Sidebar({ onSelect }: Props) {
   const nextUnreadPtr = nextHighlighted(true);
 
   return (
-    <aside className="flex flex-col h-full bg-gray-950 select-none overflow-hidden touch-pan-y"
+    <aside className="flex flex-col h-full bg-gray-950 border-r border-white/[0.03] select-none overflow-hidden touch-pan-y"
       style={{ width: `min(${settings.sidebarWidth}px, 85vw)`, flexShrink: 0 }}>
 
       {/* Brand */}
-      <div className="flex items-center gap-2.5 pl-4 pr-3 pt-4 pb-2 shrink-0">
+      <div className="flex items-center gap-2.5 pl-4 pr-3 pt-4 pb-3 shrink-0">
         <BearLogo size={24} />
         <span className="text-[14px] font-bold text-gray-200 tracking-tight flex-1">DarkBear</span>
         <button onClick={() => openModal('settings')}
           className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.08] transition-all"
           title="Settings">
-          <svg className="w-[16px] h-[16px] sm:w-[14px] sm:h-[14px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="8" cy="3" r="1" fill="currentColor" stroke="none" /><circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" /><circle cx="8" cy="13" r="1" fill="currentColor" stroke="none" />
+          <svg className="w-[15px] h-[15px] sm:w-[13px] sm:h-[13px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="8" cy="8" r="2.5" />
+            <path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" />
           </svg>
         </button>
       </div>
@@ -155,7 +156,7 @@ export default function Sidebar({ onSelect }: Props) {
           placeholder="Filter buffers"
           autoComplete="off" spellCheck={false}
           onKeyDown={e => { if (e.key === 'Escape') { setFilterQuery(''); (e.target as HTMLInputElement).blur(); } }}
-          className="w-full bg-white/[0.03] sm:bg-transparent border border-white/[0.06] sm:border-0 sm:border-b sm:border-white/[0.05] rounded-lg sm:rounded-none text-[13px] sm:text-[12px] text-gray-300 placeholder-gray-600 px-3 sm:px-1 py-2.5 sm:py-2 outline-none focus:border-indigo-500/30 transition-colors" />
+          className="w-full bg-white/[0.03] sm:bg-transparent border border-white/[0.06] sm:border-0 sm:border-b sm:border-white/[0.05] rounded-lg sm:rounded-none text-[13px] sm:text-[12px] text-gray-300 placeholder-gray-600 px-3 sm:px-1 py-2.5 sm:py-2 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors" />
       </div>
 
       {/* Buffer list */}
@@ -180,19 +181,19 @@ export default function Sidebar({ onSelect }: Props) {
                 </button>
                 {grp.serverEntry ? (
                   <button onClick={() => selectBuffer(grp.serverEntry!.buffer.id)}
-                    className={`flex-1 text-left text-[10px] font-extrabold uppercase tracking-[0.12em] py-1.5 px-1 rounded transition-colors truncate
-                      ${activeBuffer === grp.serverEntry.buffer.id ? 'text-indigo-400' : 'text-gray-500 hover:text-gray-300'}`}>
+                    className={`flex-1 text-left text-[9px] font-black uppercase tracking-[0.18em] py-1.5 px-1 rounded transition-colors truncate
+                      ${activeBuffer === grp.serverEntry.buffer.id ? 'text-[var(--custom-accent,#818cf8)]' : 'text-gray-600 hover:text-gray-300'}`}>
                     {grp.serverName}
                   </button>
                 ) : (
-                  <span className="flex-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-gray-500 py-1.5 px-1 truncate">
+                  <span className="flex-1 text-[9px] font-black uppercase tracking-[0.18em] text-gray-600 py-1.5 px-1 truncate">
                     {grp.serverName}
                   </span>
                 )}
                 {isCollapsed && grp.totalHighlights > 0 && <Pip count={grp.totalHighlights} hot />}
                 {!isCollapsed && (
                   <button onClick={() => { setShowJoinBar(grp.serverName); setJoinInput(''); }}
-                    className="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center rounded text-gray-500 hover:text-indigo-400 active:bg-white/[0.04] transition-colors"
+                    className="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center rounded text-gray-500 hover:text-[var(--custom-accent,#818cf8)] active:bg-white/[0.04] transition-colors"
                     title="Join channel">
                     <svg className="w-[12px] h-[12px] sm:w-[10px] sm:h-[10px]" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                       <path d="M5 1v8M1 5h8" />
@@ -211,7 +212,7 @@ export default function Sidebar({ onSelect }: Props) {
                           if (e.key === 'Escape') { setShowJoinBar(null); setJoinInput(''); }
                         }}
                         placeholder="#channel"
-                        className="w-full bg-indigo-500/[0.06] border border-indigo-500/20 rounded-lg text-[13px] sm:text-[12px] text-gray-200 px-3 py-2.5 sm:py-1.5 outline-none focus:border-indigo-500/40 placeholder-gray-600 transition-colors" />
+                        className="w-full bg-[var(--custom-accent,#818cf8)]/[0.06] border border-[var(--custom-accent,#818cf8)]/20 rounded-lg text-[13px] sm:text-[12px] text-gray-200 px-3 py-2.5 sm:py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/40 placeholder-gray-600 transition-colors" />
                     </div>
                   )}
 
@@ -263,19 +264,19 @@ function BufItem({ entry, active, onClick, indent, pinned, muted, query }: {
 
   return (
     <button onClick={onClick} title={entry.buffer.fullName}
-      className={`w-full text-left ${indent ? 'pl-6' : 'pl-3'} pr-2 py-2 sm:py-[6px] flex items-center gap-2 transition-all text-[14px] sm:text-[13px] rounded-lg group relative
+      className={`w-full text-left ${indent ? 'pl-6' : 'pl-3'} pr-2 py-2.5 sm:py-[7px] flex items-center gap-2 transition-all text-[14px] sm:text-[13px] rounded-lg group relative
         active:bg-white/[0.04]
         ${active
-          ? 'text-gray-100 bg-white/[0.06]'
+          ? 'text-gray-100 bg-[var(--custom-accent,#818cf8)]/[0.07]'
           : entry.highlighted > 0
             ? 'text-gray-100'
             : entry.unread > 0
               ? 'text-gray-300'
               : 'text-gray-400 hover:text-gray-200 hover:bg-white/[0.02]'}`}>
-      {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 sm:h-4 rounded-r-full bg-indigo-500" />}
+      {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 sm:h-4 rounded-r-full bg-[var(--custom-accent,#818cf8)]" />}
       <BufIcon kind={kind} />
       <span className="truncate flex-1 leading-snug">{name}</span>
-      {pinned && <span className="w-1 h-1 rounded-full bg-indigo-500/50 shrink-0" />}
+      {pinned && <span className="w-1 h-1 rounded-full bg-[var(--custom-accent,#818cf8)]/50 shrink-0" />}
       {muted && <span className="text-[10px] text-gray-600 shrink-0">/</span>}
       {entry.highlighted > 0 ? (
         <Pip count={entry.highlighted} hot />
@@ -289,6 +290,18 @@ function BufItem({ entry, active, onClick, indent, pinned, muted, query }: {
 function BufIcon({ kind }: { kind: BufferKind }) {
   const cls = "w-3.5 h-3.5 shrink-0 opacity-40";
   switch (kind) {
+    case 'channel':
+      return (
+        <svg className={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M6 2L4 14M12 2l-2 12M2 6h12M1 10h12" />
+        </svg>
+      );
+    case 'query':
+      return (
+        <svg className={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 10c0 1.1-.9 2-2 2H5l-3 2V4c0-1.1.9-2 2-2h8c1.1 0 2 .9 2 2v6z" />
+        </svg>
+      );
     case 'raw':
       return (
         <svg className={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">

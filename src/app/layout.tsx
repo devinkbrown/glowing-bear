@@ -16,7 +16,9 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
+  userScalable: false,
   viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -36,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var v='2026-05-16-133242-darkbear-5ba2e21';var k='darkbear_asset_version';if(localStorage.getItem(k)!==v){localStorage.setItem(k,v);if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister()})})}if(window.location.pathname.indexOf('/darkbear')===0&&performance.navigation&&performance.navigation.type!==1){setTimeout(function(){window.location.reload()},50)}}}catch(e){}})()`,
+            __html: `(function(){try{var v='2026-05-17-051919-darkbear-edc3d9a';var k='darkbear_asset_version';if(localStorage.getItem(k)!==v){localStorage.setItem(k,v);if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister()})})}if(window.location.pathname.indexOf('/darkbear')===0&&performance.navigation&&performance.navigation.type!==1){setTimeout(function(){window.location.reload()},50)}}}catch(e){}})()`,
           }}
         />
       </head>

@@ -46,7 +46,11 @@ export function useViewportHeight() {
     function onResize() {
       scheduleUpdate();
       if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(update, 350);
+      resizeTimer = setTimeout(() => {
+        update();
+        // Notify message views that the viewport has stabilized
+        window.dispatchEvent(new CustomEvent('viewport-stable'));
+      }, 350);
     }
 
     // iOS fires scroll events on the visualViewport when the keyboard pushes

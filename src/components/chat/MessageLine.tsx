@@ -1,13 +1,11 @@
 'use client';
 
-import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import { memo, useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import type { WeeChatLine } from '@/types';
 import { nickColor } from '@/lib/nickcolor';
 import { formatTimestamp } from '@/lib/timestamps';
 import { formatText } from '@/protocol/irc/formatter';
 import { stripColors } from '@/protocol/weechat/strip-colors';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { useStore } from '@/stores';
 import type { BufferKind } from '@/lib/bufferKind';
 
 interface Props {
@@ -19,6 +17,8 @@ interface Props {
   showPrefixes: boolean;
   inlineImages: boolean;
   bufferKind?: BufferKind;
+  isDesktop: boolean;
+  isBot: (nick: string) => boolean;
 }
 
 const IMAGE_RE = /https?:\/\/\S+\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?\S*)?/gi;
@@ -76,7 +76,7 @@ function MessageContextMenu({ menu, onClose }: { menu: ContextMenu; onClose: () 
   );
 }
 
-export default function MessageLine(props: Props) {
+function MessageLineInner(props: Props) {
   const { bufferKind: kind } = props;
   if (kind === 'raw' || kind === 'fset' || kind === 'plugin') {
     return <SpecialLine line={props.line} kind={kind} timestampFormat={props.timestampFormat} />;
@@ -84,9 +84,24 @@ export default function MessageLine(props: Props) {
   return <IrcMessageLine {...props} />;
 }
 
-function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, showPrefixes, inlineImages }: Props) {
-  const isDesktop = useMediaQuery('(min-width: 640px)');
-  const isBot = useStore(s => s.isBot);
+const MessageLine = memo(MessageLineInner, (prev, next) => {
+  return (
+    prev.line === next.line &&
+    prev.grouped === next.grouped &&
+    prev.compact === next.compact &&
+    prev.timestampFormat === next.timestampFormat &&
+    prev.colorNicks === next.colorNicks &&
+    prev.showPrefixes === next.showPrefixes &&
+    prev.inlineImages === next.inlineImages &&
+    prev.bufferKind === next.bufferKind &&
+    prev.isDesktop === next.isDesktop &&
+    prev.isBot === next.isBot
+  );
+});
+
+export default MessageLine;
+
+function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, showPrefixes, inlineImages, isDesktop, isBot }: Props) {
   const timestamp = timestampFormat !== 'off' ? formatTimestamp(line.date, timestampFormat) : '';
   const nick = line.nick ?? '';
   const nickIsBot = nick ? isBot(nick) : false;
@@ -170,10 +185,21 @@ function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, s
 
   // ── System messages ──
   if (line.isJoin || line.isPart || line.isQuit || line.isNick || line.isMode || line.isTopic) {
+    const eventColor = line.isJoin
+      ? 'text-emerald-400/75'
+      : (line.isPart || line.isQuit)
+      ? 'text-red-400/65'
+      : line.isNick
+      ? 'text-amber-400/70'
+      : line.isMode
+      ? 'text-sky-400/65'
+      : 'text-purple-400/65'; // topic
+
     return (
       <div className={`msg-row msg-system ${compact ? '' : 'msg-gap'}`} {...touchProps}>
         {timestamp && <span className="msg-ts">{timestamp}</span>}
-        <span className="msg-body text-gray-500 sm:hover:text-gray-300 transition-colors text-[11px] sm:text-[12px]"
+        <span className="msg-nick-spacer" />
+        <span className={`msg-body ${eventColor} text-[11px] sm:text-[12px]`}
           dangerouslySetInnerHTML={{ __html: formattedMessage }} />
         {contextMenu && <MessageContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />}
       </div>
@@ -186,8 +212,9 @@ function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, s
       <div className={`msg-row ${compact ? '' : 'py-0.5'} ${line.highlight ? 'msg-highlight' : ''}`} {...touchProps}>
         {timestamp && <span className={`msg-ts ${grouped ? 'invisible' : ''}`}>{timestamp}</span>}
         <span className="msg-nick-spacer" />
-        <div className="msg-body text-gray-300 text-[14px] sm:text-[13px]">
-          <strong style={nickStyle}>{nick}</strong>{' '}
+        <div className="msg-body text-gray-400/90 text-[14px] sm:text-[13px] italic">
+          <span className="not-italic text-gray-500/60 mr-1 text-[11px]">*</span>
+          <strong style={nickStyle} className="not-italic">{nick}</strong>{' '}
           <span className="irc-msg-text" dangerouslySetInnerHTML={{ __html: formattedMessage }} />
         </div>
         {contextMenu && <MessageContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />}
@@ -202,8 +229,9 @@ function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, s
         {timestamp && <span className="msg-ts">{timestamp}</span>}
         <span className="msg-nick-spacer" />
         <div className="msg-body">
-          <span className="text-purple-400/80 text-[13px] font-medium">-{nick}-</span>{' '}
-          <span className="text-purple-300/70 irc-msg-text text-[13px]" dangerouslySetInnerHTML={{ __html: formattedMessage }} />
+          <span className="text-[var(--custom-accent,#818cf8)]/40 text-[11px] mr-1">»</span>
+          <span className="text-[var(--custom-accent,#818cf8)]/80 text-[13px] font-semibold tracking-tight">-{nick}-</span>{' '}
+          <span className="text-[var(--custom-accent,#818cf8)]/60 irc-msg-text text-[13px]" dangerouslySetInnerHTML={{ __html: formattedMessage }} />
         </div>
         {contextMenu && <MessageContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />}
       </div>
@@ -213,7 +241,7 @@ function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, s
   // ── Whisper ──
   if (line.isWhisper) {
     return (
-      <div className={`msg-row ${compact ? '' : 'py-0.5'} bg-amber-500/[0.03] border-l-2 border-amber-500/30`} {...touchProps}>
+      <div className={`msg-row ${compact ? '' : 'py-0.5'} bg-amber-500/[0.04] border-l-2 border-amber-500/40`} {...touchProps}>
         {timestamp && <span className={`msg-ts ${grouped ? 'invisible' : ''}`}>{timestamp}</span>}
         {!grouped ? (
           <span className="msg-nick" style={nickStyle}>
@@ -240,7 +268,7 @@ function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, s
           <div className="flex items-baseline gap-2 px-3 pt-1.5">
             <span className="font-semibold text-[13px] truncate max-w-[60%] inline-flex items-center gap-1" style={nickStyle}>
               {prefix}{nick}
-              {nickIsBot && <span className="px-1 py-px rounded text-[7px] font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 leading-none">BOT</span>}
+              {nickIsBot && <span className="px-1 py-px rounded text-[7px] font-bold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/20 leading-none">BOT</span>}
             </span>
             {timestamp && (
               <span className="text-[10px] text-gray-500 font-mono tabular-nums shrink-0">{timestamp}</span>
@@ -248,7 +276,7 @@ function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, s
           </div>
         )}
         <div className="px-3 pb-0.5">
-          <span className={`irc-msg-text text-[14px] leading-[1.55] ${line.isSelf ? 'text-gray-400' : 'text-gray-200'}`}
+          <span className={`irc-msg-text text-[14px] leading-[1.55] text-gray-200`}
             dangerouslySetInnerHTML={{ __html: formattedMessage }} />
           {imageUrls.map(url => (
             <img key={url} src={url} alt="" loading="lazy" className="irc-inline-image cursor-pointer"
@@ -268,13 +296,13 @@ function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, s
       {!grouped ? (
         <span className="msg-nick" style={nickStyle}>
           {prefix}{nick}
-          {nickIsBot && <span className="ml-1 inline-flex px-1 py-px rounded text-[7px] font-bold uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 leading-none align-middle">BOT</span>}
+          {nickIsBot && <span className="ml-1 inline-flex px-1 py-px rounded text-[7px] font-bold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/20 leading-none align-middle">BOT</span>}
         </span>
       ) : (
         <span className="msg-nick" />
       )}
       <div className="msg-body">
-        <span className={`irc-msg-text text-[13px] ${line.isSelf ? 'text-gray-400' : 'text-gray-200'}`}
+        <span className={`irc-msg-text text-[13px] text-gray-200`}
           dangerouslySetInnerHTML={{ __html: formattedMessage }} />
         {imageUrls.map(url => (
           <img key={url} src={url} alt="" loading="lazy" className="irc-inline-image cursor-pointer"
@@ -286,10 +314,10 @@ function IrcMessageLine({ line, grouped, compact, timestampFormat, colorNicks, s
   );
 }
 
-function SpecialLine({ line, kind, timestampFormat }: { line: WeeChatLine; kind: BufferKind; timestampFormat: string }) {
+function SpecialLine({ line, kind, timestampFormat }: { line: WeeChatLine; kind: BufferKind; timestampFormat: Props['timestampFormat'] }) {
   const formatted = useMemo(() => formatText(line.message), [line.message]);
   const prefix = line.prefix ? stripColors(line.prefix).trim() : '';
-  const timestamp = timestampFormat !== 'off' ? formatTimestamp(line.date, timestampFormat as '12h' | '24h' | 'relative') : '';
+  const timestamp = timestampFormat !== 'off' ? formatTimestamp(line.date, timestampFormat) : '';
 
   if (kind === 'raw') {
     const isSend = prefix === '>>>' || prefix === '>>' || prefix.includes('→') || prefix.includes('>>');
