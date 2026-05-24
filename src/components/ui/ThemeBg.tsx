@@ -96,8 +96,8 @@ function DarkBearBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
@@ -122,7 +122,11 @@ function DarkBearBg() {
       cx.restore();
     }
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -213,7 +217,6 @@ function DarkBearBg() {
       cx.fillStyle = sgrd;
       cx.fillRect(0, sy, w, 1);
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -261,15 +264,19 @@ function MidnightBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -352,7 +359,6 @@ function MidnightBg() {
         cx.stroke();
       }
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -419,15 +425,19 @@ function ObsidianBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -520,7 +530,6 @@ function ObsidianBg() {
         cx.fill();
       }
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -567,8 +576,8 @@ function NordBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
@@ -581,7 +590,11 @@ function NordBg() {
     ];
     const frostColors = ['#88c0d0', '#81a1c1', '#8fbcbb'];
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -649,7 +662,6 @@ function NordBg() {
         cx.fill();
       }
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -700,15 +712,19 @@ function GruvboxBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -793,7 +809,6 @@ function GruvboxBg() {
       }
       cx.globalAlpha = 1;
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -845,15 +860,19 @@ function RosePineBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -919,7 +938,6 @@ function RosePineBg() {
       }
       cx.globalAlpha = 1;
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -976,15 +994,19 @@ function AbyssBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -1061,7 +1083,6 @@ function AbyssBg() {
         cx.fill();
       }
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -1108,15 +1129,19 @@ function EmberBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -1171,7 +1196,6 @@ function EmberBg() {
       }
       cx.globalAlpha = 1;
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -1218,8 +1242,8 @@ function AuroraBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
@@ -1239,7 +1263,11 @@ function AuroraBg() {
       return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
     }
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -1317,7 +1345,6 @@ function AuroraBg() {
       cx.closePath();
       cx.fill();
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -1374,8 +1401,8 @@ function CatppuccinBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
@@ -1387,7 +1414,11 @@ function CatppuccinBg() {
       return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
     }
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -1442,7 +1473,6 @@ function CatppuccinBg() {
       }
       cx.globalAlpha = 1;
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -1504,8 +1534,8 @@ function TokyoNightBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
@@ -1517,7 +1547,11 @@ function TokyoNightBg() {
       return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
     }
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -1590,7 +1624,6 @@ function TokyoNightBg() {
         cx.stroke();
       }
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -1646,8 +1679,8 @@ function DraculaBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
@@ -1676,7 +1709,11 @@ function DraculaBg() {
       cx.restore();
     }
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -1769,7 +1806,6 @@ function DraculaBg() {
       cx.closePath();
       cx.fill();
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -1823,15 +1859,19 @@ function SolarizedBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -1925,7 +1965,6 @@ function SolarizedBg() {
       }
       cx.globalAlpha = 1;
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -2008,15 +2047,19 @@ function LightningBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -2122,7 +2165,6 @@ function LightningBg() {
         cx.stroke();
       }
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -2192,15 +2234,19 @@ function PhoenixBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -2351,7 +2397,6 @@ function PhoenixBg() {
       }
       cx.globalAlpha = 1;
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -2478,8 +2523,8 @@ function RetroArcadeBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
@@ -2548,7 +2593,11 @@ function RetroArcadeBg() {
       cx.restore();
     }
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -2766,7 +2815,6 @@ function RetroArcadeBg() {
       cx.arc(w / 2, h / 2, Math.max(w, h) * 0.7, 0, Math.PI * 2);
       cx.fill();
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -2805,15 +2853,19 @@ function StarfieldSimpleBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -2854,7 +2906,6 @@ function StarfieldSimpleBg() {
       }
       cx.globalAlpha = 1;
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -2890,15 +2941,19 @@ function LightBg() {
     }
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
       build(c.width, c.height);
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -2948,7 +3003,6 @@ function LightBg() {
         cx.fill();
       }
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 
@@ -2971,14 +3025,18 @@ function CustomBg() {
     let raf: number;
 
     function resize() {
-      c.width = c.offsetWidth;
-      c.height = c.offsetHeight;
+      c.width = Math.max(1, Math.ceil(c.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(c.offsetHeight / 2));
     }
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(ms: number) {
+      raf = requestAnimationFrame(draw);
+      if (ms - lastMs < 50) return;
+      lastMs = ms;
       const w = c.width, h = c.height;
       const tt = ms / 1000;
       cx.clearRect(0, 0, w, h);
@@ -3034,7 +3092,6 @@ function CustomBg() {
       }
       cx.setLineDash([]);
 
-      raf = requestAnimationFrame(draw);
     }
     raf = requestAnimationFrame(draw);
 

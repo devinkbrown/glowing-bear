@@ -65,8 +65,8 @@ export default function StarfieldBg() {
 
     function resize() {
       if (!canvas) return;
-      c.width = canvas.offsetWidth;
-      c.height = canvas.offsetHeight;
+      c.width = Math.max(1, Math.ceil(canvas.offsetWidth / 2));
+      c.height = Math.max(1, Math.ceil(canvas.offsetHeight / 2));
       buildStars(c.width, c.height);
     }
 
@@ -74,7 +74,11 @@ export default function StarfieldBg() {
     const ro = new ResizeObserver(resize);
     ro.observe(c);
 
+    let lastMs = 0;
     function draw(t: number) {
+      raf = requestAnimationFrame(draw);
+      if (t - lastMs < 50) return;
+      lastMs = t;
       const w = c.width;
       const h = c.height;
       cx2d.clearRect(0, 0, w, h);
@@ -131,8 +135,6 @@ export default function StarfieldBg() {
         cx2d.fill();
       }
       cx2d.globalAlpha = 1;
-
-      raf = requestAnimationFrame(draw);
     }
 
     raf = requestAnimationFrame(draw);
