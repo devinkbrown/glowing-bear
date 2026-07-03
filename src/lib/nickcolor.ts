@@ -28,5 +28,5 @@ export function nickColor(nick: string): string {
 	for (let i = 0; i < nick.length; i++) {
 		hash = ((hash << 5) + hash + nick.charCodeAt(i)) | 0;
 	}
-	return PALETTE[Math.abs(hash) % PALETTE.length];
+	return PALETTE[Math.abs(hash) % PALETTE.length]!;
 }

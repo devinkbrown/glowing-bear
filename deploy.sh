@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
 set -e
 
-# Auto-bump cache version in layout.tsx before build
-LAYOUT=src/app/layout.tsx
+# Auto-bump cache version in index.html before build (matches the asset-version
+# reload script in <head>; unregisters stale service workers on change).
 VERSION="$(date +%Y-%m-%d-%H%M%S)-darkbear-$(git rev-parse --short HEAD 2>/dev/null || echo local)"
-sed -i "s/var v='[^']*'/var v='${VERSION}'/" "$LAYOUT"
+sed -i "s/var v = '[^']*'/var v = '${VERSION}'/" index.html
 
-NODE_OPTIONS="--disable-warning=DEP0205" pnpm build
+pnpm build
 
 DEST=/home/kain/website/darkbear
-BACKUP=$(mktemp)
-cp "$DEST/invite.json" "$BACKUP"
-find "$DEST" -mindepth 1 ! -name invite.json -delete 2>/dev/null || true
+mkdir -p "$DEST"
+find "$DEST" -mindepth 1 -delete 2>/dev/null || true
 cp -r out/. "$DEST/"
-cp "$BACKUP" "$DEST/invite.json"
-rm "$BACKUP"
-echo "deployed $VERSION — clean copy, invite.json preserved"
+echo "deployed $VERSION — clean copy to $DEST"

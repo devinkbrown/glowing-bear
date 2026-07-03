@@ -10,7 +10,7 @@ function getAudioCtx(): AudioContext | null {
 		if (!_audioCtx) _audioCtx = new AudioContext();
 		if (_audioCtx.state === 'suspended') _audioCtx.resume();
 		return _audioCtx;
-	} catch (_) {
+	} catch {
 		return null;
 	}
 }
@@ -54,7 +54,7 @@ export function notify(title: string, body: string, icon?: string, bufferId?: st
 			n.close();
 		};
 		setTimeout(() => n.close(), NOTIFY_TIMEOUT);
-	} catch (_) {
+	} catch {
 		// Notifications are blocked in some secure contexts (e.g. sandboxed iframes)
 	}
 }
@@ -91,7 +91,7 @@ export function playSound(): void {
 		gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
 		osc.start(ctx.currentTime);
 		osc.stop(ctx.currentTime + 0.35);
-	} catch (_) {
+	} catch {
 		// AudioContext unavailable (e.g. sandboxed iframe)
 	}
 }
