@@ -26,6 +26,15 @@ function formatTimestamp(ts: number): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+/** Access-entry lifetime in seconds → compact "3d" / "2h" / "45m" / "30s". */
+function formatDuration(secs: number): string {
+  if (secs <= 0) return '';
+  if (secs >= 86400) return `${Math.round(secs / 86400)}d`;
+  if (secs >= 3600) return `${Math.round(secs / 3600)}h`;
+  if (secs >= 60) return `${Math.round(secs / 60)}m`;
+  return `${secs}s`;
+}
+
 function formatPropValue(key: string, value: string): string {
   const k = key.toUpperCase();
   if (k === 'CREATION' && /^\d+$/.test(value)) return formatTimestamp(parseInt(value, 10));
@@ -322,8 +331,10 @@ export default function ChannelInfoPanel(props: Props) {
                             <Show when={entry.setter}>
                               <span class="text-[10px] text-gray-600 shrink-0">by {entry.setter}</span>
                             </Show>
-                            <Show when={entry.timestamp > 0}>
-                              <span class="text-[10px] text-gray-600 shrink-0 tabular-nums">{formatTimestamp(entry.timestamp)}</span>
+                            <Show when={entry.duration > 0}>
+                              <span class="text-[10px] text-gray-600 shrink-0 tabular-nums" title="expires">
+                                {formatDuration(entry.duration)}
+                              </span>
                             </Show>
                             <button
                               onClick={() => { const ch = channel(); if (ch) removeAccess(ch, level, entry.mask); }}

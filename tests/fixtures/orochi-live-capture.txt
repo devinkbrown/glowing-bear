@@ -1,0 +1,148 @@
+>>>A CAP LS 302
+>>>A NICK dbtA3950
+>>>A USER webchat 0 * :darkbear capture
+<<<A :eshmaki.me CAP * LS * :server-time message-tags echo-message sasl=PLAIN,EXTERNAL,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,SESSION-TOKEN multi-prefix userhost-in-names away-notify setname extended-join invite-notify account-tag orochi/session-sync orochi/bouncer chghost no-implicit-names draft/no-implicit-names draft/chathistory draft/search draft/message-redaction draft/message-editing draft/read-marker
+>>>A CAP REQ :server-time message-tags echo-message multi-prefix away-notify account-tag batch draft/chathistory draft/typing draft/react draft/reply draft/metadata-2 draft/read-marker extended-join
+<<<A :eshmaki.me CAP * LS :draft/event-playback draft/typing draft/react draft/reply batch bot draft/channel-rename extended-monitor account-notify draft/account-registration=custom-account-name draft/metadata-2 standard-replies cap-notify labeled-response draft/pre-away draft/channel-context draft/multiline=max-bytes=4096,max-lines=24 sts=duration=2592000,port=6697 account-extban=a utf8-only draft/netsplit draft/netjoin
+<<<A :eshmaki.me CAP dbtA3950 ACK :server-time message-tags echo-message multi-prefix away-notify account-tag batch draft/chathistory draft/typing draft/react draft/reply draft/metadata-2 draft/read-marker extended-join
+>>>A CAP END
+<<<A :eshmaki.me 001 dbtA3950 :Welcome to the IRCXNet network, dbtA3950 - you are dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet
+>>>A IRCX
+<<<A :eshmaki.me 002 dbtA3950 :Your host is eshmaki.me (node 1), running orochi-0.1.0+96b3126
+<<<A :eshmaki.me 003 dbtA3950 :This node has been weaving the mesh since 03 Jul 2026 14:53 UTC
+<<<A :eshmaki.me 004 dbtA3950 eshmaki.me orochi-0.1.0+96b3126 BCDHMPQRagijoprxz ACIMNOSTWbegiklmnst Ibekl
+<<<A :eshmaki.me 005 dbtA3950 IRCX NETWORK=IRCXNet CHANTYPES=#& NICKLEN=64 TOPICLEN=390 AWAYLEN=256 KICKLEN=307 CHANNELLEN=64 MAXLIST=beIZ:100 CHANLIMIT=#&:50 MAXTARGETS=4 MONITOR=128 SILENCE=32 CASEMAPPING=ascii CHANMODES=beIZ,k,lfj,imnstCTNMSgWOAVUFD BOT=B EXTBAN=$,acgmrz WHOX UTF8ONLY PREFIX=(YQqov)*!.@+ STATUSMSG=!.@+ MODES=1 VAPID=BNWGYVizYSlVkgMSfR2FoJzqIMfC6oU7SK1ZSH8JE_MLIbjyusafAzw7d2mRh_qho-PG7fLYIRFuovRfTqXhIZ0 :are supported by this server
+<<<A :eshmaki.me NOTICE dbtA3950 :secured (TLS1.3 AES-128-GCM) | you are f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet | not logged in
+<<<A :eshmaki.me NOTICE dbtA3950 :mesh: 2 nodes linked | /HELP to get started
+<<<A :eshmaki.me 251 dbtA3950 :There are 11 users and 0 invisible on 2 servers
+<<<A :eshmaki.me 252 dbtA3950 0 :IRC Operators online
+<<<A :eshmaki.me 253 dbtA3950 0 :unknown connection(s)
+<<<A :eshmaki.me 254 dbtA3950 2 :channels formed
+<<<A :eshmaki.me 255 dbtA3950 :I have 8 clients and 2 servers
+<<<A :eshmaki.me 250 dbtA3950 :Highest connection count: 8 (8 clients) (109 connections received)
+<<<A :eshmaki.me 265 dbtA3950 :Current local users 8, max 8
+<<<A :eshmaki.me 266 dbtA3950 :Current global users 11, max 11
+<<<A :eshmaki.me 375 dbtA3950 :- eshmaki.me Message of the Day -
+<<<A :eshmaki.me 372 dbtA3950 :- Good evening, dbtA3950 - welcome to IRCXNet.
+<<<A :eshmaki.me 372 dbtA3950 :- 11 users are online across the mesh right now.
+<<<A :eshmaki.me 372 dbtA3950 :- Tip: register your account to reserve your nick and unlock services.
+<<<A :eshmaki.me 372 dbtA3950 :- eshmaki.me - IRCXNet's home node. (and yeah, i fucking hate winter.)
+<<<A :eshmaki.me 376 dbtA3950 :End of /MOTD command.
+<<<A :eshmaki.me 800 dbtA3950 1 0 PLAIN,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,EXTERNAL,SESSION-TOKEN 512 :*
+>>>B CAP LS 302
+>>>B NICK dbtB351
+>>>B USER webchat 0 * :darkbear capture
+<<<B :eshmaki.me CAP * LS * :server-time message-tags echo-message sasl=PLAIN,EXTERNAL,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,SESSION-TOKEN multi-prefix userhost-in-names away-notify setname extended-join invite-notify account-tag orochi/session-sync orochi/bouncer chghost no-implicit-names draft/no-implicit-names draft/chathistory draft/search draft/message-redaction draft/message-editing draft/read-marker
+>>>B CAP REQ :server-time message-tags echo-message multi-prefix away-notify account-tag batch draft/chathistory draft/typing draft/react draft/reply draft/metadata-2 draft/read-marker extended-join
+<<<B :eshmaki.me CAP * LS :draft/event-playback draft/typing draft/react draft/reply batch bot draft/channel-rename extended-monitor account-notify draft/account-registration=custom-account-name draft/metadata-2 standard-replies cap-notify labeled-response draft/pre-away draft/channel-context draft/multiline=max-bytes=4096,max-lines=24 sts=duration=2592000,port=6697 account-extban=a utf8-only draft/netsplit draft/netjoin
+<<<B :eshmaki.me CAP dbtB351 ACK :server-time message-tags echo-message multi-prefix away-notify account-tag batch draft/chathistory draft/typing draft/react draft/reply draft/metadata-2 draft/read-marker extended-join
+>>>B CAP END
+<<<B :eshmaki.me 001 dbtB351 :Welcome to the IRCXNet network, dbtB351 - you are dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet
+>>>B IRCX
+<<<B :eshmaki.me 002 dbtB351 :Your host is eshmaki.me (node 1), running orochi-0.1.0+96b3126
+<<<B :eshmaki.me 003 dbtB351 :This node has been weaving the mesh since 03 Jul 2026 14:53 UTC
+<<<B :eshmaki.me 004 dbtB351 eshmaki.me orochi-0.1.0+96b3126 BCDHMPQRagijoprxz ACIMNOSTWbegiklmnst Ibekl
+<<<B :eshmaki.me 005 dbtB351 IRCX NETWORK=IRCXNet CHANTYPES=#& NICKLEN=64 TOPICLEN=390 AWAYLEN=256 KICKLEN=307 CHANNELLEN=64 MAXLIST=beIZ:100 CHANLIMIT=#&:50 MAXTARGETS=4 MONITOR=128 SILENCE=32 CASEMAPPING=ascii CHANMODES=beIZ,k,lfj,imnstCTNMSgWOAVUFD BOT=B EXTBAN=$,acgmrz WHOX UTF8ONLY PREFIX=(YQqov)*!.@+ STATUSMSG=!.@+ MODES=1 VAPID=BNWGYVizYSlVkgMSfR2FoJzqIMfC6oU7SK1ZSH8JE_MLIbjyusafAzw7d2mRh_qho-PG7fLYIRFuovRfTqXhIZ0 :are supported by this server
+<<<B :eshmaki.me NOTICE dbtB351 :secured (TLS1.3 AES-128-GCM) | you are f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet | not logged in
+<<<B :eshmaki.me NOTICE dbtB351 :mesh: 2 nodes linked | /HELP to get started
+<<<B :eshmaki.me 251 dbtB351 :There are 12 users and 0 invisible on 2 servers
+<<<B :eshmaki.me 252 dbtB351 1 :IRC Operators online
+<<<B :eshmaki.me 253 dbtB351 0 :unknown connection(s)
+<<<B :eshmaki.me 254 dbtB351 2 :channels formed
+<<<B :eshmaki.me 255 dbtB351 :I have 9 clients and 2 servers
+<<<B :eshmaki.me 250 dbtB351 :Highest connection count: 9 (9 clients) (109 connections received)
+<<<B :eshmaki.me 265 dbtB351 :Current local users 9, max 9
+<<<B :eshmaki.me 266 dbtB351 :Current global users 12, max 12
+<<<B :eshmaki.me 375 dbtB351 :- eshmaki.me Message of the Day -
+<<<B :eshmaki.me 372 dbtB351 :- Good evening, dbtB351 - welcome to IRCXNet.
+<<<B :eshmaki.me 372 dbtB351 :- 12 users are online across the mesh right now.
+<<<B :eshmaki.me 372 dbtB351 :- Headlines - Iran begins funeral rites for Ali Khamenei, supreme leader killed in war | Kyiv’s most-bombed neighborhood just won’t quit.
+<<<B :eshmaki.me 372 dbtB351 :- Tip: register your account to reserve your nick and unlock services.
+<<<B :eshmaki.me 372 dbtB351 :- eshmaki.me - IRCXNet's home node. (and yeah, i fucking hate winter.)
+<<<B :eshmaki.me 376 dbtB351 :End of /MOTD command.
+<<<B :eshmaki.me 800 dbtB351 1 0 PLAIN,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,EXTERNAL,SESSION-TOKEN 512 :*
+>>>A JOIN #dbtest19036
+<<<A @time=2026-07-03T20:38:05.724Z :dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet JOIN #dbtest19036 * :darkbear capture
+<<<A @time=2026-07-03T20:38:05.724Z :eshmaki.me MODE #dbtest19036 +nt
+<<<A :eshmaki.me 331 dbtA3950 #dbtest19036 :No topic is set
+<<<A :eshmaki.me 353 dbtA3950 = #dbtest19036 :!dbtA3950
+<<<A :eshmaki.me 366 dbtA3950 #dbtest19036 :End of /NAMES list
+>>>B JOIN #dbtest19036
+<<<B @time=2026-07-03T20:38:05.724Z :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet JOIN #dbtest19036 * :darkbear capture
+<<<B :eshmaki.me 331 dbtB351 #dbtest19036 :No topic is set
+<<<B :eshmaki.me 353 dbtB351 = #dbtest19036 :dbtB351 !dbtA3950
+<<<B :eshmaki.me 366 dbtB351 #dbtest19036 :End of /NAMES list
+>>>A PROP #dbtest19036 SUBJECT :capture subject
+<<<A @time=2026-07-03T20:38:05.724Z :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet JOIN #dbtest19036 * :darkbear capture
+<<<A :eshmaki.me 818 dbtA3950 #dbtest19036 SUBJECT :capture subject
+>>>A PROP #dbtest19036
+<<<A :eshmaki.me 819 dbtA3950 #dbtest19036 :End of properties
+>>>A ACCESS #dbtest19036 ADD VOICE *!*@capture.example
+<<<A :eshmaki.me 818 dbtA3950 #dbtest19036 SUBJECT :capture subject
+<<<A :eshmaki.me 819 dbtA3950 #dbtest19036 :End of properties
+<<<B :dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet PROP #dbtest19036 SUBJECT :capture subject
+<<<A :eshmaki.me 801 dbtA3950 #dbtest19036 VOICE *!*@capture.example :ACCESS entry added
+>>>A ACCESS #dbtest19036 LIST
+<<<A :eshmaki.me 803 dbtA3950 #dbtest19036 :ACCESS list begins
+<<<A :eshmaki.me 804 dbtA3950 #dbtest19036 VOICE *!*@capture.example dbtA3950 0
+<<<A :eshmaki.me 805 dbtA3950 #dbtest19036 :End of ACCESS list
+>>>A ACCESS #dbtest19036 DELETE VOICE *!*@capture.example
+<<<A :eshmaki.me 802 dbtA3950 #dbtest19036 VOICE *!*@capture.example :ACCESS entry deleted
+>>>A EVENT ADD MEDIA *
+<<<A :eshmaki.me 806 dbtA3950 MEDIA * :Event added
+>>>A EVENT LIST
+<<<A :eshmaki.me 808 dbtA3950 :Start of event list
+<<<A :eshmaki.me 809 dbtA3950 MEDIA * :Event subscription
+<<<A :eshmaki.me 810 dbtA3950 :End of event list
+>>>A EVENT DEL MEDIA *
+>>>A EVENT ADD MEDIA *
+>>>A PRIVMSG #dbtest19036 :hello from capture A
+<<<A :eshmaki.me 807 dbtA3950 MEDIA :Event removed
+<<<A :eshmaki.me 806 dbtA3950 MEDIA * :Event added
+<<<A @time=2026-07-03T20:38:05.726Z;msgid=17J4YRKCFKJPWSJN9YQTCGW72M :dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet PRIVMSG #dbtest19036 :hello from capture A
+<<<B @time=2026-07-03T20:38:05.726Z;msgid=17J4YRKCFKJPWSJN9YQTCGW72M :dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet PRIVMSG #dbtest19036 :hello from capture A
+>>>B @+typing=active TAGMSG #dbtest19036
+<<<B @time=2026-07-03T20:38:05.727Z;msgid=7NQMP58BNN9VEH02BMC7MJH6PQ;+typing=active :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet TAGMSG #dbtest19036
+<<<A @time=2026-07-03T20:38:05.727Z;msgid=7NQMP58BNN9VEH02BMC7MJH6PQ;+typing=active :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet TAGMSG #dbtest19036
+>>>B @+draft/react=👍;+draft/reply=17J4YRKCFKJPWSJN9YQTCGW72M TAGMSG #dbtest19036
+>>>A WHISPER #dbtest19036 dbtB351 :whisper test
+<<<B @time=2026-07-03T20:38:05.727Z;msgid=6YW51221PRMN59GANA2KZCVK80;+draft/react=👍;+draft/reply=17J4YRKCFKJPWSJN9YQTCGW72M :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet TAGMSG #dbtest19036
+<<<B :dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet WHISPER #dbtest19036 dbtB351 :whisper test
+>>>A CHATHISTORY LATEST #dbtest19036 * 10
+<<<A @time=2026-07-03T20:38:05.727Z;msgid=6YW51221PRMN59GANA2KZCVK80;+draft/react=👍;+draft/reply=17J4YRKCFKJPWSJN9YQTCGW72M :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet TAGMSG #dbtest19036
+<<<A BATCH +1 chathistory #dbtest19036
+>>>A MARKREAD #dbtest19036 timestamp=2026-07-03T20:38:05.728Z
+<<<A @time=2026-07-03T20:38:05.727Z;msgid=6YW51221PRMN59GANA2KZCVK80;+draft/react=👍;+draft/reply=17J4YRKCFKJPWSJN9YQTCGW72M :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet TAGMSG #dbtest19036
+<<<A @time=2026-07-03T20:38:05.727Z;msgid=7NQMP58BNN9VEH02BMC7MJH6PQ;+typing=active :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet TAGMSG #dbtest19036
+<<<A @time=2026-07-03T20:38:05.726Z;msgid=17J4YRKCFKJPWSJN9YQTCGW72M :dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet PRIVMSG #dbtest19036 :hello from capture A
+<<<A BATCH -1
+<<<A MARKREAD #dbtest19036 timestamp=2026-07-03T20:38:05.728Z
+>>>A METADATA * SET ocean.display-name :Capture A
+<<<A :eshmaki.me 761 dbtA3950 * ocean.display-name * :Capture A
+>>>B METADATA dbtA3950 GET ocean.display-name
+<<<A :eshmaki.me 762 dbtA3950 :end of metadata
+<<<B :eshmaki.me 761 dbtB351 dbtA3950 ocean.display-name * :Capture A
+>>>A MONITOR + dbtB351
+<<<B :eshmaki.me 762 dbtB351 :end of metadata
+<<<A :eshmaki.me 730 dbtA3950 :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet
+>>>A MEDIA JOIN #dbtest19036 voice
+<<<A @orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA JOIN #dbtest19036 dbtA3950 voice
+<<<A :eshmaki.me NOTE MEDIA #dbtest19036 MACKEY CkJLQ8My54lDA9r5kcDReJH1pUxkDi2rL0DLhJeBmzc=
+>>>A MEDIA ROSTER #dbtest19036
+<<<A :eshmaki.me NOTE MEDIA #dbtest19036 ROSTER dbtA3950 voice main 0 0 -
+>>>A MEDIA LEAVE #dbtest19036
+<<<A :eshmaki.me NOTE MEDIA #dbtest19036 :End of roster (1)
+<<<A @orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA LEAVE #dbtest19036 dbtA3950
+>>>A LISTX
+<<<A :eshmaki.me 811 dbtA3950 Channel Members CreatedMs TopicMs :Topic
+<<<A :eshmaki.me 812 dbtA3950 #test 1 0 0 :
+<<<A :eshmaki.me 812 dbtA3950 #root 8 0 0 :
+<<<A :eshmaki.me 812 dbtA3950 #dbtest19036 2 1783111085000 0 :
+<<<A :eshmaki.me 817 dbtA3950 :End of LISTX
+>>>A PART #dbtest19036
+>>>B PART #dbtest19036
+>>>A QUIT :capture done
+>>>B QUIT :capture done
+<<<A @time=2026-07-03T20:38:09.735Z :dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet PART #dbtest19036
+<<<B @time=2026-07-03T20:38:09.735Z :dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet PART #dbtest19036
+<<<B @time=2026-07-03T20:38:09.736Z :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet PART #dbtest19036

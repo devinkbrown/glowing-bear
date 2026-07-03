@@ -20,7 +20,7 @@ export function isIrcxNumeric(tags: string[]): boolean {
   const num = findIrcNumeric(tags);
   if (!num) return false;
   const n = parseInt(num, 10);
-  return (n >= 801 && n <= 825) || (n >= 915 && n <= 919);
+  return (n >= 801 && n <= 825) || n === 913 || (n >= 915 && n <= 919);
 }
 
 export interface ParsedProp {
@@ -51,7 +51,7 @@ export interface ParsedAccessEnd {
 }
 
 export interface ParsedEvent {
-  type: 'event_add' | 'event_list' | 'event_end' | 'event_delete' | 'event_change';
+  type: 'event_add' | 'event_start' | 'event_list' | 'event_end' | 'event_delete' | 'event_change';
   eventType?: string;
   mask?: string;
 }
@@ -86,11 +86,16 @@ export function parseIrcxLine(line: WeeChatLine): IrcxParsed | null {
     case '803': return parseAccessStart(plain);
     case '804': return parseAccessEntry(plain, 'access_entry');
     case '805': return parseAccessEnd(plain);
-    case '808': return { type: 'event_add', eventType: undefined, mask: undefined };
-    case '809': return { type: 'event_list', eventType: undefined, mask: undefined };
+    // EVENT numerics per draft-pfenning-04, live-verified against orochi:
+    // "806 <me> MEDIA * :Event added", "807 ... :Event removed",
+    // "808 <me> :Start of event list", "809 <me> <cat> <mask>", "810 :End".
+    case '806': return parseEventAck('event_add', plain);
+    case '807': return parseEventAck('event_delete', plain);
+    case '808': return { type: 'event_start' };
+    case '809': return parseEventAck('event_list', plain);
     case '810': return { type: 'event_end' };
-    case '824': return { type: 'event_delete' };
     case '825': return { type: 'event_change' };
+    case '913':
     case '915':
     case '916':
     case '917':
@@ -136,7 +141,11 @@ function parsePropEnd(plain: string): ParsedPropEnd | null {
   return null;
 }
 
-// 801/802/804: "<channel> <level> <mask> <timestamp> <setter> :<reason>"
+// Orochi wire shapes (live-verified):
+//   804 RPL_ACCESSENTRY:  "<channel> <level> <mask> <set_by> <duration>"
+//   801/802 ADD/DELETE:   "<channel> <level> <mask> :ACCESS entry added|deleted"
+// The relay may render the trailing text with or without its ':' marker, so
+// only the first three tokens are trusted for 801/802; 804 reads all five.
 function parseAccessEntry(plain: string, type: 'access_entry' | 'access_add' | 'access_delete'): ParsedAccessEntry | null {
   const colonIdx = plain.indexOf(' :');
   let reason = '';
@@ -147,19 +156,28 @@ function parseAccessEntry(plain: string, type: 'access_entry' | 'access_add' | '
   }
 
   const parts = before.split(/\s+/);
-  if (parts.length < 4) return null;
+  if (parts.length < 3) return null;
 
+  const isFullEntry = type === 'access_entry';
   return {
     type,
     entry: {
       channel: parts[0]!,
       level: parts[1]!.toUpperCase() as AccessLevel,
       mask: parts[2]!,
-      timestamp: parseInt(parts[3]!, 10) || 0,
-      setter: parts[4] ?? '',
+      setter: isFullEntry ? (parts[3] ?? '') : '',
+      duration: isFullEntry ? parseInt(parts[4] ?? '0', 10) || 0 : 0,
       reason,
     },
   };
+}
+
+// 806/807/809: "<category> <mask> :<text>"  (category/mask absent on some acks)
+function parseEventAck(type: 'event_add' | 'event_delete' | 'event_list', plain: string): ParsedEvent {
+  const colonIdx = plain.indexOf(' :');
+  const before = colonIdx !== -1 ? plain.slice(0, colonIdx) : plain;
+  const parts = before.split(/\s+/).filter(Boolean);
+  return { type, eventType: parts[0], mask: parts[1] };
 }
 
 // 803: "<channel> :Start of access entries"

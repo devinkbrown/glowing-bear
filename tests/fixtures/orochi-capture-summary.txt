@@ -1,0 +1,32 @@
+IRCX ack (800): :eshmaki.me 800 dbtA3950 1 0 PLAIN,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,EXTERNAL,SESSION-TOKEN 512 :*
+005 count: 1
+VAPID present: true
+PREFIX: PREFIX=(YQqov)*!.@+
+PROP set reply 818: :eshmaki.me 818 dbtA3950 #dbtest19036 SUBJECT :capture subject
+PROP end 819: :eshmaki.me 819 dbtA3950 #dbtest19036 :End of properties
+ACCESS ADD 801: :eshmaki.me 801 dbtA3950 #dbtest19036 VOICE *!*@capture.example :ACCESS entry added
+ACCESS START 803: :eshmaki.me 803 dbtA3950 #dbtest19036 :ACCESS list begins
+ACCESS ENTRY 804: :eshmaki.me 804 dbtA3950 #dbtest19036 VOICE *!*@capture.example dbtA3950 0
+ACCESS END 805: :eshmaki.me 805 dbtA3950 #dbtest19036 :End of ACCESS list
+ACCESS DELETE 802: :eshmaki.me 802 dbtA3950 #dbtest19036 VOICE *!*@capture.example :ACCESS entry deleted
+EVENT ADD reply: :eshmaki.me 806 dbtA3950 MEDIA * :Event added
+EVENT LIST entry: :eshmaki.me 808 dbtA3950 :Start of event list
+EVENT LIST end 810: :eshmaki.me 810 dbtA3950 :End of event list
+EVENT DEL reply: :eshmaki.me 806 dbtA3950 MEDIA * :Event added
+echo-message w/ msgid: @time=2026-07-03T20:38:05.726Z;msgid=17J4YRKCFKJPWSJN9YQTCGW72M :dbtA3950!webchat@f76dcb8e1062d4e6.8
+B receives tagged msg: @time=2026-07-03T20:38:05.726Z;msgid=17J4YRKCFKJPWSJN9YQTCGW72M :dbtA3950!webchat@f76dcb8e1062d4e6.8
+A sees typing TAGMSG: @time=2026-07-03T20:38:05.727Z;msgid=7NQMP58BNN9VEH02BMC7MJH6PQ;+typing=active :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet TAGMSG #dbtest19036
+A sees react TAGMSG: :eshmaki.me CAP * LS :draft/event-playback draft/typing draft/react draft/reply batch bot draft/channel-rename extended-monitor account-notify draft/account-registration=custom-account-name draft/metadata-2 standard-replies cap-notify labeled-response draft/pre-away draft/channel-context draft/multiline=max-bytes=4096,max-lines=24 sts=duration=2592000,port=6697 account-extban=a utf8-only draft/netsplit draft/netjoin
+B receives WHISPER: :dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet WHISPER #dbtest19036 dbtB351 :whisper test
+CHATHISTORY batch: BATCH +1 chathistory #dbtest19036
+MARKREAD reply: MARKREAD #dbtest19036 timestamp=2026-07-03T20:38:05.728Z
+METADATA SET reply: :eshmaki.me 761 dbtA3950 * ocean.display-name * :Capture A
+METADATA GET reply: :eshmaki.me 761 dbtB351 dbtA3950 ocean.display-name * :Capture A
+MONITOR online 730: :eshmaki.me 730 dbtA3950 :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet
+MEDIA JOIN reply: @orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA JOIN #dbtest19036 dbtA3950 voice
+MACKEY note: :eshmaki.me NOTE MEDIA #dbtest19036 MACKEY <redacted>
+B sees MEDIA presence: NOT SEEN (B has no EVENT sub)
+MEDIA ROSTER reply: :eshmaki.me NOTE MEDIA #dbtest19036 ROSTER dbtA3950 voice main 0 0 -
+LISTX entry 812: :eshmaki.me 812 dbtA3950 #test 1 0 0 :
+LISTX end 817: :eshmaki.me 817 dbtA3950 :End of LISTX
+SESSION TOKEN note: not issued (guest)
