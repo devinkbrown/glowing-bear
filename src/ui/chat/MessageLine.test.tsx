@@ -1,0 +1,176 @@
+// MessageLine render tests — regular/action/system/whisper variants,
+// highlight styling, bot badge, timestamp settings, mIRC formatting,
+// HTML escaping of message bodies, and the E2EE placeholder overlay.
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import { render, cleanup } from '@solidjs/testing-library';
+import type { WeeChatLine } from '@/types';
+import { clearBuffers, clearIrcx, markBot, resetSettings, updateSettings } from '@/state';
+import { decryptedFor } from '@/state/bridge';
+import MessageLine from './MessageLine';
+
+vi.mock('@/state/bridge', () => ({
+  bridgeState: { status: 'off', nick: null, error: null, e2eeReady: false },
+  _setBridgeState: vi.fn(),
+  _setBridgeBackend: vi.fn(),
+  bridgeRun: vi.fn(),
+  sendTyping: vi.fn(),
+  sendReactionTag: vi.fn(),
+  markRead: vi.fn(),
+  canE2ee: vi.fn(() => false),
+  _storeDecryptedOverlay: vi.fn(),
+  decryptedFor: vi.fn(() => null),
+  _setPeerDmKey: vi.fn(),
+  _ingestEncryptedDm: vi.fn(),
+  sendE2eeDm: vi.fn(async () => false),
+}));
+
+const decryptedForMock = vi.mocked(decryptedFor);
+
+// Unique line ids per test — MessageLine caches formatted HTML per line id.
+let lineSeq = 0;
+
+function makeLine(over: Partial<WeeChatLine> = {}): WeeChatLine {
+  const now = new Date();
+  return {
+    id: `line_${++lineSeq}`,
+    buffer: '0xb',
+    date: now,
+    datePrinted: now,
+    displayed: true,
+    highlight: false,
+    tags: [],
+    prefix: '',
+    message: 'hello world',
+    nick: 'alice',
+    ircTags: new Map(),
+    ...over,
+  };
+}
+
+function renderLine(line: WeeChatLine) {
+  return render(() => (
+    <MessageLine line={line} grouped={false} bufferKind="channel" bufferPtr="0xb" isDesktop={true} />
+  ));
+}
+
+beforeEach(() => {
+  globalThis.localStorage?.clear();
+  resetSettings();
+  clearBuffers();
+  clearIrcx();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe('MessageLine', () => {
+  it('renders a regular message with nick and formatted body', () => {
+    const { container, getByText } = renderLine(makeLine({ nick: 'alice', message: 'hello world' }));
+
+    const nickEl = container.querySelector('.msg-nick');
+    expect(nickEl).not.toBeNull();
+    expect(nickEl!.textContent).toContain('alice');
+    expect(getByText('hello world')).toBeInTheDocument();
+    expect(container.querySelector('.msg-row')).not.toBeNull();
+  });
+
+  it('renders the /me action variant with the nick in bold and italic body', () => {
+    const { container, getByText } = renderLine(makeLine({ isAction: true, nick: 'alice', message: 'waves hello' }));
+
+    const strong = container.querySelector('strong');
+    expect(strong).not.toBeNull();
+    expect(strong!.textContent).toBe('alice');
+    expect(getByText('waves hello')).toBeInTheDocument();
+    // Action rows do not use the regular nick column.
+    expect(container.querySelector('.msg-nick')).toBeNull();
+  });
+
+  it('renders join/part/quit system variants with event colors', () => {
+    const cases: Array<[Partial<WeeChatLine>, string]> = [
+      [{ isJoin: true, message: 'bob has joined #alpha' }, 'text-emerald-400/75'],
+      [{ isPart: true, message: 'bob has left #alpha' }, 'text-red-400/65'],
+      [{ isQuit: true, message: 'bob has quit (bye)' }, 'text-red-400/65'],
+    ];
+    for (const [over, colorClass] of cases) {
+      const { container, unmount } = renderLine(makeLine({ nick: 'bob', ...over }));
+      const row = container.querySelector('.msg-system');
+      expect(row).not.toBeNull();
+      const body = row!.querySelector('.msg-body');
+      expect(body).not.toBeNull();
+      expect(body!.classList.contains(colorClass)).toBe(true);
+      expect(container.textContent).toContain(over.message as string);
+      unmount();
+    }
+  });
+
+  it('renders the whisper variant with a WHISPER label', () => {
+    const { container, getByText } = renderLine(makeLine({ isWhisper: true, nick: 'alice', message: 'psst secret' }));
+
+    expect(getByText('WHISPER')).toBeInTheDocument();
+    expect(getByText('psst secret')).toBeInTheDocument();
+    expect(container.querySelector('.border-amber-500\\/40')).not.toBeNull();
+  });
+
+  it('applies the highlight class when line.highlight is set', () => {
+    const { container } = renderLine(makeLine({ highlight: true }));
+    const row = container.querySelector('.msg-row');
+    expect(row).not.toBeNull();
+    expect(row!.classList.contains('msg-highlight')).toBe(true);
+  });
+
+  it('does not apply the highlight class on a plain line', () => {
+    const { container } = renderLine(makeLine({ highlight: false }));
+    expect(container.querySelector('.msg-highlight')).toBeNull();
+  });
+
+  it('shows the BOT badge for nicks marked via ircx markBot', () => {
+    markBot('helper');
+    const { getByText } = renderLine(makeLine({ nick: 'helper', message: 'beep boop' }));
+    expect(getByText('BOT')).toBeInTheDocument();
+  });
+
+  it('shows no BOT badge for unmarked nicks', () => {
+    const { queryByText } = renderLine(makeLine({ nick: 'human' }));
+    expect(queryByText('BOT')).toBeNull();
+  });
+
+  it('renders a timestamp by default and none when timestampFormat is off', () => {
+    const withTs = renderLine(makeLine());
+    expect(withTs.container.querySelector('.msg-ts')).not.toBeNull();
+    withTs.unmount();
+
+    updateSettings({ timestampFormat: 'off' });
+    const noTs = renderLine(makeLine());
+    expect(noTs.container.querySelector('.msg-ts')).toBeNull();
+  });
+
+  it('renders mIRC bold codes as an .irc-bold span', () => {
+    const { container } = renderLine(makeLine({ message: 'plain \x02bolded\x02 tail' }));
+    const bold = container.querySelector('.irc-bold');
+    expect(bold).not.toBeNull();
+    expect(bold!.textContent).toBe('bolded');
+    expect(container.textContent).toContain('plain');
+    expect(container.textContent).toContain('tail');
+  });
+
+  it('escapes HTML in message bodies — an <img> payload renders as text', () => {
+    const payload = '<img src=x onerror=alert(1)>';
+    const { container } = renderLine(makeLine({ message: payload }));
+
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.textContent).toContain(payload);
+  });
+
+  it('renders the encrypted placeholder for TSUMUGI1 payloads when decryption yields nothing', () => {
+    const line = makeLine({ message: 'TSUMUGI1 xyz', msgid: 'mid-1' });
+    const { container } = renderLine(line);
+
+    expect(decryptedForMock).toHaveBeenCalledWith('mid-1', 'TSUMUGI1 xyz');
+    expect(container.textContent).toContain('encrypted message');
+    expect(container.textContent).not.toContain('TSUMUGI1');
+  });
+});

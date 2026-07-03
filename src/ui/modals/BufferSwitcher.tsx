@@ -107,7 +107,8 @@ export default function BufferSwitcher() {
         if (e.target === e.currentTarget) closeModal();
       }}
     >
-      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" />
+      {/* The backdrop covers the overlay, so outside clicks target it — close from here too. */}
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => closeModal()} />
       <div
         class="relative w-full max-w-[min(440px,calc(100vw-1.5rem))] rounded-2xl border border-white/[0.06] bg-gray-900 shadow-2xl overflow-hidden animate-slide-down"
         style={{ 'box-shadow': '0 25px 80px rgba(0,0,0,0.5)' }}

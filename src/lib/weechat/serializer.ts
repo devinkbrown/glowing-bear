@@ -24,8 +24,11 @@ export function cmd(id: string, command: string, ...args: string[]): string {
  * Must be the first command sent after the WebSocket opens.
  */
 export function initCmd(password: string, compression: boolean): string {
-	// WeeChat relay expects comma-separated options for init
-	const opts = [`password=${password}`, `compression=${compression ? 'zlib' : 'off'}`].join(',');
+	// WeeChat relay expects comma-separated options for init. Literal commas
+	// in the password must be escaped as "\," per the relay protocol, or the
+	// password is truncated and the remainder parsed as a bogus option.
+	const escaped = password.replace(/,/g, '\\,');
+	const opts = [`password=${escaped}`, `compression=${compression ? 'zlib' : 'off'}`].join(',');
 	return `init ${opts}\n`;
 }
 

@@ -56,6 +56,7 @@ export default function Modal(props: ModalProps) {
 function ModalShell(props: ModalProps) {
   const titleId = createUniqueId();
   let overlayRef: HTMLDivElement | undefined;
+  let backdropRef: HTMLDivElement | undefined;
   let panelRef: HTMLDivElement | undefined;
 
   const widthCss = () => {
@@ -107,10 +108,13 @@ function ModalShell(props: ModalProps) {
         'padding-bottom': 'max(0.75rem, env(safe-area-inset-bottom))',
       }}
       onClick={(e) => {
-        if (e.target === overlayRef && props.onClose) props.onClose();
+        // The dimming backdrop covers the overlay, so outside-the-panel clicks
+        // target the backdrop — treat both as click-to-close.
+        if ((e.target === overlayRef || e.target === backdropRef) && props.onClose) props.onClose();
       }}
     >
       <div
+        ref={(el) => (backdropRef = el)}
         class="absolute inset-0 bg-black/60"
         style={{ '-webkit-backdrop-filter': 'blur(4px)', 'backdrop-filter': 'blur(4px)' }}
       />

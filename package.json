@@ -18,7 +18,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@solidjs/testing-library": "^0.8.10",
     "@tailwindcss/vite": "^4.1.7",
+    "@testing-library/jest-dom": "^6.9.1",
     "@types/node": "^22.15.0",
     "eslint": "^9",
     "eslint-plugin-solid": "^0.14.5",

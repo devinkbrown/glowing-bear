@@ -1,0 +1,237 @@
+// @vitest-environment jsdom
+//
+// Bridge store API over a fake BridgeBackend, plus a REAL end-to-end E2EE DM
+// round-trip through dmCipher (fake-indexeddb). The round-trip is the guard
+// that would have caught the corrupted ENVELOPE_PREFIX (stray \x01) — it seals
+// with the real cipher and opens the exact wire envelope back.
+
+import 'fake-indexeddb/auto';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  canE2ee,
+  decryptedFor,
+  markRead,
+  sendReactionTag,
+  sendTyping,
+  sendE2eeDm,
+  _setBridgeBackend,
+  _setBridgeState,
+  _setPeerDmKey,
+  _ingestEncryptedDm,
+  _storeDecryptedOverlay,
+  type BridgeBackend,
+} from './bridge';
+import { updateBridge, resetSettings } from './settings';
+import { clearBuffers, upsertBuffer, buffersState } from './buffers';
+import { deviceKeys, sealDm, _resetDeviceKeysForTests, _resetSharedKeysForTests } from '@/lib/e2ee/dmCipher';
+import type { WeeChatBuffer } from '@/lib/weechat/model';
+
+function chanBuffer(id: string, channel: string): WeeChatBuffer {
+  return {
+    id, number: 2, name: `irc.eshmaki.${channel}`, fullName: `irc.eshmaki.${channel}`,
+    shortName: channel, title: '', type: 0,
+    localVars: { type: 'channel', server: 'eshmaki', channel }, nicksCount: 0, notify: 0, hidden: false,
+  };
+}
+
+function makeBackend(over: Partial<BridgeBackend> = {}): BridgeBackend & { [K in keyof BridgeBackend]: ReturnType<typeof vi.fn> } {
+  return {
+    ready: vi.fn(() => true),
+    ownNick: vi.fn(() => 'me'),
+    targetForBuffer: vi.fn((ptr: string) => (ptr === '0xchan' ? '#room' : null)),
+    sendTagmsg: vi.fn(),
+    sendPrivmsg: vi.fn(),
+    sendRaw: vi.fn(),
+    requestPeerDmKey: vi.fn(),
+    ensureReady: vi.fn(),
+    ...over,
+  } as never;
+}
+
+beforeEach(() => {
+  clearBuffers();
+  resetSettings();
+  _setBridgeBackend(null);
+  _setBridgeState({ status: 'off', nick: null, error: null, e2eeReady: false });
+  upsertBuffer(chanBuffer('0xchan', '#room'));
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('typing / reactions / read markers', () => {
+  it('sendTyping maps the buffer to its orochi target', () => {
+    const be = makeBackend();
+    _setBridgeBackend(be);
+    sendTyping('0xchan', 'active');
+    expect(be.sendTagmsg).toHaveBeenCalledWith('#room', { '+typing': 'active' });
+  });
+
+  it('sendTyping is a no-op when the backend is not ready', () => {
+    const be = makeBackend({ ready: vi.fn(() => false) });
+    _setBridgeBackend(be);
+    sendTyping('0xchan', 'active');
+    expect(be.sendTagmsg).not.toHaveBeenCalled();
+  });
+
+  it('sendTyping is a no-op for an unmapped buffer', () => {
+    const be = makeBackend();
+    _setBridgeBackend(be);
+    sendTyping('0xnope', 'active');
+    expect(be.sendTagmsg).not.toHaveBeenCalled();
+  });
+
+  it('sendReactionTag sends the tag AND optimistically adds the reaction exactly once', () => {
+    const be = makeBackend();
+    _setBridgeBackend(be);
+    sendReactionTag('0xchan', 'MID1', '👍');
+    expect(be.sendTagmsg).toHaveBeenCalledWith('#room', { '+draft/react': '👍', '+draft/reply': 'MID1' });
+    const reactions = buffersState.buffers['0xchan']?.reactions['MID1'];
+    expect(reactions).toEqual([{ emoji: '👍', nicks: ['me'] }]);
+  });
+
+  it('sendReactionTag does not double-apply when called twice for the same nick', () => {
+    const be = makeBackend();
+    _setBridgeBackend(be);
+    sendReactionTag('0xchan', 'MID1', '👍');
+    sendReactionTag('0xchan', 'MID1', '👍');
+    expect(buffersState.buffers['0xchan']?.reactions['MID1']).toEqual([{ emoji: '👍', nicks: ['me'] }]);
+  });
+
+  it('markRead sends MARKREAD with an ISO timestamp', () => {
+    const be = makeBackend();
+    _setBridgeBackend(be);
+    markRead('0xchan');
+    expect(be.sendRaw).toHaveBeenCalledTimes(1);
+    const args = be.sendRaw.mock.calls[0]!;
+    expect(args[0]).toBe('MARKREAD');
+    expect(args[1]).toBe('#room');
+    expect(args[2]).toMatch(/^timestamp=\d{4}-\d\d-\d\dT/);
+  });
+});
+
+describe('decryptedFor overlay precedence', () => {
+  it('returns null for an unknown non-envelope', () => {
+    expect(decryptedFor('MID', 'plain text')).toBeNull();
+  });
+
+  it('resolves by msgid, and falls back to the ciphertext key', () => {
+    const cipher = 'TSUMUGI1 AAAA';
+    // A decrypted message registers under BOTH keys (same plaintext).
+    _storeDecryptedOverlay('MID', cipher, 'plain');
+    expect(decryptedFor('MID', cipher)).toBe('plain'); // hit by msgid
+    expect(decryptedFor(undefined, cipher)).toBe('plain'); // hit by ciphertext
+    expect(decryptedFor('OTHER', cipher)).toBe('plain'); // msgid miss → ciphertext hit
+  });
+
+  it('resolves a ciphertext-only overlay (no msgid on the wire)', () => {
+    const cipher = 'TSUMUGI1 BBBB';
+    _storeDecryptedOverlay(undefined, cipher, 'echo-plain');
+    expect(decryptedFor(undefined, cipher)).toBe('echo-plain');
+    expect(decryptedFor('ANY', cipher)).toBe('echo-plain');
+  });
+});
+
+describe('canE2ee', () => {
+  it('is false before a peer key is known and true after', () => {
+    expect(canE2ee('trev')).toBe(false);
+    _setPeerDmKey('trev', 'BSomeKeyB64');
+    expect(canE2ee('trev')).toBe(true);
+    expect(canE2ee('TREV')).toBe(true); // case-insensitive
+  });
+
+  it('goes false again when the key is cleared', () => {
+    _setPeerDmKey('trev', 'BSomeKeyB64');
+    _setPeerDmKey('trev', null);
+    expect(canE2ee('trev')).toBe(false);
+  });
+});
+
+describe('E2EE DM round-trip (real cipher, fake-indexeddb)', () => {
+  beforeEach(() => {
+    _resetDeviceKeysForTests();
+    _resetSharedKeysForTests();
+  });
+
+  it('seals a DM and the inbound envelope decrypts to the same plaintext', async () => {
+    // Our device identity (static-static: sealing to a peer pubkey and opening
+    // the same envelope with that pubkey derive the identical AES key).
+    const dev = await deviceKeys();
+    expect(dev).not.toBeNull();
+    const peerPub = dev!.publicB64; // symmetric key with self — exercises full path
+
+    updateBridge({ enabled: true, e2eeDms: true });
+    const sent: Array<[string, string]> = [];
+    const be = makeBackend({
+      ready: vi.fn(() => true),
+      sendPrivmsg: vi.fn((target: string, text: string) => sent.push([target, text])),
+    });
+    _setBridgeBackend(be);
+    _setPeerDmKey('peer', peerPub);
+
+    const ok = await sendE2eeDm('peer', 'hello secret');
+    expect(ok).toBe(true);
+    expect(sent).toHaveLength(1);
+    const envelope = sent[0]![1];
+    expect(envelope.startsWith('TSUMUGI1 ')).toBe(true);
+    // The wire NEVER carries the plaintext.
+    expect(envelope.includes('hello secret')).toBe(false);
+    // Our own echo is overlaid immediately (view-only).
+    expect(decryptedFor(undefined, envelope)).toBe('hello secret');
+  });
+
+  it('an inbound TSUMUGI1 envelope from a keyed peer decrypts via the ingest path', async () => {
+    const dev = await deviceKeys();
+    const peerPub = dev!.publicB64;
+    _setPeerDmKey('peer', peerPub);
+
+    // Build a real envelope exactly as a peer would send it.
+    const envelope = await sealDm(peerPub, 'inbound message');
+    expect(envelope).not.toBeNull();
+    expect(envelope!.startsWith('TSUMUGI1 ')).toBe(true);
+
+    _ingestEncryptedDm('peer', 'DMID', envelope!);
+    // decrypt is async — poll the overlay briefly.
+    for (let i = 0; i < 20 && decryptedFor('DMID', envelope!) === null; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(decryptedFor('DMID', envelope!)).toBe('inbound message');
+  });
+
+  it('parks an envelope with no cached key and requests it, then decrypts on arrival', async () => {
+    const dev = await deviceKeys();
+    const peerPub = dev!.publicB64;
+    const envelope = (await sealDm(peerPub, 'parked note'))!;
+
+    const be = makeBackend();
+    _setBridgeBackend(be);
+    _ingestEncryptedDm('newpeer', 'DMID2', envelope);
+    expect(be.requestPeerDmKey).toHaveBeenCalledWith('newpeer');
+    expect(decryptedFor('DMID2', envelope)).toBeNull();
+
+    _setPeerDmKey('newpeer', peerPub); // key lands → parked queue flushes
+    for (let i = 0; i < 20 && decryptedFor('DMID2', envelope) === null; i++) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(decryptedFor('DMID2', envelope)).toBe('parked note');
+  });
+
+  it('sendE2eeDm returns false and requests the key when the peer key is unknown', async () => {
+    updateBridge({ enabled: true, e2eeDms: true });
+    const be = makeBackend();
+    _setBridgeBackend(be);
+    const ok = await sendE2eeDm('strangernick', 'hi');
+    expect(ok).toBe(false);
+    expect(be.requestPeerDmKey).toHaveBeenCalledWith('strangernick');
+  });
+
+  it('sendE2eeDm returns false when e2eeDms is disabled', async () => {
+    updateBridge({ enabled: true, e2eeDms: false });
+    const dev = await deviceKeys();
+    _setPeerDmKey('peer', dev!.publicB64);
+    const be = makeBackend();
+    _setBridgeBackend(be);
+    expect(await sendE2eeDm('peer', 'hi')).toBe(false);
+  });
+});

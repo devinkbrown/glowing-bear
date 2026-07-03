@@ -211,6 +211,7 @@ export function clearBuffers(): void {
   setState(produce((s) => {
     s.buffers = {};
     s.activeBuffer = null;
+    s.readMarkerPos = {};
   }));
 }
 
