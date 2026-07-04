@@ -20,7 +20,7 @@ import {
   closeServicesPanel,
   applyTheme,
 } from '@/state';
-import { ConnectionState } from '@/lib/weechat/model';
+import { connectModalAction } from '@/state/connectModalPolicy';
 import { mediaState } from '@/state/media';
 import { markRead } from '@/state/bridge';
 import { initBridge } from '@/core/bridge';
@@ -120,11 +120,12 @@ export default function App() {
     if (ptr) markRead(ptr);
   });
 
-  // Re-open the connect modal when the relay drops for good.
+  // Connect modal follows the relay state (see connectModalPolicy): close it
+  // once connected, re-open it when the relay drops with nothing else open.
   createEffect(() => {
-    if (connectionState() === ConnectionState.DISCONNECTED && uiState.activeModal === null) {
-      openModal('connect');
-    }
+    const action = connectModalAction(connectionState(), uiState.activeModal);
+    if (action === 'close') closeModal();
+    else if (action === 'open') openModal('connect');
   });
 
   // Custom-theme palette → CSS variables on <html>.
