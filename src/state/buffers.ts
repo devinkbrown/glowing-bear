@@ -19,13 +19,21 @@ const MUTE_KEY = 'db-muted';
 const IGNORE_KEY = 'db-ignored';
 const LAST_BUFFER_KEY = 'db-last-buffer';
 
-// Ordered privilege tiers -- checked against nick.prefix.trim()
+// Ordered privilege tiers, highest first -- checked against nick.prefix.trim().
+// Covers orochi's PREFIX=(YQqov)*!.@+ (Y=* network-oper, Q=! founder,
+// q=. owner, o=@ op, v=+ voice) AND standard IRC (~ owner, & admin, @ op,
+// % halfop, + voice). A nick's WeeChat-relay prefix is its single highest
+// char; Founder (!) is ranked above Owner (~/.) so orochi channels group
+// correctly. Networks only ever use one prefix universe, so the interleaving
+// is harmless.
 const PREFIX_TIERS: { chars: Set<string>; label: string }[] = [
-  { chars: new Set(['.', '~']), label: 'Owner' },
-  { chars: new Set(['&']),      label: 'Admin' },
-  { chars: new Set(['@']),      label: 'Op' },
-  { chars: new Set(['%']),      label: 'Halfop' },
-  { chars: new Set(['+']),      label: 'Voice' },
+  { chars: new Set(['*']),      label: 'Operator' }, // orochi network operator (Y)
+  { chars: new Set(['!']),      label: 'Founder' },  // orochi channel founder (Q)
+  { chars: new Set(['.', '~']), label: 'Owner' },    // orochi owner (q) / standard owner
+  { chars: new Set(['&']),      label: 'Admin' },    // standard admin
+  { chars: new Set(['@']),      label: 'Op' },       // op (o)
+  { chars: new Set(['%']),      label: 'Halfop' },   // standard halfop
+  { chars: new Set(['+']),      label: 'Voice' },    // voice (v)
 ];
 
 /** Tier labels in nicklist display order (nickGroups key insertion order). */

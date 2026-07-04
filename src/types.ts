@@ -176,7 +176,18 @@ export interface Reaction {
 }
 
 /** Nicklist privilege tier labels, in display order. */
-export type NickTier = 'Owner' | 'Admin' | 'Op' | 'Halfop' | 'Voice' | 'Regular';
+// Privilege tiers spanning orochi (PREFIX=(YQqov)*!.@+ → * ! . @ +) and
+// standard IRC (qaohv → ~ & @ % +). Operator (*) and Founder (!) are
+// orochi-specific; the rest are shared.
+export type NickTier =
+  | 'Operator'
+  | 'Founder'
+  | 'Owner'
+  | 'Admin'
+  | 'Op'
+  | 'Halfop'
+  | 'Voice'
+  | 'Regular';
 
 /**
  * Per-buffer state entry held in the buffers store.

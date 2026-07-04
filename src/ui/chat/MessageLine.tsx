@@ -31,7 +31,8 @@ export interface MessageLineProps {
 }
 
 const URL_RE = /https?:\/\/[^\s<"']+/g;
-const NICK_PREFIX_RE = /^([.~&@%+!])/;
+// Channel status sigils, orochi (*!.@+) + standard IRC (~&@%+) prefixes.
+const NICK_PREFIX_RE = /^([*!.~&@%+])/;
 const E2EE_PREFIX = 'TSUMUGI1 ';
 const E2EE_PLACEHOLDER = '\u{1F512} encrypted message';
 const LONG_PRESS_MS = 500;

@@ -392,7 +392,7 @@ describe('buffers store', () => {
       upsertBuffer(makeBuffer(A));
     });
 
-    it('maps prefixes to tiers and orders nickGroups by NICK_TIER_ORDER', () => {
+    it('maps standard IRC prefixes to tiers and orders by NICK_TIER_ORDER', () => {
       setNicklist(A, [
         makeNick('reg', ' '),
         makeNick('voicer', '+'),
@@ -404,14 +404,42 @@ describe('buffers store', () => {
       ]);
 
       const groups = entry(A).nickGroups;
+      // Only non-empty tiers appear (no Operator/Founder on standard IRC),
+      // and they appear in NICK_TIER_ORDER order.
       expect(Object.keys(groups)).toEqual(['Owner', 'Admin', 'Op', 'Halfop', 'Voice', 'Regular']);
-      expect(Object.keys(groups)).toEqual([...NICK_TIER_ORDER]);
       expect(groups['Owner']?.map((n) => n.name)).toEqual(['owner1', 'owner2']);
       expect(groups['Admin']?.map((n) => n.name)).toEqual(['adm']);
       expect(groups['Op']?.map((n) => n.name)).toEqual(['opper']);
       expect(groups['Halfop']?.map((n) => n.name)).toEqual(['half']);
       expect(groups['Voice']?.map((n) => n.name)).toEqual(['voicer']);
       expect(groups['Regular']?.map((n) => n.name)).toEqual(['reg']);
+    });
+
+    it('maps orochi prefixes (*!.@+) to Operator/Founder/Owner/Op/Voice in rank order', () => {
+      // orochi PREFIX=(YQqov)*!.@+  → * oper, ! founder, . owner, @ op, + voice
+      setNicklist(A, [
+        makeNick('vic', '+'),
+        makeNick('operator', '*'),
+        makeNick('founder1', '!'),
+        makeNick('owner1', '.'),
+        makeNick('op1', '@'),
+        makeNick('plain', ' '),
+      ]);
+
+      const groups = entry(A).nickGroups;
+      expect(Object.keys(groups)).toEqual(['Operator', 'Founder', 'Owner', 'Op', 'Voice', 'Regular']);
+      expect(groups['Operator']?.map((n) => n.name)).toEqual(['operator']);
+      expect(groups['Founder']?.map((n) => n.name)).toEqual(['founder1']);
+      expect(groups['Owner']?.map((n) => n.name)).toEqual(['owner1']);
+      expect(groups['Op']?.map((n) => n.name)).toEqual(['op1']);
+      expect(groups['Voice']?.map((n) => n.name)).toEqual(['vic']);
+      expect(groups['Regular']?.map((n) => n.name)).toEqual(['plain']);
+    });
+
+    it('NICK_TIER_ORDER spans orochi + standard tiers, highest first', () => {
+      expect([...NICK_TIER_ORDER]).toEqual([
+        'Operator', 'Founder', 'Owner', 'Admin', 'Op', 'Halfop', 'Voice', 'Regular',
+      ]);
     });
 
     it('sorts nicks case-insensitively inside a tier and skips headers/invisible', () => {

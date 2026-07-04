@@ -14,6 +14,8 @@ import { mediaState, startCall } from '@/state/media';
 import { nickColor } from '@/lib/nickcolor';
 
 const TIER_ICONS: Record<string, { icon: string; label: string }> = {
+  Operator: { icon: 'star', label: 'Operator' },
+  Founder: { icon: 'crown', label: 'Founder' },
   Owner: { icon: 'crown', label: 'Owner' },
   Admin: { icon: 'bolt', label: 'Admin' },
   Op: { icon: 'shield', label: 'Op' },
@@ -23,7 +25,7 @@ const TIER_ICONS: Record<string, { icon: string; label: string }> = {
 };
 
 const TIER_SIGILS_FALLBACK: Record<string, string> = {
-  Owner: '.', Admin: '&', Op: '@', Halfop: '%', Voice: '+', Regular: '',
+  Operator: '*', Founder: '!', Owner: '.', Admin: '&', Op: '@', Halfop: '%', Voice: '+', Regular: '',
 };
 
 interface Props {
@@ -39,6 +41,8 @@ interface NickAction {
 
 function tierAccent(label: string): string {
   switch (label) {
+    case 'Operator': return '#fb7185'; // rose — network staff (orochi *)
+    case 'Founder': return '#f59e0b';  // amber-gold — orochi founder (!)
     case 'Owner': return '#f87171';
     case 'Admin': return '#c084fc';
     case 'Op': return '#4ade80';
@@ -126,11 +130,10 @@ export default function UserList(props: Props) {
   const handleNickClick = (nick: string, ev: MouseEvent): void => {
     const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
     setConfirming(null);
-    setActionPopup({
-      nick,
-      x: props.mobile ? rect.left : rect.right + 4,
-      y: rect.top,
-    });
+    // The user list is right-docked, so anchor the popup to the row's LEFT edge
+    // and let it grow leftward (see the style block) — opening rightward would
+    // push it off the right edge of the screen.
+    setActionPopup({ nick, x: rect.left, y: rect.top });
   };
 
   const doAction = (action: string): void => {
@@ -346,8 +349,12 @@ export default function UserList(props: Props) {
               ref={(el) => { popupEl = el; }}
               class="fixed z-[100] animate-fade-up"
               style={{
-                left: props.mobile ? '50%' : `${popup().x}px`,
-                top: `${Math.min(popup().y, window.innerHeight - 260)}px`,
+                // Mobile: centered. Desktop: anchor the popup's RIGHT edge just
+                // left of the nick row so it stays on-screen next to the
+                // right-docked list. Vertically clamped into the viewport.
+                left: props.mobile ? '50%' : 'auto',
+                right: props.mobile ? 'auto' : `${Math.max(8, window.innerWidth - popup().x + 4)}px`,
+                top: `${Math.max(8, Math.min(popup().y, window.innerHeight - 300))}px`,
                 transform: props.mobile ? 'translateX(-50%)' : undefined,
               }}
             >
@@ -412,6 +419,11 @@ function TierIcon(props: { icon: string; accent: string }): JSX.Element {
   const cls = 'w-[9px] h-[9px] sm:w-[8px] sm:h-[8px] shrink-0';
   return (
     <>
+      <Show when={props.icon === 'star'}>
+        <svg class={cls} style={{ color: props.accent }} viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 1l2 4.5 5 .5-3.7 3.3 1.1 4.9L8 11.8 3.6 14.2l1.1-4.9L1 6l5-.5z" />
+        </svg>
+      </Show>
       <Show when={props.icon === 'crown'}>
         <svg class={cls} style={{ color: props.accent }} viewBox="0 0 16 16" fill="currentColor">
           <path d="M2 12h12l1-7-4 3-3-5-3 5-4-3z" />
