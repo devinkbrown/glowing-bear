@@ -30,6 +30,11 @@ export function setupViewportHeight(): () => void {
   function update(): void {
     const vp = window.visualViewport;
     const vh = vp ? vp.height : window.innerHeight;
+    // CONTRACT: --vh is the FULL visual-viewport height in px (NOT a 1% unit).
+    // The app shell consumes it directly as `h-[var(--vh,100dvh)]` in App.tsx.
+    // Do NOT switch to the `innerHeight * 0.01` "1vh unit" convention without
+    // also changing that consumer — a mismatch multiplies the layout 100× and
+    // pushes the whole app off-screen (only the input bar stays visible).
     document.documentElement.style.setProperty('--vh', `${vh}px`);
 
     // iOS Safari scrolls the html/body when the keyboard opens, even though

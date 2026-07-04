@@ -178,7 +178,7 @@ export default function App() {
         </div>
       )}
     >
-      <div class="relative flex h-[calc(var(--vh,1vh)*100)] w-full overflow-hidden bg-gray-950 text-gray-200">
+      <div class="relative flex h-[var(--vh,100dvh)] w-full overflow-hidden bg-gray-950 text-gray-200">
         {/* Theme background layers */}
         <Show when={settings.animateThemes && settings.theme !== 'custom' && !settings.bgImage}>
           <Show when={settings.theme === 'starfield'} fallback={<ThemeBg theme={settings.theme as ThemeName} />}>
