@@ -37,6 +37,30 @@ interface ReadMarkerItem { kind: 'readMarker'; key: string }
 interface MsgItem { kind: 'msg'; key: string; line: WeeChatLine; grouped: boolean; dimmed: boolean }
 type RenderItem = DayItem | ReadMarkerItem | MsgItem;
 
+// A completed render-item build plus the snapshot needed to extend it
+// incrementally on the next tail append (see buildRenderItems).
+export interface RenderItemBuild {
+  items: RenderItem[];
+  ptr: string;
+  special: boolean;
+  readMarker: number | undefined;
+  query: string;
+  len: number;
+  firstLine: WeeChatLine | undefined;
+  lastLine: WeeChatLine | undefined;
+  lastDayKey: string | null;
+  prevMsgLine: WeeChatLine | null;
+}
+
+export interface RenderItemInput {
+  ptr: string;
+  special: boolean;
+  readMarker: number | undefined;
+  matches: { ids: Record<string, true> } | null;
+  query: string;
+  lines: readonly WeeChatLine[];
+}
+
 const GROUP_WINDOW_MS = 300_000; // same-nick grouping window (5 min)
 const HISTORY_TOP_PX = 200; // scrollTop threshold that triggers history load
 const AT_BOTTOM_PX = 40;
@@ -45,6 +69,94 @@ const ANNOUNCE_MAX = 30; // cap the live-region node count (old nodes are remova
 
 function getDayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+// Build the flat render-item list (day separators + inline read marker + grouped
+// message lines) INCREMENTALLY.
+//
+// Building this over a 5000-line buffer allocates thousands of item objects
+// (day-key strings, date math, grouping logic); doing it on every tail line is
+// the list's hottest waste. So when `input.lines` is a clean tail-extension of
+// the previous build — same shape inputs (buffer, join/part filter, search
+// query, read-marker index) and an intact prefix (front not trimmed, boundary
+// line identity unchanged) — the previously built prefix is reused BY REFERENCE
+// (which also preserves the keyed <For> DOM identity of untouched rows) and only
+// the newly appended lines get fresh items, carrying the day/grouping state
+// across the window's top edge so the first new row groups exactly as a full
+// rebuild would. Any other change (front trim at MAX_LINES, optimistic-echo
+// splice, history prepend, filter/search/marker/buffer change) triggers a full
+// rebuild. The output is identical to a from-scratch build in every case.
+//
+// Prefix identity is compared via snapshotted line references, so the fast path
+// holds even when joinPartMsgs returns the live store array mutated in place by
+// produce() (same array object across pushes).
+export function buildRenderItems(prev: RenderItemBuild | null, input: RenderItemInput): RenderItemBuild {
+  const { ptr, special, readMarker, matches, query, lines } = input;
+  const len = lines.length;
+
+  const canAppend =
+    prev !== null &&
+    ptr === prev.ptr &&
+    special === prev.special &&
+    readMarker === prev.readMarker &&
+    query === prev.query &&
+    prev.len > 0 &&
+    len >= prev.len &&
+    lines[0] === prev.firstLine &&
+    lines[prev.len - 1] === prev.lastLine;
+
+  // Nothing appended and nothing reshaped — return the prior build untouched so
+  // the memo's reference-equality check short-circuits downstream work.
+  if (canAppend && len === prev.len) return prev;
+
+  const items: RenderItem[] = canAppend ? prev.items.slice() : [];
+  const startIdx = canAppend ? prev.len : 0;
+  let lastDayKey = canAppend ? prev.lastDayKey : null;
+  let prevMsgLine = canAppend ? prev.prevMsgLine : null;
+
+  for (let i = startIdx; i < len; i++) {
+    const line = lines[i];
+    if (!line) continue;
+    const dayKey = getDayKey(line.date);
+    const dayChanged = dayKey !== lastDayKey;
+
+    if (!special && dayChanged) {
+      items.push({ kind: 'day', key: `day-${dayKey}`, date: line.date });
+      lastDayKey = dayKey;
+    }
+
+    if (readMarker !== undefined && i === readMarker) {
+      items.push({ kind: 'readMarker', key: `rm-${readMarker}` });
+    }
+
+    const grouped = !special && !!(
+      prevMsgLine &&
+      !dayChanged &&
+      line.nick &&
+      prevMsgLine.nick === line.nick &&
+      !line.isAction && !prevMsgLine.isAction &&
+      !line.isJoin && !line.isPart && !line.isQuit &&
+      !prevMsgLine.isJoin && !prevMsgLine.isQuit &&
+      line.date.getTime() - prevMsgLine.date.getTime() < GROUP_WINDOW_MS
+    );
+
+    const dimmed = matches !== null && !matches.ids[line.id];
+    items.push({ kind: 'msg', key: line.id, line, grouped, dimmed });
+    prevMsgLine = line;
+  }
+
+  return {
+    items,
+    ptr,
+    special,
+    readMarker,
+    query,
+    len,
+    firstLine: lines[0],
+    lastLine: lines[len - 1],
+    lastDayKey,
+    prevMsgLine,
+  };
 }
 
 // Screen-reader text for one newly-arrived line: nick + plain-text body, with
@@ -172,48 +284,20 @@ export default function MessageView(props: MessageViewProps) {
     return { ids, count };
   });
 
-  // Build flat render items (messages + day separators + read marker)
+  // Incremental render-item cache. buildRenderItems reuses the previously built
+  // prefix by reference on a clean tail append (see its doc), so the memo below
+  // only allocates item objects for the newly arrived lines.
+  let ciBuild: RenderItemBuild | null = null;
   const renderItems = createMemo<RenderItem[]>(() => {
-    const items: RenderItem[] = [];
-    const special = isSpecialBuf();
-    const readMarker = buffersState.readMarkerPos[props.bufferPtr];
-    const matches = searchMatches();
-    const lines = filteredLines();
-    let lastDayKey: string | null = null;
-    let prevMsgLine: WeeChatLine | null = null;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line) continue;
-      const dayKey = getDayKey(line.date);
-      const dayChanged = dayKey !== lastDayKey;
-
-      if (!special && dayChanged) {
-        items.push({ kind: 'day', key: `day-${dayKey}`, date: line.date });
-        lastDayKey = dayKey;
-      }
-
-      if (readMarker !== undefined && i === readMarker) {
-        items.push({ kind: 'readMarker', key: `rm-${readMarker}` });
-      }
-
-      const grouped = !special && !!(
-        prevMsgLine &&
-        !dayChanged &&
-        line.nick &&
-        prevMsgLine.nick === line.nick &&
-        !line.isAction && !prevMsgLine.isAction &&
-        !line.isJoin && !line.isPart && !line.isQuit &&
-        !prevMsgLine.isJoin && !prevMsgLine.isQuit &&
-        line.date.getTime() - prevMsgLine.date.getTime() < GROUP_WINDOW_MS
-      );
-
-      const dimmed = matches !== null && !matches.ids[line.id];
-      items.push({ kind: 'msg', key: line.id, line, grouped, dimmed });
-      prevMsgLine = line;
-    }
-
-    return items;
+    ciBuild = buildRenderItems(ciBuild, {
+      ptr: props.bufferPtr,
+      special: isSpecialBuf(),
+      readMarker: buffersState.readMarkerPos[props.bufferPtr],
+      matches: searchMatches(),
+      query: (uiState.searchOpen ? searchQuery() : '').trim().toLowerCase(),
+      lines: filteredLines(),
+    });
+    return ciBuild.items;
   });
 
   // ── Virtual list ────────────────────────────────────────────────────────
@@ -270,7 +354,11 @@ export default function MessageView(props: MessageViewProps) {
     const newLast = lines[lines.length - 1]?.id;
     // Unchanged tail => a prepend (requestHistory), reconcile, or no-op. Silent.
     if (newLast === undefined || newLast === lastAnnouncedId) return;
-    const prevIdx = lastAnnouncedId === undefined ? -1 : lines.findIndex((l) => l.id === lastAnnouncedId);
+    // The baseline is the previous tail, so it sits near the end — scan from the
+    // back (findLastIndex) instead of the front so this stays O(new tail) rather
+    // than O(buffer) on every message. Ids are unique, so back-scan and
+    // front-scan return the same index; behavior is identical.
+    const prevIdx = lastAnnouncedId === undefined ? -1 : lines.findLastIndex((l) => l.id === lastAnnouncedId);
     // Known baseline: announce everything after it. Unknown baseline (trimmed
     // away or was empty): announce only the final line, never the transcript.
     const tail = prevIdx >= 0 ? lines.slice(prevIdx + 1) : lines.slice(-1);
