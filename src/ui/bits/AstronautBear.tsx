@@ -1,9 +1,41 @@
-import { mergeProps } from 'solid-js';
+import { createContext, mergeProps, Show, useContext, type Accessor, type ComponentProps } from 'solid-js';
+import { createMediaQuery } from '@/primitives/mediaQuery';
 import type { ThemeName } from './ThemeBg';
+
+// Whether decorative SMIL motion may run. Under prefers-reduced-motion: reduce the
+// provider flips this to false and the gated <Anim>/<AnimTransform> wrappers render
+// nothing, so the SVG holds no SMIL nodes at all. CSS `animation:none` cannot reach
+// SMIL (<animate>/<animateTransform>), so this JS gate is the only mechanism that
+// stops the blink/idle + accessory motion (WCAG 2.2.2 Pause, Stop, Hide /
+// 2.3.3 Animation from Interactions).
+const MotionContext = createContext<Accessor<boolean>>(() => true);
+
+/** Motion-gated <animate>. Absent from the DOM when reduced motion is active. */
+function Anim(props: ComponentProps<'animate'>) {
+  const motionOn = useContext(MotionContext);
+  return (
+    <Show when={motionOn()}>
+      <animate {...props} />
+    </Show>
+  );
+}
+
+/** Motion-gated <animateTransform>. Absent from the DOM when reduced motion is active. */
+function AnimTransform(props: ComponentProps<'animateTransform'>) {
+  const motionOn = useContext(MotionContext);
+  return (
+    <Show when={motionOn()}>
+      <animateTransform {...props} />
+    </Show>
+  );
+}
 
 export default function AstronautBear(props: { size?: number; class?: string; accent?: string; theme?: ThemeName }) {
   const p = mergeProps({ size: 120, class: '', accent: '#818cf8', theme: 'darkbear' as ThemeName }, props);
+  const reduced = createMediaQuery('(prefers-reduced-motion: reduce)');
+  const motionOn = (): boolean => !reduced();
   return (
+    <MotionContext.Provider value={motionOn}>
     <svg width={p.size} height={p.size} viewBox="0 0 200 200" class={p.class} aria-hidden="true">
       <defs>
         <radialGradient id="ab-fur" cx="45%" cy="35%" r="60%">
@@ -54,14 +86,14 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         </filter>
         <clipPath id="ab-blink-l">
           <rect x="58" y="64" width="28" height="24">
-            <animate attributeName="height" values="24;1;24" dur="5s" keyTimes="0;0.04;0.08" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" calcMode="spline" repeatCount="indefinite" begin="2.5s" />
-            <animate attributeName="y" values="64;82;64" dur="5s" keyTimes="0;0.04;0.08" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" calcMode="spline" repeatCount="indefinite" begin="2.5s" />
+            <Anim attributeName="height" values="24;1;24" dur="5s" keyTimes="0;0.04;0.08" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" calcMode="spline" repeatCount="indefinite" begin="2.5s" />
+            <Anim attributeName="y" values="64;82;64" dur="5s" keyTimes="0;0.04;0.08" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" calcMode="spline" repeatCount="indefinite" begin="2.5s" />
           </rect>
         </clipPath>
         <clipPath id="ab-blink-r">
           <rect x="114" y="64" width="28" height="24">
-            <animate attributeName="height" values="24;1;24" dur="5s" keyTimes="0;0.04;0.08" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" calcMode="spline" repeatCount="indefinite" begin="2.5s" />
-            <animate attributeName="y" values="64;82;64" dur="5s" keyTimes="0;0.04;0.08" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" calcMode="spline" repeatCount="indefinite" begin="2.5s" />
+            <Anim attributeName="height" values="24;1;24" dur="5s" keyTimes="0;0.04;0.08" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" calcMode="spline" repeatCount="indefinite" begin="2.5s" />
+            <Anim attributeName="y" values="64;82;64" dur="5s" keyTimes="0;0.04;0.08" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" calcMode="spline" repeatCount="indefinite" begin="2.5s" />
           </rect>
         </clipPath>
       </defs>
@@ -89,7 +121,7 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         <path d="M68 148 Q100 140 132 148" fill="none" stroke="#8b9cf8" stroke-width="2" />
         {[82,92,100,108,118].map((x, i) => (
           <circle cx={x} cy={155 + (i % 2) * 4} r="1.5" fill="#c7d2fe" opacity={0.5}>
-            <animate attributeName="opacity" values="0.5;0.15;0.5" dur={`${2 + i * 0.3}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.5;0.15;0.5" dur={`${2 + i * 0.3}s`} repeatCount="indefinite" />
           </circle>
         ))}
       </>}
@@ -160,7 +192,7 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         <ellipse cx="100" cy="158" rx="37" ry="29" fill="#0d1030" stroke="#4f5bab" stroke-width="1" />
         {[82,90,100,110,118].map((x, i) => (
           <circle cx={x} cy={154 + (i % 2) * 6} r="1.2" fill="#c7d2fe" opacity={0.5}>
-            <animate attributeName="opacity" values="0.5;0.1;0.5" dur={`${2 + i * 0.3}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.5;0.1;0.5" dur={`${2 + i * 0.3}s`} repeatCount="indefinite" />
           </circle>
         ))}
       </>}
@@ -287,7 +319,7 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         {/* EQ bars */}
         {[{x:88,y:160,h:8},{x:93,y:157,h:14},{x:98,y:155,h:18},{x:103,y:157,h:14},{x:108,y:159,h:10}].map((b, i) => (
           <rect x={b.x} y={b.y} width="3" height={b.h} rx="1" fill="#818cf8" opacity="0.3">
-            <animate attributeName="height" values={`${b.h};${b.h * 0.4};${b.h}`} dur={`${0.8 + i * 0.15}s`} repeatCount="indefinite" />
+            <Anim attributeName="height" values={`${b.h};${b.h * 0.4};${b.h}`} dur={`${0.8 + i * 0.15}s`} repeatCount="indefinite" />
           </rect>
         ))}
       </>}
@@ -298,11 +330,11 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         <path d="M58 52 L100 -24 L142 52" fill="#1a2150" />
         <path d="M48 54 Q100 66 152 54 Q100 72 48 54" fill="#0c1030" stroke="#8b9cf8" stroke-width="1.2" />
         <circle cx="100" cy="-22" r="8" fill="#8b9cf8" opacity="0.6">
-          <animate attributeName="opacity" values="0.6;0.25;0.6" dur="3s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.6;0.25;0.6" dur="3s" repeatCount="indefinite" />
         </circle>
         {[{x:76,y:16,r:3},{x:118,y:10,r:2.8},{x:88,y:-6,r:2.2},{x:108,y:0,r:2.5},{x:96,y:26,r:2}].map((s, i) => (
           <circle cx={s.x} cy={s.y} r={s.r} fill="#c7d2fe" opacity={0.45}>
-            <animate attributeName="opacity" values="0.45;0.1;0.45" dur={`${2.5 + i * 0.5}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.45;0.1;0.45" dur={`${2.5 + i * 0.5}s`} repeatCount="indefinite" />
           </circle>
         ))}
         {/* Crescent moon */}
@@ -311,14 +343,14 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         <g transform="translate(58,158) rotate(-35)">
           <rect x="-1.5" y="-28" width="3" height="30" rx="1" fill="#3b3080" opacity="0.6" />
           <circle cx="0" cy="-30" r="4" fill="#c7d2fe" opacity="0.5">
-            <animate attributeName="opacity" values="0.5;0.8;0.5" dur="2s" repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.5;0.8;0.5" dur="2s" repeatCount="indefinite" />
           </circle>
           <circle cx="0" cy="-30" r="2" fill="#fff" opacity="0.3" />
         </g>
         {/* Wand sparkle trail */}
         {[{x:28,y:130,d:2.5},{x:22,y:122,d:3},{x:34,y:118,d:3.5}].map((s, i) => (
           <circle cx={s.x} cy={s.y} r="1.5" fill="#c7d2fe" opacity="0.35">
-            <animate attributeName="opacity" values="0.35;0;0.35" dur={`${s.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.35;0;0.35" dur={`${s.d}s`} repeatCount="indefinite" />
           </circle>
         ))}
       </>}
@@ -334,13 +366,13 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         <polygon points="72,19 66,44 80,42" fill="#e9d5ff" opacity="0.15" />
         <polygon points="128,19 134,44 120,42" fill="#e9d5ff" opacity="0.15" />
         <circle cx="100" cy="42" r="5" fill="#7c3aed" opacity="0.35">
-          <animate attributeName="opacity" values="0.35;0.12;0.35" dur="2.5s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.35;0.12;0.35" dur="2.5s" repeatCount="indefinite" />
         </circle>
         {/* Orbiting sparkles around crystals */}
         {[0,120,240].map((deg, i) => (
           <circle cx="100" cy="20" r="1.8" fill="#e9d5ff" opacity="0.4">
-            <animateTransform attributeName="transform" type="rotate" values={`${deg} 100 20;${deg + 360} 100 20`} dur={`${6 + i}s`} repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.4;0.1;0.4" dur={`${3 + i}s`} repeatCount="indefinite" />
+            <AnimTransform attributeName="transform" type="rotate" values={`${deg} 100 20;${deg + 360} 100 20`} dur={`${6 + i}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.4;0.1;0.4" dur={`${3 + i}s`} repeatCount="indefinite" />
           </circle>
         ))}
       </>}
@@ -415,7 +447,7 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
           <path d="M0 0 Q-6 4 -4 10 Q-1 6 0 0" fill="#eb6f92" opacity="0.4" />
           <path d="M0 0 Q6 4 4 10 Q1 6 0 0" fill="#f6c177" opacity="0.4" />
           <line x1="0" y1="0" x2="0" y2="-2" stroke="#31748f" stroke-width="0.5" opacity="0.4" />
-          <animateTransform attributeName="transform" type="translate" values="170,30;168,26;170,30;172,28;170,30" dur="4s" repeatCount="indefinite" />
+          <AnimTransform attributeName="transform" type="translate" values="170,30;168,26;170,30;172,28;170,30" dur="4s" repeatCount="indefinite" />
         </g>
       </>}
 
@@ -437,22 +469,22 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         {/* Bubbles */}
         {[{x:168,y:0,r:3.5,d:4},{x:176,y:-6,r:2.5,d:5},{x:172,y:-14,r:1.8,d:6}].map((b, i) => (
           <circle cx={b.x} cy={b.y} r={b.r} fill="none" stroke="#2dd4bf" stroke-width="1" opacity="0.35">
-            <animate attributeName="cy" values={`${b.y};${b.y - 25};${b.y}`} dur={`${b.d}s`} repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.35;0;0.35" dur={`${b.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="cy" values={`${b.y};${b.y - 25};${b.y}`} dur={`${b.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.35;0;0.35" dur={`${b.d}s`} repeatCount="indefinite" />
           </circle>
         ))}
         {/* Small fish */}
         <g opacity="0.4">
           <path d="M22 170 Q16 166 22 162 Q28 166 22 170 Z" fill="#2dd4bf">
-            <animate attributeName="d" values="M22 170 Q16 166 22 162 Q28 166 22 170 Z;M22 172 Q14 168 22 164 Q30 168 22 172 Z;M22 170 Q16 166 22 162 Q28 166 22 170 Z" dur="3s" repeatCount="indefinite" />
+            <Anim attributeName="d" values="M22 170 Q16 166 22 162 Q28 166 22 170 Z;M22 172 Q14 168 22 164 Q30 168 22 172 Z;M22 170 Q16 166 22 162 Q28 166 22 170 Z" dur="3s" repeatCount="indefinite" />
           </path>
           <path d="M14 166 L10 162 L10 170 Z" fill="#2dd4bf" opacity="0.6" />
           <circle cx="24" cy="166" r="1" fill="#0a1628" />
-          <animateTransform attributeName="transform" type="translate" values="0,0;6,-4;0,0;-4,2;0,0" dur="5s" repeatCount="indefinite" />
+          <AnimTransform attributeName="transform" type="translate" values="0,0;6,-4;0,0;-4,2;0,0" dur="5s" repeatCount="indefinite" />
         </g>
         {/* Seaweed */}
         <path d="M186 196 Q182 180 186 168 Q190 156 184 148" fill="none" stroke="#2dd4bf" stroke-width="2" opacity="0.2">
-          <animate attributeName="d" values="M186 196 Q182 180 186 168 Q190 156 184 148;M186 196 Q190 180 184 168 Q180 156 186 148;M186 196 Q182 180 186 168 Q190 156 184 148" dur="4s" repeatCount="indefinite" />
+          <Anim attributeName="d" values="M186 196 Q182 180 186 168 Q190 156 184 148;M186 196 Q190 180 184 168 Q180 156 186 148;M186 196 Q182 180 186 168 Q190 156 184 148" dur="4s" repeatCount="indefinite" />
         </path>
       </>}
 
@@ -460,26 +492,26 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
       {p.theme === 'ember' && <>
         <path d="M52 54 Q62 10 74 30 Q78 -8 88 18 Q92 -18 100 14 Q108 -18 112 18 Q116 -8 126 30 Q136 10 148 54"
           fill="#f97316" opacity="0.55" stroke="#ef4444" stroke-width="1.2">
-          <animate attributeName="opacity" values="0.55;0.35;0.55" dur="1.5s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.55;0.35;0.55" dur="1.5s" repeatCount="indefinite" />
         </path>
         <path d="M60 50 Q70 14 82 30 Q88 0 98 20 Q100 -10 102 20 Q112 0 118 30 Q128 14 140 50"
           fill="#ef4444" opacity="0.35">
-          <animate attributeName="opacity" values="0.35;0.55;0.35" dur="1.2s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.35;0.55;0.35" dur="1.2s" repeatCount="indefinite" />
         </path>
         <path d="M68 48 Q78 22 90 34 Q96 10 100 26 Q104 10 110 34 Q122 22 132 48"
           fill="#fbbf24" opacity="0.2">
-          <animate attributeName="opacity" values="0.2;0.4;0.2" dur="1s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.2;0.4;0.2" dur="1s" repeatCount="indefinite" />
         </path>
         {/* Ember particles */}
         {[{x:46,y:40,d:3},{x:154,y:35,d:4},{x:38,y:58,d:3.5},{x:160,y:55,d:5},{x:42,y:20,d:4.5}].map((e, i) => (
           <circle cx={e.x} cy={e.y} r={2.5 - i * 0.2} fill={i % 2 === 0 ? '#f97316' : '#ef4444'} opacity="0.45">
-            <animate attributeName="cy" values={`${e.y};${e.y - 24};${e.y}`} dur={`${e.d}s`} repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.45;0;0.45" dur={`${e.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="cy" values={`${e.y};${e.y - 24};${e.y}`} dur={`${e.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.45;0;0.45" dur={`${e.d}s`} repeatCount="indefinite" />
           </circle>
         ))}
         {/* Heat shimmer */}
         <path d="M70 130 Q80 124 90 130 Q100 124 110 130 Q120 124 130 130" fill="none" stroke="#f97316" stroke-width="0.8" opacity="0.15">
-          <animate attributeName="d" values="M70 130 Q80 124 90 130 Q100 124 110 130 Q120 124 130 130;M70 130 Q80 136 90 130 Q100 136 110 130 Q120 136 130 130;M70 130 Q80 124 90 130 Q100 124 110 130 Q120 124 130 130" dur="2s" repeatCount="indefinite" />
+          <Anim attributeName="d" values="M70 130 Q80 124 90 130 Q100 124 110 130 Q120 124 130 130;M70 130 Q80 136 90 130 Q100 136 110 130 Q120 136 130 130;M70 130 Q80 124 90 130 Q100 124 110 130 Q120 124 130 130" dur="2s" repeatCount="indefinite" />
         </path>
       </>}
 
@@ -506,7 +538,7 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
             <line x1={sf.x} y1={sf.y - sf.s} x2={sf.x} y2={sf.y + sf.s} stroke="#e0f2fe" stroke-width="0.8" />
             <line x1={sf.x - sf.s * 0.7} y1={sf.y - sf.s * 0.7} x2={sf.x + sf.s * 0.7} y2={sf.y + sf.s * 0.7} stroke="#e0f2fe" stroke-width="0.5" />
             <line x1={sf.x + sf.s * 0.7} y1={sf.y - sf.s * 0.7} x2={sf.x - sf.s * 0.7} y2={sf.y + sf.s * 0.7} stroke="#e0f2fe" stroke-width="0.5" />
-            <animate attributeName="opacity" values="0.3;0.08;0.3" dur={`${sf.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.3;0.08;0.3" dur={`${sf.d}s`} repeatCount="indefinite" />
           </g>
         ))}
         {/* Hot cocoa mug in right paw */}
@@ -514,7 +546,7 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
           <rect x="-5" y="-8" width="10" height="12" rx="2" fill="#6b3e26" opacity="0.5" stroke="#5a3d30" stroke-width="0.8" />
           <path d="M5 -4 Q10 -4 10 0 Q10 4 5 4" fill="none" stroke="#6b3e26" stroke-width="1.5" opacity="0.4" />
           <path d="M-2 -10 Q0 -14 2 -10" fill="none" stroke="#d1fae5" stroke-width="0.8" opacity="0.3">
-            <animate attributeName="opacity" values="0.3;0.08;0.3" dur="3s" repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.3;0.08;0.3" dur="3s" repeatCount="indefinite" />
           </path>
         </g>
       </>}
@@ -538,30 +570,30 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
       {p.theme === 'tokyo-night' && <>
         <path d="M52 76 Q100 66 148 76 Q148 86 144 90 Q100 82 56 90 Q52 86 52 76 Z" fill="#1a1b2e" stroke="#7aa2f7" stroke-width="1.5" opacity="0.75" />
         <path d="M56 78 L142 78" fill="none" stroke="#7aa2f7" stroke-width="1" opacity="0.3">
-          <animate attributeName="opacity" values="0.3;0.6;0.3" dur="2s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.3;0.6;0.3" dur="2s" repeatCount="indefinite" />
         </path>
         <path d="M56 82 L142 82" fill="none" stroke="#bb9af7" stroke-width="0.8" opacity="0.2" />
         <line x1="98" y1="74" x2="102" y2="74" stroke="#ff9e64" stroke-width="2" opacity="0.5" />
         {/* LED ear tips */}
         <circle cx="56" cy="22" r="3.5" fill="#7aa2f7" opacity="0.5">
-          <animate attributeName="opacity" values="0.5;0.1;0.5" dur="1.5s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.5;0.1;0.5" dur="1.5s" repeatCount="indefinite" />
         </circle>
         <circle cx="144" cy="22" r="3.5" fill="#ff7b72" opacity="0.45">
-          <animate attributeName="opacity" values="0.45;0.1;0.45" dur="2s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.45;0.1;0.45" dur="2s" repeatCount="indefinite" />
         </circle>
         {/* Antenna */}
         <line x1="144" y1="22" x2="160" y2="4" stroke="#ff7b72" stroke-width="1.5" opacity="0.3" />
         <circle cx="160" cy="4" r="2.5" fill="#ff7b72" opacity="0.35">
-          <animate attributeName="opacity" values="0.35;0.1;0.35" dur="1s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.35;0.1;0.35" dur="1s" repeatCount="indefinite" />
         </circle>
         {/* Holographic data streams */}
         {[{x:20,y:140,h:30},{x:176,y:150,h:25}].map((d, i) => (
           <g opacity="0.2">
             <rect x={d.x} y={d.y} width="6" height={d.h} rx="1" fill="#7aa2f7">
-              <animate attributeName="height" values={`${d.h};${d.h * 0.3};${d.h}`} dur={`${1.5 + i * 0.5}s`} repeatCount="indefinite" />
+              <Anim attributeName="height" values={`${d.h};${d.h * 0.3};${d.h}`} dur={`${1.5 + i * 0.5}s`} repeatCount="indefinite" />
             </rect>
             <rect x={d.x + 8} y={d.y + 4} width="4" height={d.h - 8} rx="1" fill="#bb9af7">
-              <animate attributeName="height" values={`${d.h - 8};${(d.h - 8) * 0.5};${d.h - 8}`} dur={`${1.8 + i * 0.3}s`} repeatCount="indefinite" />
+              <Anim attributeName="height" values={`${d.h - 8};${(d.h - 8) * 0.5};${d.h - 8}`} dur={`${1.8 + i * 0.3}s`} repeatCount="indefinite" />
             </rect>
           </g>
         ))}
@@ -583,7 +615,7 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         {[{x:18,y:40,s:1,d:4},{x:178,y:30,s:0.8,d:5},{x:10,y:110,s:0.7,d:6}].map((bat, i) => (
           <g transform={`translate(${bat.x},${bat.y}) scale(${bat.s})`} opacity="0.3">
             <path d="M0 0 Q-6 -8 -14 -4 Q-8 -2 -6 0 Q-4 -4 0 -2 Q4 -4 6 0 Q8 -2 14 -4 Q6 -8 0 0" fill="#bd93f9" />
-            <animateTransform attributeName="transform" type="translate" values={`${bat.x},${bat.y};${bat.x - 4},${bat.y - 6};${bat.x},${bat.y};${bat.x + 4},${bat.y - 3};${bat.x},${bat.y}`} dur={`${bat.d}s`} repeatCount="indefinite" />
+            <AnimTransform attributeName="transform" type="translate" values={`${bat.x},${bat.y};${bat.x - 4},${bat.y - 6};${bat.x},${bat.y};${bat.x + 4},${bat.y - 3};${bat.x},${bat.y}`} dur={`${bat.d}s`} repeatCount="indefinite" />
           </g>
         ))}
         {/* Blood red lining flash on cape */}
@@ -622,22 +654,22 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         <rect x="158" y="44" width="22" height="8" rx="3" fill="#1a1e42" stroke="#4f5bab" stroke-width="0.8" />
         <circle cx="182" cy="48" r="6" fill="#2d3060" stroke="#4f5bab" stroke-width="1" />
         <circle cx="182" cy="48" r="3" fill="#c7d2fe" opacity="0.35">
-          <animate attributeName="opacity" values="0.35;0.1;0.35" dur="2s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.35;0.1;0.35" dur="2s" repeatCount="indefinite" />
         </circle>
         {/* Star marks on cheeks */}
         {[{x:60,y:86},{x:56,y:80},{x:140,y:86},{x:144,y:80}].map((s, i) => (
           <circle cx={s.x} cy={s.y} r="1.5" fill="#c7d2fe" opacity={0.3}>
-            <animate attributeName="opacity" values="0.3;0.08;0.3" dur={`${2 + i * 0.3}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.3;0.08;0.3" dur={`${2 + i * 0.3}s`} repeatCount="indefinite" />
           </circle>
         ))}
         <line x1="56" y1="80" x2="60" y2="86" stroke="#c7d2fe" stroke-width="0.5" opacity="0.2" />
         <line x1="140" y1="86" x2="144" y2="80" stroke="#c7d2fe" stroke-width="0.5" opacity="0.2" />
         {/* Shooting star */}
         <line x1="8" y1="20" x2="30" y2="35" stroke="#c7d2fe" stroke-width="1.5" opacity="0.3">
-          <animate attributeName="opacity" values="0;0.5;0" dur="4s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0;0.5;0" dur="4s" repeatCount="indefinite" />
         </line>
         <circle cx="8" cy="20" r="2" fill="#fff" opacity="0.3">
-          <animate attributeName="opacity" values="0;0.6;0" dur="4s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0;0.6;0" dur="4s" repeatCount="indefinite" />
         </circle>
         {/* Star map scroll in paw */}
         <g transform="translate(52,158)">
@@ -654,28 +686,28 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
       {p.theme === 'lightning' && <>
         <path d="M60 44 L52 4 L72 32 L64 -8 L84 26 L78 -16 L100 20 L122 -16 L116 26 L136 -8 L128 32 L148 4 L140 44"
           fill="none" stroke="#3b82f6" stroke-width="3" opacity="0.55">
-          <animate attributeName="opacity" values="0.55;0.75;0.3;0.55" dur="2s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.55;0.75;0.3;0.55" dur="2s" repeatCount="indefinite" />
         </path>
         <path d="M68 42 L62 8 L80 30 L74 -4 L94 24 L90 -8 L100 18 L110 -8 L106 24 L126 -4 L120 30 L138 8 L132 42"
           fill="none" stroke="#60a5fa" stroke-width="1.5" opacity="0.3">
-          <animate attributeName="opacity" values="0.3;0.5;0.15;0.3" dur="1.5s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.3;0.5;0.15;0.3" dur="1.5s" repeatCount="indefinite" />
         </path>
         {/* Big spark particles */}
         {[{x:44,y:24},{x:156,y:20},{x:38,y:56},{x:162,y:52}].map((s, i) => (
           <circle cx={s.x} cy={s.y} r="2.5" fill="#60a5fa" opacity="0.4">
-            <animate attributeName="opacity" values="0.4;0.05;0.4;0.6;0.4" dur={`${1.2 + i * 0.3}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.4;0.05;0.4;0.6;0.4" dur={`${1.2 + i * 0.3}s`} repeatCount="indefinite" />
           </circle>
         ))}
         {/* Mini bolts near ears */}
         <path d="M42 38 L46 28 L44 32 L48 22" fill="none" stroke="#93c5fd" stroke-width="1.2" opacity="0.4">
-          <animate attributeName="opacity" values="0.4;0;0.4" dur="3s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.4;0;0.4" dur="3s" repeatCount="indefinite" />
         </path>
         <path d="M158 36 L154 26 L156 30 L152 20" fill="none" stroke="#93c5fd" stroke-width="1.2" opacity="0.35">
-          <animate attributeName="opacity" values="0;0.35;0;0.35" dur="2.5s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0;0.35;0;0.35" dur="2.5s" repeatCount="indefinite" />
         </path>
         {/* Lightning bolt emblem on chest */}
         <path d="M96 150 L102 150 L98 158 L104 158 L94 172 L98 162 L92 162 Z" fill="#60a5fa" opacity="0.35">
-          <animate attributeName="opacity" values="0.35;0.6;0.35" dur="2s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.35;0.6;0.35" dur="2s" repeatCount="indefinite" />
         </path>
       </>}
 
@@ -694,17 +726,17 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         {/* Fire crest */}
         <path d="M64 46 Q74 6 84 24 Q88 -12 96 16 Q100 -20 104 16 Q108 -12 116 24 Q122 6 136 46"
           fill="#f59e0b" opacity="0.5">
-          <animate attributeName="opacity" values="0.5;0.3;0.5" dur="1.5s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.5;0.3;0.5" dur="1.5s" repeatCount="indefinite" />
         </path>
         <path d="M72 44 Q80 12 90 28 Q96 0 100 20 Q104 0 110 28 Q120 12 128 44"
           fill="#ef4444" opacity="0.3">
-          <animate attributeName="opacity" values="0.3;0.5;0.3" dur="1.2s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.3;0.5;0.3" dur="1.2s" repeatCount="indefinite" />
         </path>
         {/* Ember particles */}
         {[{x:16,y:55,d:3},{x:184,y:50,d:4},{x:8,y:75,d:3.5},{x:192,y:70,d:4.5}].map((e, i) => (
           <circle cx={e.x} cy={e.y} r="2" fill="#f59e0b" opacity="0.35">
-            <animate attributeName="cy" values={`${e.y};${e.y - 28};${e.y}`} dur={`${e.d}s`} repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.35;0;0.35" dur={`${e.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="cy" values={`${e.y};${e.y - 28};${e.y}`} dur={`${e.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.35;0;0.35" dur={`${e.d}s`} repeatCount="indefinite" />
           </circle>
         ))}
         {/* Tail feather plume behind body */}
@@ -733,15 +765,15 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         {/* Pixel sparkles */}
         {[{x:10,y:40,c:'#e879f9'},{x:190,y:50,c:'#22d3ee'},{x:6,y:120,c:'#fbbf24'},{x:194,y:130,c:'#a3e635'}].map((px, i) => (
           <rect x={px.x - 2} y={px.y - 2} width="4" height="4" fill={px.c} opacity="0.25">
-            <animate attributeName="opacity" values="0.25;0.05;0.25" dur={`${1.2 + i * 0.3}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.25;0.05;0.25" dur={`${1.2 + i * 0.3}s`} repeatCount="indefinite" />
           </rect>
         ))}
         {/* Floating music notes */}
         {[{x:6,y:80,d:3.5},{x:192,y:100,d:4.5}].map((n, i) => (
           <g opacity="0.3">
             <text x={n.x} y={n.y} font-size="12" fill={i === 0 ? '#e879f9' : '#22d3ee'}>&#9834;</text>
-            <animateTransform attributeName="transform" type="translate" values={`0,0;0,-12;0,0`} dur={`${n.d}s`} repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.3;0.5;0" dur={`${n.d}s`} repeatCount="indefinite" />
+            <AnimTransform attributeName="transform" type="translate" values={`0,0;0,-12;0,0`} dur={`${n.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.3;0.5;0" dur={`${n.d}s`} repeatCount="indefinite" />
           </g>
         ))}
       </>}
@@ -772,7 +804,7 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
           <g opacity="0.25">
             <line x1={sp.x - 3} y1={sp.y} x2={sp.x + 3} y2={sp.y} stroke="#eab308" stroke-width="1" />
             <line x1={sp.x} y1={sp.y - 3} x2={sp.x} y2={sp.y + 3} stroke="#eab308" stroke-width="1" />
-            <animate attributeName="opacity" values="0.25;0.5;0.25" dur={`${sp.d}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.25;0.5;0.25" dur={`${sp.d}s`} repeatCount="indefinite" />
           </g>
         ))}
       </>}
@@ -785,7 +817,7 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         {/* Headlamp */}
         <rect x="86" y="10" width="28" height="14" rx="4" fill="#f97316" opacity="0.55" />
         <rect x="92" y="14" width="16" height="8" rx="3" fill="#fbbf24" opacity="0.45">
-          <animate attributeName="opacity" values="0.45;0.15;0.45" dur="2s" repeatCount="indefinite" />
+          <Anim attributeName="opacity" values="0.45;0.15;0.45" dur="2s" repeatCount="indefinite" />
         </rect>
         {/* Light beam */}
         <path d="M96 22 L80 -4 L120 -4 L104 22" fill="#fbbf24" opacity="0.06" />
@@ -811,5 +843,6 @@ export default function AstronautBear(props: { size?: number; class?: string; ac
         </g>
       </>}
     </svg>
+    </MotionContext.Provider>
   );
 }
