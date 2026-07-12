@@ -229,6 +229,66 @@ describe('ircx store', () => {
       expect(ircxState.pendingPropEntries).toEqual([]);
       expect(ircxState.channelProps['#general']).toBeUndefined();
     });
+
+    it('interleaved requestProps(A) → requestProps(B) → finishPropList(A) does not blank B', () => {
+      // A channel /prop is mid-flight when a nick /profile starts. A stale
+      // prop_end for the first target must not clobber the second request.
+      requestProps('#general');
+      addPropEntry({ target: '#general', key: 'TOPIC', value: 'Welcome home' });
+
+      // Second request retargets the shared collector before A's end arrives.
+      requestProps('alice');
+      addPropEntry({ target: 'alice', key: 'URL', value: 'https://alice.example' });
+
+      // Late prop_end for the FIRST target — must be a no-op.
+      finishPropList('#general');
+
+      expect(ircxState.channelProps['#general']).toBeUndefined();
+      expect(ircxState.pendingPropTarget).toBe('alice');
+      expect(ircxState.pendingPropEntries).toEqual([
+        { target: 'alice', key: 'URL', value: 'https://alice.example' },
+      ]);
+
+      // B's own end still folds correctly with its entries intact.
+      finishPropList('alice');
+
+      expect(ircxState.userProfiles['alice']).toEqual({
+        nick: 'alice',
+        url: 'https://alice.example',
+      });
+      expect(ircxState.pendingPropTarget).toBeNull();
+      expect(ircxState.pendingPropEntries).toEqual([]);
+    });
+
+    it('a stale finishPropList(A) never blanks A\'s existing good props', () => {
+      // A prior fold left good props for #general.
+      requestProps('#general');
+      addPropEntry({ target: '#general', key: 'TOPIC', value: 'Welcome home' });
+      finishPropList('#general');
+      expect(ircxState.channelProps['#general']).toEqual({ TOPIC: 'Welcome home' });
+
+      // A different request is now in flight; a late duplicate end for #general
+      // (its entries long gone) must leave the good props untouched.
+      requestProps('bob');
+      finishPropList('#general');
+
+      expect(ircxState.channelProps['#general']).toEqual({ TOPIC: 'Welcome home' });
+      expect(ircxState.pendingPropTarget).toBe('bob');
+    });
+
+    it('a duplicate finishPropList is a no-op after the request already committed', () => {
+      requestProps('#general');
+      addPropEntry({ target: '#general', key: 'TOPIC', value: 'Welcome home' });
+      finishPropList('#general');
+      expect(ircxState.channelProps['#general']).toEqual({ TOPIC: 'Welcome home' });
+
+      // Second end for the same target — pending slot is already cleared.
+      finishPropList('#general');
+
+      expect(ircxState.channelProps['#general']).toEqual({ TOPIC: 'Welcome home' });
+      expect(ircxState.pendingPropTarget).toBeNull();
+      expect(ircxState.pendingPropEntries).toEqual([]);
+    });
   });
 
   describe('ACCESS flow', () => {

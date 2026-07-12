@@ -167,15 +167,28 @@ export function addPropEntry(entry: PropEntry): void {
 
 /** Fold the pending PROP entries into channelProps or a user profile. */
 export function finishPropList(target: string): void {
+  // Interleave guard: the pending collector is a single shared slot, so a
+  // second requestProps() retargets it (wiping the first request's entries).
+  // If a DIFFERENT target is currently in flight, ignore this stale/late/
+  // duplicate end — folding it would blank the newer request's props and
+  // clobber its in-flight collection. A null pendingPropTarget means an
+  // unrequested server-pushed list (the 818/819 numeric path), which folds
+  // normally.
+  if (state.pendingPropTarget !== null && state.pendingPropTarget !== target) return;
+
   setState(produce((s) => {
     const entries = s.pendingPropEntries.filter((e) => e.target === target);
     const isChannel = target.startsWith('#') || target.startsWith('&');
 
     if (isChannel) {
-      const chanProps: Record<string, string> = {};
-      for (const e of entries) chanProps[e.key.toUpperCase()] = e.value;
-      s.channelProps[target] = chanProps;
-    } else {
+      // Never blank existing good props with an empty set (an end with no
+      // entries — e.g. a stale slot — must not overwrite a prior fold).
+      if (entries.length > 0 || !s.channelProps[target]) {
+        const chanProps: Record<string, string> = {};
+        for (const e of entries) chanProps[e.key.toUpperCase()] = e.value;
+        s.channelProps[target] = chanProps;
+      }
+    } else if (entries.length > 0 || !s.userProfiles[target]) {
       const profile: UserProfile = { nick: target };
       for (const e of entries) {
         const k = e.key.toUpperCase();
