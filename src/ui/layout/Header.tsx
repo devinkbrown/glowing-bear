@@ -89,7 +89,7 @@ export default function Header() {
       {/* Buffer name + topic */}
       <div ref={(el) => (topicRef = el)} class="flex-1 min-w-0 flex flex-col justify-center relative">
         <div class="flex items-center gap-1.5 min-w-0">
-          <h2 class="text-[15px] sm:text-[16px] font-black tracking-tight text-gray-50 truncate leading-tight">{bufName()}</h2>
+          <h2 class="text-[15px] sm:text-[16px] font-bold tracking-tight text-gray-50 truncate leading-tight">{bufName()}</h2>
           <Show when={serverName()}>
             <span class="hidden sm:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-white/[0.045] text-gray-500 border border-white/[0.06] shrink-0">
               {serverName()}
@@ -135,10 +135,24 @@ export default function Header() {
         <Show when={title()}>
           <button
             onClick={() => setTopicExpanded(!topicExpanded())}
-            class="mt-0.5 text-[11px] text-gray-600 sm:text-gray-500 truncate leading-tight max-w-full text-left hover:text-gray-300 transition-colors"
-            title={topicExpanded() ? 'Collapse topic' : 'Expand topic'}
+            class="group mt-0.5 flex items-center gap-1 max-w-full text-left text-[11px] font-normal leading-tight text-gray-600 sm:text-gray-500 transition-colors hover:text-gray-300 active:text-gray-400"
+            aria-expanded={topicExpanded()}
+            title={topicExpanded() ? 'Collapse topic' : 'Show full topic'}
           >
-            <span innerHTML={title()} />
+            <span class="truncate" innerHTML={title()} />
+            <svg
+              class="w-2.5 h-2.5 shrink-0 opacity-0 -translate-x-0.5 transition duration-200 ease-out group-hover:opacity-70 group-hover:translate-x-0 group-focus-visible:opacity-70 group-focus-visible:translate-x-0"
+              classList={{ 'rotate-180 !opacity-80 !translate-x-0': topicExpanded() }}
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 6l4 4 4-4" />
+            </svg>
           </button>
         </Show>
         <Show when={topicExpanded() && title()}>
