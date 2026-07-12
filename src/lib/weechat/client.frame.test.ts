@@ -260,7 +260,7 @@ afterEach(() => {
 // ── connection & authentication ──────────────────────────────────────────────
 
 describe('WeeRelayClient connection and authentication', () => {
-	it('opens a ws:// socket and sends init then a version info request', () => {
+	it('opens a ws:// socket and sends handshake first (no plaintext password)', () => {
 		client.connect();
 		const ws = FakeWebSocket.instances[0]!;
 		expect(client.state).toBe(ConnectionState.CONNECTING);
@@ -270,8 +270,12 @@ describe('WeeRelayClient connection and authentication', () => {
 		ws.open();
 
 		expect(client.state).toBe(ConnectionState.AUTHENTICATING);
-		expect(ws.sent[0]).toBe('init password=hunter2,compression=off\n');
-		expect(ws.sent[1]).toBe('(_version) info version\n');
+		// New auth flow is handshake-first: the plaintext password must NOT appear
+		// until/unless we fall back to legacy init (covered in client.handshake.test.ts).
+		expect(ws.sent[0]).toBe(
+			'handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
+		);
+		expect(ws.sent.join('')).not.toContain('password=hunter2');
 	});
 
 	it('fires authenticated with the server version from the _version reply', async () => {

@@ -11,14 +11,18 @@ import { parseIrcv3Tags } from '@/lib/irc-classic/tags';
 import { stripColors } from './strip-colors';
 import { WeeRelayParser } from './parser';
 import {
+	handshakeCmd,
 	hdataCmd,
 	infoCmd,
 	initCmd,
+	initHashCmd,
 	inputCmd,
 	nicklistCmd,
+	parseHandshakeReply,
 	pingCmd,
 	quitCmd,
 	syncCmd,
+	type HandshakeResult,
 } from './serializer';
 
 // ---------------------------------------------------------------------------
@@ -202,6 +206,17 @@ function itemToHotlist(item: { pointers: string[]; objects: Record<string, unkno
 const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30_000;
 
+// How long to wait for a `_handshake` reply before assuming the relay is too
+// old to speak `handshake` and falling back to the legacy plaintext `init`. The
+// reply requires no round trips server-side, so this only ever bounds the
+// one-time cost on relays that silently ignore the unknown command.
+const HANDSHAKE_TIMEOUT = 3000;
+
+// Consecutive mid-handshake closes before we conclude the relay cannot speak
+// `handshake` and fall back to legacy `init`. >1 so a single transient network
+// blip during the handshake window never permanently downgrades a modern relay.
+const HANDSHAKE_CLOSE_STRIKES = 2;
+
 function backoff(attempts: number): number {
 	return Math.min(RECONNECT_BASE * Math.pow(2, attempts), RECONNECT_MAX);
 }
@@ -210,6 +225,7 @@ function backoff(attempts: number): number {
 // Correlation IDs for requests we initiate
 // ---------------------------------------------------------------------------
 
+const ID_HANDSHAKE = '_handshake';
 const ID_VERSION = '_version';
 const ID_BUFFERS = '_buffers';
 const ID_HOTLIST = '_hotlist';
@@ -237,6 +253,25 @@ export class WeeRelayClient extends EventTarget {
 
 	private parser = new WeeRelayParser();
 	private cleanDisconnect = false;
+
+	// --- handshake / password_hash auth state ---
+	// Timer that fires the legacy fallback if no `_handshake` reply arrives.
+	private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
+	// True once an `init` (either hashed or legacy) has been sent this session —
+	// makes auth idempotent so a late reply and the timeout can never both fire.
+	private authStarted = false;
+	// Consecutive closes that happened mid-handshake (socket dropped after we
+	// sent `handshake` but before any reply/timeout). A single one is almost
+	// always a transient blip and must NOT downgrade a modern relay to plaintext;
+	// only a relay that *persistently* closes on the unknown command trips the
+	// fallback, after HANDSHAKE_CLOSE_STRIKES. A successful handshake reply resets
+	// this to 0. This avoids both a permanent-downgrade vector and an infinite
+	// handshake→close→reconnect loop.
+	private handshakeCloseStrikes = 0;
+	private handshakeUnsupported = false;
+	// Bumped on every connect() so an async hash that resolves after a reconnect
+	// can detect it belongs to a stale connection and drop its send.
+	private connectEpoch = 0;
 
 	// Track recently dispatched line IDs to catch protocol-level duplicates
 	private recentLineIds = new Set<string>();
@@ -268,6 +303,9 @@ export class WeeRelayClient extends EventTarget {
 		}
 
 		this.cleanDisconnect = false;
+		this.authStarted = false;
+		this.connectEpoch += 1;
+		this.cancelHandshakeTimer();
 		this.setState(ConnectionState.CONNECTING);
 
 		const scheme = this.settings.tls ? 'wss' : 'ws';
@@ -289,10 +327,7 @@ export class WeeRelayClient extends EventTarget {
 		ws.onopen = () => {
 			console.debug('[relay] WebSocket open →', url);
 			this.setState(ConnectionState.AUTHENTICATING);
-			// Send init then immediately ask for version — version response
-			// confirms the password was accepted.
-			this.send(initCmd(this.settings.password, this.settings.compression));
-			this.send(infoCmd(ID_VERSION, 'version'));
+			this.beginAuth();
 		};
 
 		ws.onmessage = (ev: MessageEvent) => {
@@ -311,6 +346,18 @@ export class WeeRelayClient extends EventTarget {
 			console.debug('[relay] WebSocket close', { code: ev.code, reason: ev.reason, wasClean: ev.wasClean });
 			const hadError = this._wsHadError;
 			this._wsHadError = false;
+			// If the socket closed while a handshake was still outstanding (we sent
+			// it but never authenticated), the relay likely rejected the unknown
+			// `handshake` command by closing. Remember that so the next connect
+			// skips straight to legacy `init` and we never loop-lock the user out.
+			if (this.handshakeTimer !== null && !this.authStarted) {
+				this.handshakeCloseStrikes += 1;
+				if (this.handshakeCloseStrikes >= HANDSHAKE_CLOSE_STRIKES) {
+					this.handshakeUnsupported = true;
+					console.debug('[relay] repeated close during handshake — legacy init on reconnect');
+				}
+			}
+			this.cancelHandshakeTimer();
 			this.ws = null;
 			this.resetAccumulator();
 			if (this.cleanDisconnect) {
@@ -348,6 +395,7 @@ export class WeeRelayClient extends EventTarget {
 	disconnect(clean = true): void {
 		this.cleanDisconnect = clean;
 		this.cancelReconnect();
+		this.cancelHandshakeTimer();
 		if (this.ws) {
 			if (clean) {
 				try { this.send(quitCmd()); } catch { /* already closing */ }
@@ -449,6 +497,111 @@ export class WeeRelayClient extends EventTarget {
 	}
 
 	// -----------------------------------------------------------------------
+	// Authentication: handshake / password_hash with legacy init fallback
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Start authentication after the socket opens. Prefer the `handshake` +
+	 * `password_hash` flow so the password is never sent in the clear; if the
+	 * relay is known not to support it (learned on a prior connect) go straight
+	 * to legacy `init`. Otherwise send `handshake` and arm a fallback timer.
+	 */
+	private beginAuth(): void {
+		if (this.handshakeUnsupported) {
+			this.startLegacyAuth();
+			return;
+		}
+		this.send(handshakeCmd(this.settings.compression));
+		this.cancelHandshakeTimer();
+		this.handshakeTimer = setTimeout(() => {
+			this.handshakeTimer = null;
+			// No `_handshake` reply — an older relay silently ignored it. Fall
+			// back to legacy plaintext init so existing users still connect.
+			this.startLegacyAuth();
+		}, HANDSHAKE_TIMEOUT);
+	}
+
+	/**
+	 * Handle the server's `_handshake` reply: derive the salted password hash and
+	 * authenticate with `init password_hash=…`. Falls back to legacy `init` if the
+	 * server agreed on no algorithm we support or the reply is malformed.
+	 */
+	private onHandshakeReply(objects: Array<{ type: string; value: unknown }>): void {
+		this.cancelHandshakeTimer();
+		if (this.authStarted) return; // a racing fallback already authenticated
+
+		let table: Map<unknown, unknown> | null = null;
+		for (const obj of objects) {
+			if (obj.type === 'htb' && obj.value instanceof Map) {
+				table = obj.value as Map<unknown, unknown>;
+				break;
+			}
+		}
+
+		let result: HandshakeResult | null = null;
+		if (table) {
+			try {
+				result = parseHandshakeReply(table);
+			} catch (err) {
+				console.debug('[relay] handshake reply parse failed:', err);
+				result = null;
+			}
+		}
+
+		if (!result) {
+			// Server named no hash algo we support (or the reply was malformed) —
+			// legacy init is the only remaining path.
+			this.startLegacyAuth();
+			return;
+		}
+
+		// A working handshake reply proves the relay speaks `handshake`; clear any
+		// prior mid-handshake close strikes so a later transient blip starts fresh.
+		this.handshakeCloseStrikes = 0;
+		// Claim auth synchronously before the async hash so the (already cancelled)
+		// timer path can never also fire.
+		this.authStarted = true;
+		void this.finishHashedAuth(this.connectEpoch, result);
+	}
+
+	private async finishHashedAuth(epoch: number, result: HandshakeResult): Promise<void> {
+		let initLine: string;
+		try {
+			initLine = await initHashCmd(this.settings.password, result);
+		} catch (err) {
+			// Hashing failed (e.g. Web Crypto unavailable). We already claimed auth,
+			// so force the legacy send directly rather than routing through the guard.
+			this.emitError(`Relay password hashing failed (${String(err)}); using legacy auth`);
+			if (epoch !== this.connectEpoch) return; // stale connection
+			this.send(initCmd(this.settings.password, this.settings.compression));
+			this.send(infoCmd(ID_VERSION, 'version'));
+			return;
+		}
+		// A reconnect during the await would compute this hash against the OLD
+		// server nonce; sending it onto the new socket (which issued its own
+		// handshake) would fail the salt/nonce check. Drop it if the connection
+		// generation moved.
+		if (epoch !== this.connectEpoch) return;
+		this.send(initLine);
+		this.send(infoCmd(ID_VERSION, 'version'));
+	}
+
+	/** Legacy plaintext-password auth. Idempotent via `authStarted`. */
+	private startLegacyAuth(): void {
+		if (this.authStarted) return;
+		this.authStarted = true;
+		this.send(initCmd(this.settings.password, this.settings.compression));
+		this.send(infoCmd(ID_VERSION, 'version'));
+	}
+
+	private cancelHandshakeTimer(): void {
+		if (this.handshakeTimer !== null) {
+			clearTimeout(this.handshakeTimer);
+			this.handshakeTimer = null;
+		}
+	}
+
+	// -----------------------------------------------------------------------
 	// Binary frame accumulation
 	// -----------------------------------------------------------------------
 
@@ -537,6 +690,10 @@ export class WeeRelayClient extends EventTarget {
 
 	private handleMessage(msg: { id: string; objects: Array<{ type: string; value: unknown }> }): void {
 		switch (msg.id) {
+			case ID_HANDSHAKE:
+				this.onHandshakeReply(msg.objects);
+				return;
+
 			case ID_VERSION:
 				for (const obj of msg.objects) {
 					if (obj.type === 'inf') {
