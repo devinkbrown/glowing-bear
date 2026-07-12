@@ -8,7 +8,7 @@
 //   frame = u32 total length (BE) | u8 compression=0 | str id | objects...
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WeeRelayClient } from './client';
-import type { BuffersLoadedEvent } from './client';
+import type { BuffersLoadedEvent, NickAddedEvent, NickRemovedEvent } from './client';
 import { ConnectionState, type RelaySettings } from './types';
 
 const NULL_STRING = 0xffffffff;
@@ -106,6 +106,50 @@ function buffersFrame(): ArrayBuffer {
 		.str('Welcome to #weechat')
 		.typ('str').typ('str').u32(1).str('channel').str('#weechat');
 	return frame('_buffers', body);
+}
+
+// Field spec for a `_nicklist_diff` hda item. `_diff`, `group` and `visible`
+// are all WeeChat `chr` fields — the relay serializes each as a single Int8
+// *char code* (parser.ts readInt8), NOT an ASCII string. `_diff` in particular
+// carries '+'/'-'/'*' as codes 43/45/42, which is exactly the byte the client
+// must normalize before comparing.
+const NICKLIST_DIFF_KEYS =
+	'_diff:chr,group:chr,visible:chr,level:int,name:str,color:str,prefix:str,prefix_color:str';
+
+interface NickDiffEntry {
+	bufPtr: string; // pointer hex WITHOUT the 0x prefix, e.g. 'bb22'
+	nickPtr: string;
+	diff: '+' | '-' | '*';
+	name: string;
+	prefix?: string;
+}
+
+/**
+ * `_nicklist_diff` hda reply. hpath is `buffer/nicklist_item`, so each item
+ * carries two pointers ([buffer, nick]); routeNicklistDiff keys on pointers[0]
+ * and itemToNick ids the nick off the last pointer. The leading `_diff` chr is
+ * emitted as a raw byte (u8) so the decode path sees the real Int8 char code.
+ */
+function nicklistDiffFrame(entries: NickDiffEntry[]): ArrayBuffer {
+	const body = new BinWriter()
+		.typ('hda')
+		.str('buffer/nicklist_item')
+		.str(NICKLIST_DIFF_KEYS)
+		.u32(entries.length);
+	for (const e of entries) {
+		body
+			.short(e.bufPtr)
+			.short(e.nickPtr)
+			.u8(e.diff.charCodeAt(0)) // _diff chr — the byte under test
+			.u8(0) // group chr (0 = a real nick, not a group)
+			.u8(1) // visible chr
+			.u32(0) // level int
+			.str(e.name)
+			.str('') // color
+			.str(e.prefix ?? '') // prefix
+			.str(''); // prefix_color
+	}
+	return frame('_nicklist_diff', body);
 }
 
 function concatBuffers(...parts: ArrayBuffer[]): ArrayBuffer {
@@ -328,6 +372,71 @@ describe('WeeRelayClient frame accumulation', () => {
 		await flushAsync();
 
 		expect(errors).toHaveLength(0);
+	});
+});
+
+// ── nicklist diff (chr _diff decode) ─────────────────────────────────────────
+
+describe('WeeRelayClient nicklist diff decoding', () => {
+	it('applies a removal (_diff="-", char code 45) to a nick that was added', async () => {
+		const ws = connectOpen();
+		const removed = collectEvents<NickRemovedEvent>(client, 'nickRemoved');
+
+		// First add the nick so there is something to remove.
+		ws.message(
+			nicklistDiffFrame([{ bufPtr: 'bb22', nickPtr: 'cc33', diff: '+', name: 'alice' }]),
+		);
+		await flushAsync();
+		expect(client.nicks.get('0xbb22')?.map((n) => n.name)).toEqual(['alice']);
+
+		// Now remove it — the relay sends `_diff` as the raw byte 45, not '-'.
+		ws.message(
+			nicklistDiffFrame([{ bufPtr: 'bb22', nickPtr: 'cc33', diff: '-', name: 'alice' }]),
+		);
+		await flushAsync();
+
+		expect(removed).toHaveLength(1);
+		expect(removed[0]!.nickId).toBe('0xcc33');
+		// The nick is actually gone from the cache (the shipped bug left it behind).
+		expect(client.nicks.get('0xbb22')?.some((n) => n.name === 'alice')).toBe(false);
+	});
+
+	it('applies an add (_diff="+", char code 43) to the nick cache', async () => {
+		const ws = connectOpen();
+		const added = collectEvents<NickAddedEvent>(client, 'nickAdded');
+
+		ws.message(
+			nicklistDiffFrame([{ bufPtr: 'bb22', nickPtr: 'cc33', diff: '+', name: 'bob' }]),
+		);
+		await flushAsync();
+
+		expect(added).toHaveLength(1);
+		expect(added[0]!.nick.name).toBe('bob');
+		expect(client.nicks.get('0xbb22')?.map((n) => n.name)).toEqual(['bob']);
+	});
+
+	it('applies an in-place update (_diff="*", char code 42) without duplicating', async () => {
+		const ws = connectOpen();
+
+		ws.message(
+			nicklistDiffFrame([
+				{ bufPtr: 'bb22', nickPtr: 'cc33', diff: '+', name: 'carol', prefix: ' ' },
+			]),
+		);
+		await flushAsync();
+		expect(client.nicks.get('0xbb22')).toHaveLength(1);
+
+		// A '*' change re-sends the nick with a new prefix (e.g. it gained op).
+		ws.message(
+			nicklistDiffFrame([
+				{ bufPtr: 'bb22', nickPtr: 'cc33', diff: '*', name: 'carol', prefix: '@' },
+			]),
+		);
+		await flushAsync();
+
+		const list = client.nicks.get('0xbb22');
+		expect(list).toHaveLength(1); // updated in place, not appended
+		expect(list?.[0]!.prefix).toBe('@');
 	});
 });
 
