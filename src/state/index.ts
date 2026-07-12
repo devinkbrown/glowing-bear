@@ -10,6 +10,7 @@ export * from './ircx';
 export * from './completion';
 export * from './ui';
 export * from './bridge';
+export * from './drafts';
 
 // Media exports are re-exported by name: `toggleMute()` (media) collides with
 // buffers' `toggleMute(pointer)`, so the facade aliases it to `toggleMicMute`.

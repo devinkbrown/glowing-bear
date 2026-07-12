@@ -6,6 +6,12 @@ import { createEffect, createSignal, onCleanup, untrack, Show } from 'solid-js';
 import {
   buffersState,
   completionState,
+  draftsState,
+  getDraft,
+  setDraft,
+  clearDraft,
+  pushHistory,
+  flushDrafts,
   complete,
   cycleCompletion,
   resetCompletion,
@@ -20,7 +26,6 @@ import GifPicker from './GifPicker';
 
 const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 160;
-const HISTORY_LIMIT = 100;
 const SUBMIT_DEBOUNCE_MS = 300;
 const TYPING_ACTIVE_THROTTLE_MS = 3000;
 const TYPING_PAUSE_DELAY_MS = 5000;
@@ -58,7 +63,6 @@ function e2eeDmsEnabled(): boolean {
 
 export default function InputBar() {
   const [text, setText] = createSignal('');
-  const [history, setHistory] = createSignal<string[]>([]);
   const [historyIdx, setHistoryIdx] = createSignal(-1);
   const [showGif, setShowGif] = createSignal(false);
   const [uploading, setUploading] = createSignal(false);
@@ -70,8 +74,6 @@ export default function InputBar() {
   let fileEl: HTMLInputElement | undefined;
   let wrapperEl: HTMLDivElement | undefined;
 
-  /** Per-buffer drafts, keyed by buffer pointer (in-memory, non-reactive). */
-  const drafts: Record<string, string> = {};
   let lastSubmitTime = 0;
   let gifDismissedAt = 0;
 
@@ -81,6 +83,15 @@ export default function InputBar() {
     return ptr ? buffersState.buffers[ptr] : undefined;
   };
   const hasText = () => text().trim().length > 0;
+
+  /**
+   * Stable per-buffer draft key. Drafts persist by buffer NAME (not the WeeChat
+   * pointer, which changes across reconnect/reload) so an unsent draft survives
+   * a reload — matching the db-* pin/mute persistence convention.
+   */
+  const draftKeyFor = (entry: BufferEntry | undefined): string | null =>
+    entry ? (entry.buffer.fullName || entry.buffer.name) : null;
+  const activeDraftKey = (): string | null => draftKeyFor(activeEntry());
 
   // -------------------------------------------------------------------------
   // Typing notifications (bridge no-ops when it is off)
@@ -127,28 +138,41 @@ export default function InputBar() {
 
   onCleanup(() => stopTyping('done'));
 
+  // Flush any debounced draft/history writes before the tab is hidden or torn
+  // down, so text typed within the debounce window is not lost on reload.
+  if (typeof window !== 'undefined') {
+    const flushOnHide = () => flushDrafts();
+    window.addEventListener('pagehide', flushOnHide);
+    document.addEventListener('visibilitychange', flushOnHide);
+    onCleanup(() => {
+      window.removeEventListener('pagehide', flushOnHide);
+      document.removeEventListener('visibilitychange', flushOnHide);
+    });
+  }
+
   // -------------------------------------------------------------------------
   // Draft persistence across buffer switches
   // -------------------------------------------------------------------------
 
   let prevBuffer: string | null = null;
+  let prevKey: string | null = null;
   createEffect(() => {
     const active = buffersState.activeBuffer;
     if (active === prevBuffer) return;
     untrack(() => {
       if (prevBuffer) {
-        const current = text();
-        if (current) drafts[prevBuffer] = current;
-        else delete drafts[prevBuffer];
+        // Persist the outgoing buffer's unsent text (empty clears it).
+        if (prevKey) setDraft(prevKey, text());
         stopTyping('done');
       }
+      const key = active ? draftKeyFor(buffersState.buffers[active]) : null;
       if (active) {
-        setText(drafts[active] ?? '');
-        delete drafts[active];
+        setText(key ? getDraft(key) : '');
         setHistoryIdx(-1);
         resetCompletion();
         inputEl?.focus();
       }
+      prevKey = key;
     });
     prevBuffer = active;
   });
@@ -205,9 +229,11 @@ export default function InputBar() {
     if (now - lastSubmitTime < SUBMIT_DEBOUNCE_MS) return;
     lastSubmitTime = now;
     void deliver(trimmed, ptr);
-    setHistory((prev) => [trimmed, ...prev].slice(0, HISTORY_LIMIT));
+    pushHistory(trimmed);
     setHistoryIdx(-1);
     setText('');
+    const key = activeDraftKey();
+    if (key) clearDraft(key);
     resetCompletion();
     stopTyping('done');
   };
@@ -288,7 +314,7 @@ export default function InputBar() {
 
     if (e.key === 'ArrowUp' && !text().includes('\n')) {
       e.preventDefault();
-      const entries = history();
+      const entries = draftsState.history;
       if (entries.length > 0) {
         const newIdx = Math.min(historyIdx() + 1, entries.length - 1);
         const item = entries[newIdx];
@@ -303,7 +329,7 @@ export default function InputBar() {
     if (e.key === 'ArrowDown' && !text().includes('\n')) {
       e.preventDefault();
       if (historyIdx() > 0) {
-        const item = history()[historyIdx() - 1];
+        const item = draftsState.history[historyIdx() - 1];
         if (item !== undefined) {
           setHistoryIdx(historyIdx() - 1);
           setText(item);
@@ -437,6 +463,10 @@ export default function InputBar() {
               const value = e.currentTarget.value;
               setText(value);
               noteTyping(value);
+              // Persist the active draft (debounced in the store) so mid-typing
+              // text survives a reload without a buffer switch.
+              const key = activeDraftKey();
+              if (key) setDraft(key, value);
             }}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
