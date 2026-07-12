@@ -37,9 +37,24 @@ export interface IRCClientOptions {
   onDisconnected?: (reason: string) => void;
   onError?: (err: string) => void;
   onNickChanged?: (newNick: string) => void;
+  /**
+   * Called for an inbound IRCv3 `draft/read-marker` MARKREAD. `timestamp` is the
+   * validated server-time string, or null when the server reports no marker
+   * (`MARKREAD <target> *`) or a malformed one. The bridge folds this into the
+   * threads store's per-buffer read-marker position.
+   */
+  onReadMarker?: (target: string, timestamp: string | null) => void;
 }
 
 const RECONNECT_BASE = 2000;
+
+/**
+ * IRCv3 `draft/read-marker` timestamp: `YYYY-MM-DDThh:mm:ss[.fff]Z`, always UTC.
+ * Validated on the send path so a crafted/malformed marker fails closed rather
+ * than emitting a bad MARKREAD. (formatIRCLine additionally strips any CR/LF, so
+ * this is defence-in-depth against injection, not the only guard.)
+ */
+const MARKREAD_TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
 
 /**
  * Length-independent, data-independent string compare for SCRAM server-signature
@@ -336,6 +351,33 @@ export class IRCClient {
 
   whois(nick: string) {
     this.sendRaw('WHOIS', nick);
+  }
+
+  /**
+   * Send an IRCv3 `draft/read-marker` MARKREAD for `target` at `isoTimestamp`
+   * (server-time `YYYY-MM-DDThh:mm:ss[.fff]Z`). Fails closed — returns false and
+   * sends nothing — unless the cap was negotiated and both target and timestamp
+   * are well-formed, so we never emit an unknown command, a malformed marker, or
+   * (via a CR/LF-bearing target) a smuggled second command.
+   */
+  setReadMarker(target: string, isoTimestamp: string): boolean {
+    if (!this.negotiatedCaps.has('draft/read-marker')) return false;
+    if (!target || /[\r\n\x00 ]/.test(target)) return false;
+    if (!MARKREAD_TS_RE.test(isoTimestamp)) return false;
+    this.sendRaw('MARKREAD', target, `timestamp=${isoTimestamp}`);
+    return true;
+  }
+
+  /**
+   * Query the server's current read marker for `target` (draft/read-marker).
+   * The reply arrives as an inbound MARKREAD (see onReadMarker). Fails closed
+   * when the cap is not negotiated or the target is malformed.
+   */
+  queryReadMarker(target: string): boolean {
+    if (!this.negotiatedCaps.has('draft/read-marker')) return false;
+    if (!target || /[\r\n\x00 ]/.test(target)) return false;
+    this.sendRaw('MARKREAD', target);
+    return true;
   }
 
   /**
@@ -703,6 +745,22 @@ export class IRCClient {
         this._schedulePing();
         break;
 
+      case 'MARKREAD': {
+        // IRCv3 draft/read-marker:
+        //   :server MARKREAD <target> timestamp=<server-time>   (marker set)
+        //   :server MARKREAD <target> *                          (no marker)
+        // Surface the parsed marker; the store still receives the raw message
+        // below via onMessage. A malformed timestamp is reported as null (no
+        // marker) rather than trusted.
+        const target = msg.params[0];
+        if (target) {
+          const raw = msg.params[1] ?? '';
+          const ts = raw.startsWith('timestamp=') ? raw.slice('timestamp='.length) : '';
+          this.opts.onReadMarker?.(target, MARKREAD_TS_RE.test(ts) ? ts : null);
+        }
+        break;
+      }
+
       case 'ERROR':
         this.opts.onError?.(msg.params[0] ?? 'Server error');
         break;
@@ -796,6 +854,10 @@ export class IRCClient {
       if (cap === 'draft/file-upload') return false;
       // bot: Ocean is a human client, not a bot.
       if (cap === 'bot') return false;
+      // draft/read-marker: requested when offered — enables MARKREAD send/receive
+      // so the read position (see setReadMarker/onReadMarker) syncs across this
+      // account's clients. Only sent post-negotiation; harmless when unacked.
+      if (cap === 'draft/read-marker') return true;
 
       // orochi/session-sync: server-driven session reclaim. When ACKed, the
       // server auto-pushes JOIN + NAMES/topic + CHATHISTORY replay for every

@@ -8,6 +8,7 @@ import { render, cleanup } from '@solidjs/testing-library';
 import type { WeeChatLine } from '@/types';
 import { clearBuffers, clearIrcx, markBot, resetSettings, updateSettings } from '@/state';
 import { decryptedFor } from '@/state/bridge';
+import { threadsState, recordLinePreview, resetThreads, pendingReplyFor } from '@/state/threads';
 import { nickColor } from '@/lib/nickcolor';
 import MessageLine from './MessageLine';
 
@@ -61,6 +62,7 @@ beforeEach(() => {
   resetSettings();
   clearBuffers();
   clearIrcx();
+  resetThreads();
 });
 
 afterEach(() => {
@@ -277,5 +279,59 @@ describe('MessageLine', () => {
     expect(decryptedForMock).toHaveBeenCalledWith('mid-1', 'TSUMUGI1 xyz');
     expect(container.textContent).toContain('encrypted message');
     expect(container.textContent).not.toContain('TSUMUGI1');
+  });
+
+  // ── Reply affordance (P3.5) ──────────────────────────────────────────────
+
+  it('sets the buffer pending-reply target when the reply control is clicked', () => {
+    const line = makeLine({ nick: 'alice', message: 'parent text', msgid: 'p1' });
+    const { container } = renderLine(line);
+
+    const replyBtn = container.querySelector('.reply-action') as HTMLButtonElement | null;
+    expect(replyBtn).not.toBeNull();
+    expect(replyBtn!.getAttribute('aria-label')).toBe('Reply to alice');
+
+    replyBtn!.click();
+    const target = pendingReplyFor('0xb');
+    expect(target).toEqual({ msgid: 'p1', nick: 'alice', preview: 'parent text' });
+  });
+
+  it('offers no reply control on a line without a msgid', () => {
+    const { container } = renderLine(makeLine({ msgid: undefined }));
+    expect(container.querySelector('.reply-action')).toBeNull();
+  });
+
+  it('shows a "replying to" indicator resolving the parent preview', () => {
+    recordLinePreview('parent-1', 'the original message');
+    const { container } = renderLine(makeLine({ message: 'a reply', msgid: 'child-1', replyTo: 'parent-1' }));
+
+    const quote = container.querySelector('.reply-quote') as HTMLButtonElement | null;
+    expect(quote).not.toBeNull();
+    expect(quote!.getAttribute('aria-label')).toBe('Jump to replied message');
+    expect(quote!.textContent).toContain('the original message');
+  });
+
+  it('falls back to a generic label when the parent preview is unknown', () => {
+    const { container } = renderLine(makeLine({ msgid: 'child-2', replyTo: 'unseen' }));
+    const quote = container.querySelector('.reply-quote') as HTMLButtonElement;
+    expect(quote.textContent).toContain('replying to a message');
+  });
+
+  it('renders a reply preview as inert text, never as markup', () => {
+    // A hostile parent body must never become live DOM in the indicator.
+    recordLinePreview('parent-x', '<img src=x onerror=alert(1)>');
+    const { container } = renderLine(makeLine({ msgid: 'child-x', replyTo: 'parent-x' }));
+
+    const quote = container.querySelector('.reply-quote') as HTMLElement;
+    expect(quote.querySelector('img')).toBeNull();
+    expect(quote.textContent).toContain('<img src=x onerror=alert(1)>');
+  });
+
+  it('captures a sanitized preview into the store when replying', () => {
+    const { container } = renderLine(makeLine({ nick: 'bob', message: 'line one\nline two', msgid: 'm9' }));
+    (container.querySelector('.reply-action') as HTMLButtonElement).click();
+    // stripFormatting + threads sanitize collapse the newline to a space.
+    expect(threadsState.replyPreview['m9']).toBe('line one line two');
+    expect(pendingReplyFor('0xb')?.preview).toBe('line one line two');
   });
 });

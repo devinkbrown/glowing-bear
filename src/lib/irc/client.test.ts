@@ -459,3 +459,84 @@ describe('reconnect ownership', () => {
     expect(disconnected).toEqual(['active close']);
   });
 });
+
+// ── draft/read-marker (MARKREAD) ───────────────────────────────────────────────
+
+describe('draft/read-marker', () => {
+  const VALID_TS = '2026-07-12T09:30:15.500Z';
+
+  /** Bring a client up with draft/read-marker negotiated (ACKed). */
+  function negotiateReadMarker() {
+    const c = makeClient({ password: undefined });
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+    ws.message(':s CAP * LS :draft/read-marker message-tags');
+    ws.message(':s CAP * ACK :draft/read-marker message-tags');
+    ws.sent.length = 0; // drop negotiation noise
+    return { c, ws };
+  }
+
+  it('requests draft/read-marker when the server advertises it', () => {
+    const c = makeClient({ password: undefined });
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+    ws.message(':s CAP * LS :draft/read-marker message-tags');
+    const req = ws.sent.find((l) => l.startsWith('CAP REQ '));
+    expect(req).toContain('draft/read-marker');
+  });
+
+  it('parses an inbound MARKREAD with a timestamp', () => {
+    const markers: Array<[string, string | null]> = [];
+    const c = makeClient({ password: undefined, onReadMarker: (t, ts) => markers.push([t, ts]) });
+    c.connect();
+    lastSocket().open();
+    lastSocket().message(`:s MARKREAD #chan timestamp=${VALID_TS}`);
+    expect(markers).toEqual([['#chan', VALID_TS]]);
+  });
+
+  it('reports no marker for MARKREAD <target> * or a malformed timestamp', () => {
+    const markers: Array<[string, string | null]> = [];
+    const c = makeClient({ password: undefined, onReadMarker: (t, ts) => markers.push([t, ts]) });
+    c.connect();
+    lastSocket().open();
+    lastSocket().message(':s MARKREAD #chan *');
+    lastSocket().message(':s MARKREAD #dm timestamp=not-a-timestamp');
+    expect(markers).toEqual([['#chan', null], ['#dm', null]]);
+  });
+
+  it('sends MARKREAD only after the cap is negotiated', () => {
+    const c = makeClient({ password: undefined });
+    c.connect();
+    lastSocket().open();
+    // Cap not yet ACKed — must fail closed and send nothing.
+    expect(c.setReadMarker('#chan', VALID_TS)).toBe(false);
+    expect(lastSocket().sent.some((l) => l.startsWith('MARKREAD'))).toBe(false);
+  });
+
+  it('sends a well-formed MARKREAD once negotiated', () => {
+    const { c, ws } = negotiateReadMarker();
+    expect(c.setReadMarker('#chan', VALID_TS)).toBe(true);
+    expect(ws.sent).toContain(`MARKREAD #chan timestamp=${VALID_TS}\r\n`);
+  });
+
+  it('rejects a malformed timestamp on send (fail closed)', () => {
+    const { c, ws } = negotiateReadMarker();
+    expect(c.setReadMarker('#chan', '2026-07-12 09:30:15')).toBe(false);
+    expect(ws.sent.some((l) => l.startsWith('MARKREAD'))).toBe(false);
+  });
+
+  it('rejects an injection-bearing target and sends nothing', () => {
+    const { c, ws } = negotiateReadMarker();
+    expect(c.setReadMarker('#chan\r\nJOIN #evil', VALID_TS)).toBe(false);
+    expect(ws.sent.some((l) => l.includes('JOIN #evil'))).toBe(false);
+    expect(ws.sent.some((l) => l.startsWith('MARKREAD'))).toBe(false);
+  });
+
+  it('queries the current marker with a bare MARKREAD', () => {
+    const { c, ws } = negotiateReadMarker();
+    expect(c.queryReadMarker('#chan')).toBe(true);
+    expect(ws.sent).toContain('MARKREAD #chan\r\n');
+  });
+});

@@ -23,6 +23,7 @@ import { stripColors } from '@/lib/weechat/strip-colors';
 import { parseEventFeedText, type ParsedEventFeed } from '@/lib/ircx/parser';
 import { settings, sendInput, isBot } from '@/state';
 import { sendReactionTag, decryptedFor } from '@/state/bridge';
+import { setPendingReply, recordLinePreview, replyPreviewFor, requestScrollToMessage } from '@/state/threads';
 
 export interface MessageLineProps {
   line: WeeChatLine;
@@ -73,6 +74,8 @@ interface ContextMenuProps {
   urls: string[];
   canReact: boolean;
   onReact: (emoji: string) => void;
+  canReply: boolean;
+  onReply: () => void;
   onClose: () => void;
 }
 
@@ -101,6 +104,20 @@ function MessageContextMenu(props: ContextMenuProps) {
             </div>
           </Show>
           <div class="py-1">
+            <Show when={props.canReply}>
+              <button
+                onClick={() => {
+                  props.onReply();
+                  props.onClose();
+                }}
+                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+              >
+                <svg class="w-3.5 h-3.5 shrink-0 -scale-x-100" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 4L4 8l4 4M4 8h6a4 4 0 014 4" />
+                </svg>
+                Reply
+              </button>
+            </Show>
             <button
               onClick={() => {
                 navigator.clipboard.writeText(props.text).catch(() => undefined);
@@ -262,6 +279,49 @@ function EventFeedLine(props: { event: ParsedEventFeed; timestamp: string; rowHa
   );
 }
 
+// ── Reply affordances ────────────────────────────────────────────────────────
+
+// Compact "replying to …" indicator shown above a message that carries a
+// +draft/reply tag (line.replyTo = parent msgid). The preview is a plain string
+// from the threads store, rendered as a text node (auto-escaped) — never
+// innerHTML. Activating it asks the message list to scroll to the parent.
+function ReplyingToIndicator(props: { parentMsgid: string }) {
+  const preview = () => replyPreviewFor(props.parentMsgid);
+  return (
+    <button
+      type="button"
+      class="reply-quote mb-0.5 flex max-w-full items-center gap-1 truncate text-left text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+      aria-label="Jump to replied message"
+      onClick={() => requestScrollToMessage(props.parentMsgid)}
+    >
+      <svg class="w-3 h-3 shrink-0 -scale-x-100 opacity-70" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 4L4 8l4 4M4 8h6a4 4 0 014 4" />
+      </svg>
+      <span class="truncate">{preview() ?? 'replying to a message'}</span>
+    </button>
+  );
+}
+
+// Hover/focus "reply" control appended to a message body. Hidden until the row
+// is hovered or the control is focused (keyboard-reachable), then sets the
+// buffer's pending reply target.
+function ReplyAction(props: { nick: string; canReply: boolean; onReply: () => void }) {
+  return (
+    <Show when={props.canReply}>
+      <button
+        type="button"
+        class="reply-action ml-1.5 inline-flex shrink-0 items-center justify-center rounded p-0.5 align-middle text-gray-500 opacity-0 transition-opacity hover:text-gray-200 focus-visible:opacity-100 group-hover:opacity-100"
+        aria-label={`Reply to ${props.nick || 'message'}`}
+        onClick={() => props.onReply()}
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 4L4 8l4 4M4 8h6a4 4 0 014 4" />
+        </svg>
+      </button>
+    </Show>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function MessageLine(props: MessageLineProps) {
@@ -316,6 +376,19 @@ export default function MessageLine(props: MessageLineProps) {
           : props.line.isMode
             ? 'text-sky-400/65'
             : 'text-purple-400/65'; // topic
+
+  // Set this buffer's pending reply target to this line, capturing a sanitized
+  // plain-text preview (stripFormatting → threads store sanitizes further). The
+  // preview is also recorded by msgid so a reply that quotes this line can
+  // resolve its "replying to …" text.
+  const startReply = () => {
+    const msgid = props.line.msgid;
+    if (!msgid) return;
+    const preview = plainText();
+    recordLinePreview(msgid, preview);
+    setPendingReply(props.bufferPtr, { msgid, nick: props.line.nick ?? '', preview });
+  };
+  const canReply = () => !!props.line.msgid && props.bufferKind !== 'raw' && props.bufferKind !== 'fset' && props.bufferKind !== 'plugin';
 
   // ── Context menu triggers (right-click on desktop, long-press on touch) ──
   const openMenu = (x: number, y: number) => setMenu({ x, y });
@@ -385,7 +458,7 @@ export default function MessageLine(props: MessageLineProps) {
         fallback={
           /* ── Regular message, desktop column layout ── */
           <div
-            class={`msg-row flex ${settings.compactMode || props.grouped ? '' : 'msg-gap'} ${props.line.highlight ? 'msg-highlight' : ''}`}
+            class={`msg-row group flex ${settings.compactMode || props.grouped ? '' : 'msg-gap'} ${props.line.highlight ? 'msg-highlight' : ''}`}
             {...rowHandlers}
           >
             <Show when={timestamp()}>
@@ -398,7 +471,9 @@ export default function MessageLine(props: MessageLineProps) {
               </span>
             </Show>
             <div class="msg-body">
+              <Show when={props.line.replyTo}>{(pid) => <ReplyingToIndicator parentMsgid={pid()} />}</Show>
               <span class="irc-msg-text text-[13px] text-gray-200" innerHTML={html()} onClick={onBodyClick} />
+              <ReplyAction nick={nick()} canReply={canReply()} onReply={startReply} />
             </div>
           </div>
         }
@@ -475,7 +550,7 @@ export default function MessageLine(props: MessageLineProps) {
         <Match when={!props.isDesktop}>
           {/* ── Regular message, mobile stacked layout ── */}
           <div
-            class={`${settings.compactMode || props.grouped ? '' : 'mt-2.5'} ${props.line.highlight ? 'msg-highlight' : ''}`}
+            class={`group ${settings.compactMode || props.grouped ? '' : 'mt-2.5'} ${props.line.highlight ? 'msg-highlight' : ''}`}
             {...rowHandlers}
           >
             <Show when={!props.grouped}>
@@ -493,7 +568,9 @@ export default function MessageLine(props: MessageLineProps) {
               </div>
             </Show>
             <div class="px-3 pb-0.5">
+              <Show when={props.line.replyTo}>{(pid) => <ReplyingToIndicator parentMsgid={pid()} />}</Show>
               <span class="irc-msg-text text-[14px] leading-[1.55] text-gray-200" innerHTML={html()} onClick={onBodyClick} />
+              <ReplyAction nick={nick()} canReply={canReply()} onReply={startReply} />
             </div>
           </div>
         </Match>
@@ -512,6 +589,8 @@ export default function MessageLine(props: MessageLineProps) {
               if (msgid) sendReactionTag(props.bufferPtr, msgid, emoji);
               setMenu(null);
             }}
+            canReply={canReply()}
+            onReply={startReply}
             onClose={() => setMenu(null)}
           />
         )}
