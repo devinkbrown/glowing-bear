@@ -273,6 +273,89 @@ describe('formatText — hostile scheme / attribute safety', () => {
   });
 });
 
+describe('formatText — hostile markup breakout (topic + message path)', () => {
+  // The topic sink (Header.tsx innerHTML) and the message sink (MessageLine.tsx)
+  // are both fed by formatText, so proving these inert here covers both.
+
+  it('renders a </span>-prefixed <img onerror> payload as inert escaped text', () => {
+    const out = formatText('</span><img src=x onerror=alert(document.cookie)>');
+    // No live tag survives — the parser only ever sees escaped entities.
+    expect(out).not.toContain('<img');
+    expect(out).not.toContain('</span>');
+    expect(out).toContain('&lt;/span&gt;&lt;img src=x onerror=alert(document.cookie)&gt;');
+  });
+
+  it('keeps an <img onerror> payload inert even mid IRC-colour run', () => {
+    // A closing colour code cannot let the injected markup escape the span.
+    const out = formatText('\x034red</span><img onerror=alert(1)>\x03 done');
+    expect(out).not.toContain('<img');
+    expect(out).toContain('&lt;img onerror=alert(1)&gt;');
+    // The only real tags are the formatter's own colour span, opened and closed.
+    expect(out).toContain('<span class="irc-fg-4">');
+    expect((out.match(/<span/g) ?? []).length).toBe((out.match(/<\/span>/g) ?? []).length);
+  });
+
+  it('cannot break out of the href attribute via a quote in the URL tail', () => {
+    // URL_RE_SRC excludes '"', so the quote terminates the URL; the tail is
+    // escaped text and can never open a new attribute on the anchor.
+    const out = formatText('https://x.com/a" onmouseover="alert(1)');
+    expect(out).toContain('href="https://x.com/a"');
+    expect(out).not.toContain(' onmouseover="');
+    expect(out).toContain('&quot; onmouseover=&quot;alert(1)');
+  });
+
+  it('cannot break out of the data-channel attribute via a crafted ref tail', () => {
+    const out = formatText('##chan"><script>alert(1)</script>');
+    expect(out).not.toContain('<script');
+    expect(out).toContain('&lt;script&gt;');
+    // data-channel value is confined to the restricted channel charset.
+    expect(out).toContain('data-channel="##chan"');
+    expect(out).not.toContain('"><script');
+  });
+
+  it('leaves unbalanced / truncated mIRC colour codes safe and span-balanced', () => {
+    for (const payload of [
+      '\x03',              // bare colour reset, no digits
+      '\x0399,99tail',     // out-of-range fg/bg
+      '\x04ff',            // truncated hex (needs 6 digits)
+      '\x04ff0000,zz',     // valid fg, invalid bg
+      '\x1928(',           // WeeChat option colour, unterminated
+      '\x1b[',             // dangling ANSI CSI
+      '\x02\x1d\x1f',      // three toggles, never closed by the author
+    ]) {
+      const out = formatText(payload);
+      expect(out).not.toContain('<img');
+      expect(out).not.toContain('<script');
+      // Every span the formatter opens is closed — no dangling markup escapes.
+      expect((out.match(/<span/g) ?? []).length).toBe((out.match(/<\/span>/g) ?? []).length);
+    }
+  });
+
+  it('never emits a raw user string into an inline style or dangerous scheme', () => {
+    // An attacker-supplied "colour" that is not validated hex/palette must not
+    // reach a style attribute (the literal text may survive, but only inert).
+    const out = formatText('color: red; background: url(javascript:alert(1))');
+    expect(out).not.toContain('style="');
+    expect(out).not.toContain('href="javascript:');
+    // The dangerous scheme survives only as inert, escaped text — never a tag.
+    expect(out).not.toContain('<a ');
+  });
+
+  it('emits only a validated hex into the style attribute on the colour path', () => {
+    // Drive the ONE style-emitting path (openSpan from a \x04 hex colour) with a
+    // payload whose tail tries to smuggle a second CSS declaration. parseHexColor
+    // consumes exactly 6 hex digits, so the style value is a lone validated hex
+    // and the injection tail falls through to inert escaped text.
+    const out = formatText('\x04ff0000;background:url(x)"onload="alert(1) tail');
+    // The style attribute closes immediately after the validated hex — the tail
+    // never extended the declaration (else '#ff0000">' would not appear).
+    expect(out).toContain('<span style="color:#ff0000">');
+    // No live-quote attribute breakout; the smuggled quotes are escaped inert text.
+    expect(out).not.toContain('url(x)"');
+    expect(out).toContain('&quot;onload=&quot;');
+  });
+});
+
 describe('formatText / extractEmbeds — input length cap (DoS bound)', () => {
   it('exposes a hard cap constant', () => {
     expect(MAX_FORMAT_LENGTH).toBeGreaterThan(0);

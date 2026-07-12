@@ -22,6 +22,7 @@ import {
   upsertBuffer,
 } from '@/state';
 import { joinRoom, startCall } from '@/state/media';
+import { MAX_FORMAT_LENGTH } from '@/lib/irc-classic/formatter';
 import Header from './Header';
 
 vi.mock('@/state/media', () => ({
@@ -218,6 +219,46 @@ describe('Header', () => {
     const { queryByLabelText } = render(() => <Header />);
     expect(queryByLabelText('Join voice')).toBeNull();
     expect(queryByLabelText('Join video')).toBeNull();
+  });
+
+  it('renders a hostile channel topic as inert text (no live tag reaches innerHTML)', () => {
+    // The topic is the highest-value XSS surface: it reaches every channel
+    // viewer. It must be fed ONLY through formatText, which escapes first.
+    upsertBuffer(makeBuffer('0xh', {
+      name: 'irc.eshmaki.#evil',
+      fullName: 'irc.eshmaki.#evil',
+      shortName: '#evil',
+      title: '</span><img src=x onerror="alert(document.cookie)">',
+      localVars: { type: 'channel', server: 'eshmaki', channel: '#evil' },
+    }));
+    setActiveBuffer('0xh');
+
+    const { container } = render(() => <Header />);
+
+    // The payload never materializes as a DOM node — it is escaped text only.
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('script')).toBeNull();
+    // The '<img' exists only as literal text content, never a parsed tag.
+    expect(container.textContent).toContain('<img');
+    expect(container.innerHTML).toContain('&lt;img');
+  });
+
+  it('applies the formatText length cap to the topic path', () => {
+    const sentinel = 'PASTCAPSENTINEL';
+    upsertBuffer(makeBuffer('0xl', {
+      name: 'irc.eshmaki.#long',
+      fullName: 'irc.eshmaki.#long',
+      shortName: '#long',
+      title: 'a'.repeat(MAX_FORMAT_LENGTH) + sentinel,
+      localVars: { type: 'channel', server: 'eshmaki', channel: '#long' },
+    }));
+    setActiveBuffer('0xl');
+
+    const { container } = render(() => <Header />);
+
+    // Content past the cap is truncated before it can be rendered or parsed.
+    expect(container.innerHTML).not.toContain(sentinel);
+    expect(container.textContent).toContain('…');
   });
 
   it('opens the channel browser from the top bar while connected', () => {
