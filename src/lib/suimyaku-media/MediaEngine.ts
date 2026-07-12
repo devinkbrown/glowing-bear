@@ -561,7 +561,7 @@ export class SuimyakuMediaEngine {
       : [null, null];
     if (singleVs?.established && !this.activeRoom.startsWith('#')) {
       singleVs.encrypt(encoded).then((ct: Uint8Array) => {
-        void ct;
+        if (this.activeRoom) this.sendFrame(this.activeRoom, 'TSUMUGI_DATA', ct);
       }).catch(() => { if (this.activeRoom) this.sendFrame(this.activeRoom, 'AUDIO', encoded); });
       void singleNick; // suppress unused warning
       return;
