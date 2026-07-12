@@ -62,6 +62,22 @@ describe('parseIrcxLine — 818/819 PROP', () => {
     expect(parsed.value).toBe('');
   });
 
+  it('keeps extra 818 value tokens together after target and key', () => {
+    const parsed = parse('818', '#chan SUBJECT value with extra relay tokens') as ParsedProp;
+
+    expect(parsed).toEqual({
+      type: 'prop',
+      target: '#chan',
+      key: 'SUBJECT',
+      value: 'value with extra relay tokens',
+    });
+  });
+
+  it('returns null for a malformed 818 with only a target', () => {
+    expect(() => parse('818', '#chan')).not.toThrow();
+    expect(parse('818', '#chan')).toBeNull();
+  });
+
   it('parses the 819 end-of-properties marker in both renderings', () => {
     expect(parse('819', '#dbtest19036 :End of properties')).toEqual({
       type: 'prop_end',
@@ -70,6 +86,14 @@ describe('parseIrcxLine — 818/819 PROP', () => {
     expect(parse('819', '#dbtest19036 End of properties')).toEqual({
       type: 'prop_end',
       target: '#dbtest19036',
+    });
+  });
+
+  it('fail-safes an empty 819 marker without throwing', () => {
+    expect(() => parse('819', '')).not.toThrow();
+    expect(parse('819', '')).toEqual({
+      type: 'prop_end',
+      target: '',
     });
   });
 
@@ -261,6 +285,26 @@ describe('parseIrcxLine — 801-805 ACCESS', () => {
     expect(parsed.entry.duration).toBe(42);
   });
 
+  it('parses an 804 entry with extra tokens as part of the duration field only', () => {
+    const parsed = parse('804', '#chan VOICE *!*@good.example ops 15 ignored trailing text') as ParsedAccessEntry;
+
+    expect(parsed.entry).toEqual({
+      channel: '#chan',
+      level: 'VOICE',
+      mask: '*!*@good.example',
+      setter: 'ops',
+      duration: 15,
+      reason: '',
+    });
+  });
+
+  it('coerces malformed 804 durations to 0 without throwing', () => {
+    expect(() => parse('804', '#chan VOICE *!*@good.example ops not-a-number')).not.toThrow();
+
+    const parsed = parse('804', '#chan VOICE *!*@good.example ops not-a-number') as ParsedAccessEntry;
+    expect(parsed.entry.duration).toBe(0);
+  });
+
   it('uppercases the access level', () => {
     const parsed = parse('804', '#chan voice *!*@x setter 0') as ParsedAccessEntry;
     expect(parsed.entry.level).toBe('VOICE');
@@ -279,6 +323,13 @@ describe('parseIrcxLine — 801-805 ACCESS', () => {
       type: 'access_end',
       channel: '#dbtest19036',
     });
+  });
+
+  it('fail-safes empty 803 and 805 markers without throwing', () => {
+    expect(() => parse('803', '')).not.toThrow();
+    expect(() => parse('805', '')).not.toThrow();
+    expect(parse('803', '')).toEqual({ type: 'access_start', channel: '' });
+    expect(parse('805', '')).toEqual({ type: 'access_end', channel: '' });
   });
 });
 
@@ -378,6 +429,30 @@ describe('parseIrcxLine — LIST/LISTX channel rows', () => {
     });
     expect(parse('817', 'me :End of LISTX')).toEqual({ type: 'channel_list_end' });
   });
+
+  it('returns null for malformed LIST and LISTX rows without channel params', () => {
+    expect(() => parse('322', 'me not-a-channel 4 :bad')).not.toThrow();
+    expect(() => parse('812', 'me not-a-channel 4 +nt 0 :bad')).not.toThrow();
+    expect(parse('322', 'me not-a-channel 4 :bad')).toBeNull();
+    expect(parse('812', 'me not-a-channel 4 +nt 0 :bad')).toBeNull();
+  });
+
+  it('coerces malformed LIST and LISTX user counts to 0', () => {
+    expect(parse('322', '#root nope :Topic')).toMatchObject({
+      type: 'channel_list_row',
+      channel: '#root',
+      users: 0,
+      topic: 'Topic',
+    });
+
+    expect(parse('812', '#root nope +nt 0 :Topic')).toMatchObject({
+      type: 'channel_list_row',
+      channel: '#root',
+      users: 0,
+      modes: '+nt 0',
+      topic: 'Topic',
+    });
+  });
 });
 
 describe('parseIrcxLine — 913/915-919 errors', () => {
@@ -436,6 +511,7 @@ describe('isIrcxNumeric boundaries', () => {
   it.each([
     ['irc_800', false],
     ['irc_801', true],
+    ['irc_804', true],
     ['irc_825', true],
     ['irc_826', false],
     ['irc_913', true],
@@ -449,5 +525,11 @@ describe('isIrcxNumeric boundaries', () => {
   it('returns false when no numeric tag is present', () => {
     expect(isIrcxNumeric(['irc_privmsg', 'notify_message'])).toBe(false);
     expect(isIrcxNumeric([])).toBe(false);
+  });
+
+  it('recognizes 321 as channel-list-only and not parsed IRCX payload', () => {
+    expect(isIrcxNumeric(['irc_321'])).toBe(false);
+    expect(isChannelListNumeric(['irc_321'])).toBe(true);
+    expect(parse('321', 'Channel :Users Name')).toBeNull();
   });
 });
