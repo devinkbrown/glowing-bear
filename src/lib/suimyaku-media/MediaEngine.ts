@@ -10,9 +10,9 @@ import { TsumugiGroup } from './TsumugiGroup';
 import { TsumugiIdentity } from './TsumugiIdentity';
 import { ChunkAssembler } from './ChunkAssembler';
 import { PeerRegistry } from './PeerRegistry';
-import { KaguraCodec, type KaguraCodecTag, decodeKaguraFrame, encodeKaguraFrame } from './kaguraFrame';
-import { appendMediaMac, importMediaMacKey } from './mediaMac';
-import { MediaStreamRouter, mediaStreamId } from './mediaStream';
+import { KaguraCodec, type KaguraCodecTag, type KaguraFrame, decodeKaguraFrame, encodeKaguraFrame, KAGURA_MIN_FRAME_BYTES } from './kaguraFrame';
+import { appendMediaMac, importMediaMacKey, mediaMacTag, mediaMacEqual, MEDIA_MAC_TAG_BYTES } from './mediaMac';
+import { MediaStreamRouter, mediaStreamId, type MediaStreamSource } from './mediaStream';
 import type { IRCMessage } from '@/lib/irc/types';
 import type {
   CallState, VoiceCallState, MediaKind,
@@ -31,6 +31,29 @@ function base64ToBytes(b64: string): Uint8Array {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+/**
+ * Verify a relayed media datagram's trailing per-stream MAC tag, constant-time.
+ *
+ * `datagram` is the on-wire `frame || tag16`; `frameByteLen` is the exact length
+ * of the kagura frame prefix (KAGURA_MIN_FRAME_BYTES + payload length, taken from
+ * the decoded frame). A key-known stream MUST carry a full 16-byte tag — a
+ * datagram that is exactly the frame with no tag, or any other length, fails
+ * closed (returns false). The tag is recomputed over the exact frame bytes and
+ * compared with the constant-time `mediaMacEqual`. Never accept an
+ * unauthenticated frame on a stream for which a key is held.
+ */
+export async function verifyMediaDatagramMac(
+  key: CryptoKey,
+  datagram: Uint8Array,
+  frameByteLen: number,
+): Promise<boolean> {
+  if (frameByteLen < 0 || datagram.length !== frameByteLen + MEDIA_MAC_TAG_BYTES) return false;
+  const frame = datagram.subarray(0, frameByteLen);
+  const tag = datagram.subarray(frameByteLen);
+  const expected = await mediaMacTag(key, frame);
+  return mediaMacEqual(tag, expected);
 }
 
 export type { CallState, VoiceCallState, MediaKind, SuimyakuPeerState, SuimyakuRoomStats, NetworkQualityTier, SuimyakuMediaCallbacks, SuimyakuChannelInfo };
@@ -199,6 +222,16 @@ export class SuimyakuMediaEngine {
    *  `EVENT <me> MEDIA MACKEY <#chan> <b64>` arrives — i.e. the server opted in
    *  (`[media].ws_media_relay`). While null, sendFrame stays a no-op. */
   private wsMediaKey: CryptoKey | null = null;
+  /** Per-stream MAC keys for INBOUND verification, keyed by kagura `streamId`.
+   *  When a stream's key is present, `handleMediaDatagram` verifies the trailing
+   *  MAC tag constant-time and DROPS the datagram on mismatch (fail-closed) — an
+   *  unauthenticated frame is never processed when a key exists. When a stream
+   *  has no key here, authenticity is delegated to the Orochi SFU, which binds
+   *  `streamId` to the authenticated sender (documented trust boundary). Today
+   *  the server issues only THIS participant's key (via MACKEY), so only the
+   *  local stream is client-verifiable; per-peer verification needs the server
+   *  to distribute peer keys — a cross-repo wire co-change, not done here. */
+  private readonly wsStreamMacKeys = new Map<number, CryptoKey>();
   private wsMyNick = '';
   private wsAudSeq = 0;
   private wsVidSeq = 0;
@@ -944,9 +977,20 @@ export class SuimyakuMediaEngine {
       this.wsAudSeq = 0;
       this.wsVidSeq = 0;
       this.streamRouter.setRoster(channel, this.wsMyNick ? [this.wsMyNick] : []);
+      this.wsStreamMacKeys.clear();
+      const nick = this.wsMyNick;
       try {
         importMediaMacKey(base64ToBytes(b64))
-          .then((k) => { this.wsMediaKey = k; })
+          .then((k) => {
+            this.wsMediaKey = k;
+            // Register our own key against our own streams so a looped-back local
+            // datagram is verified fail-closed. Peer streams remain on the SFU
+            // trust boundary until the server distributes peer keys.
+            if (nick && channel === this.activeRoom) {
+              this.wsStreamMacKeys.set(mediaStreamId(channel, nick, 'audio'), k);
+              this.wsStreamMacKeys.set(mediaStreamId(channel, nick, 'video'), k);
+            }
+          })
           .catch(() => {});
       } catch { /* malformed key — stay a no-op */ }
     } else if (verb === 'JOIN' || verb === 'ROSTER') {
@@ -1000,6 +1044,24 @@ export class SuimyakuMediaEngine {
     const src = this.streamRouter.resolve(frame.streamId);
     if (!src) return; // unknown stream (not a current roster participant)
 
+    // Authenticity: when we hold the MAC key for this stream, verify the trailing
+    // tag and DROP the datagram on mismatch — never process an unauthenticated
+    // frame when a key exists. When no key is known, authenticity is delegated to
+    // the Orochi SFU, which binds `streamId` to the authenticated sender (see the
+    // `wsStreamMacKeys` doc — the documented client-edge trust boundary).
+    const macKey = this.wsStreamMacKeys.get(frame.streamId);
+    if (macKey) {
+      const frameByteLen = KAGURA_MIN_FRAME_BYTES + frame.payload.length;
+      verifyMediaDatagramMac(macKey, data, frameByteLen)
+        .then((ok) => { if (ok && this.activeRoom === room) this.dispatchDecodedFrame(frame, src, room); })
+        .catch(() => { /* verification error drops one frame; fail-closed */ });
+      return;
+    }
+    this.dispatchDecodedFrame(frame, src, room);
+  }
+
+  /** Route a verified/SFU-trusted decoded frame to the sending peer's decoder. */
+  private dispatchDecodedFrame(frame: KaguraFrame, src: MediaStreamSource, room: string) {
     if (frame.bandId === WS_BAND_TSUMUGI_AUDIO) {
       const groupKey = this.tsumugiGroupKey;
       if (!groupKey) return; // can't decrypt without the group key
@@ -1689,6 +1751,7 @@ export class SuimyakuMediaEngine {
     this.setCallState('in_call', '', channel);
     // Drop any prior call's MAC key/stream map; the new call's MACKEY repopulates.
     this.wsMediaKey = null;
+    this.wsStreamMacKeys.clear();
     this.wsAudSeq = 0;
     this.wsVidSeq = 0;
     this.streamRouter.clear();
@@ -1754,6 +1817,7 @@ export class SuimyakuMediaEngine {
     this.tsumugiGroupKeyPromise = null;
     // WS media plane teardown.
     this.wsMediaKey = null;
+    this.wsStreamMacKeys.clear();
     this.wsMyNick = '';
     this.wsAudSeq = 0;
     this.wsVidSeq = 0;
