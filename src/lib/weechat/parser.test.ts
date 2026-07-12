@@ -227,6 +227,26 @@ describe('WeeRelayParser inf and arr', () => {
 		expect(await decodeOne(body)).toEqual({ name: 'version', value: '4.2.1' });
 	});
 
+	it('decodes inl as a named infolist with stringified item variables', async () => {
+		const body = new BinWriter()
+			.typ('inl')
+			.str('buffer')
+			.u32(2)
+			.u32(2)
+			.str('name').typ('str').str('core.weechat')
+			.str('number').typ('int').i32(1)
+			.u32(1)
+			.str('short_name').typ('str').str('#weechat');
+
+		expect(await decodeOne(body)).toEqual({
+			name: 'buffer',
+			items: [
+				{ name: 'core.weechat', number: '1' },
+				{ short_name: '#weechat' },
+			],
+		});
+	});
+
 	it('decodes an arr of str, preserving null entries', async () => {
 		const body = new BinWriter()
 			.typ('arr').typ('str').u32(3)
@@ -243,6 +263,12 @@ describe('WeeRelayParser inf and arr', () => {
 
 	it('decodes an empty arr', async () => {
 		expect(await decodeOne(new BinWriter().typ('arr').typ('int').u32(0))).toEqual([]);
+	});
+
+	it('rejects an array whose count exceeds the collection limit', async () => {
+		const body = new BinWriter().typ('arr').typ('int').u32(100001);
+
+		await expect(parseFrame(null, body)).rejects.toThrow(/arr count exceeds limit/);
 	});
 });
 
@@ -471,6 +497,26 @@ describe('WeeRelayParser hostile input', () => {
 		const act = () => parseFrame(null, body);
 
 		await expect(act()).rejects.toThrow(/Unknown WeeChat type: zzz/);
+	});
+
+	it('rejects an infolist whose item count exceeds the collection limit', async () => {
+		const body = new BinWriter().typ('inl').str('buffer').u32(100001);
+
+		const act = () => parseFrame(null, body);
+
+		await expect(act()).rejects.toThrow(/inl count exceeds limit/);
+	});
+
+	it('rejects an infolist item whose variable count exceeds the collection limit', async () => {
+		const body = new BinWriter()
+			.typ('inl')
+			.str('buffer')
+			.u32(1)
+			.u32(100001);
+
+		const act = () => parseFrame(null, body);
+
+		await expect(act()).rejects.toThrow(/inl-vars count exceeds limit/);
 	});
 });
 
