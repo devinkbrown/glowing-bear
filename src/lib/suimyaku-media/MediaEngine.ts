@@ -239,6 +239,9 @@ export class SuimyakuMediaEngine {
   private ringTimer: ReturnType<typeof setTimeout> | null = null;
   private static readonly RING_TIMEOUT_MS = 30_000;
 
+  /** One-shot timer that re-announces the room after a WS reconnect. */
+  private rejoinTimer: ReturnType<typeof setTimeout> | null = null;
+
   private readonly registry = new PeerRegistry({
     sampleRate:   SAMPLE_RATE,
     audioQuality: () => this.audioQuality,
@@ -310,7 +313,9 @@ export class SuimyakuMediaEngine {
     if (!client && this.callState !== 'idle') { this.setIdle(); return; }
     if (client && !prev && this.callState === 'in_call' && this.activeRoom) {
       const room = this.activeRoom;
-      setTimeout(() => {
+      if (this.rejoinTimer) clearTimeout(this.rejoinTimer);
+      this.rejoinTimer = setTimeout(() => {
+        this.rejoinTimer = null;
         if (this.client && this.activeRoom === room) {
           this.mediaframeCmd(room, 'VOICE_JOIN', `${SAMPLE_RATE} ${AUDIO_CHANNELS}`);
           if (this.localKind === 'video' || this.localKind === 'screen') {
@@ -1739,6 +1744,7 @@ export class SuimyakuMediaEngine {
 
   private setIdle() {
     this.clearRingTimer();
+    if (this.rejoinTimer) { clearTimeout(this.rejoinTimer); this.rejoinTimer = null; }
     this.stopAudioCapture(); this.stopVideoCapture(); this.stopSpeakingMeter();
     if (this.audioLevelTimer) { clearInterval(this.audioLevelTimer); this.audioLevelTimer = null; }
     this.registry.peerLevels.clear();
@@ -1856,6 +1862,13 @@ export class SuimyakuMediaEngine {
     if (this.gcTimer) clearInterval(this.gcTimer);
     this.gcTimer = null;
     this.setIdle();
+    // Unbind the media handlers from the client — otherwise these closures keep
+    // the whole engine (registry, decoders, contexts) alive after dispose.
+    if (this.boundMediaClient) {
+      this.boundMediaClient.binaryHandlers.delete(this.onMediaDatagramBound);
+      this.boundMediaClient.extraMessageHandlers.delete(this.onMediaServerMessageBound);
+      this.boundMediaClient = null;
+    }
   }
 }
 
