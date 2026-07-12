@@ -12,6 +12,17 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import ThemeBg, { shimmerLayers, type ThemeName } from './ThemeBg';
 
+// The reduced-motion gate and budget cases synchronously mount heavy scenes (the
+// SMIL-reduce case renders 5 scenes in a loop, tokyo-night ~180 windows). The
+// matchMedia reduced-motion value and the SMIL gate resolve synchronously at render
+// (createMediaQuery seeds its signal from mql.matches; settings.sceneMotion defaults
+// synchronously), so the asserted values are deterministic and pass identically every
+// run. What flaked under full-suite parallel load was wall-time: these ~0.5s renders
+// inflate 2.5x+ under core saturation and can cross vitest's 5s default per-test
+// timeout. A generous ceiling removes that contention timeout without weakening any
+// assertion — a gate regression still fails its expect() immediately.
+vi.setConfig({ testTimeout: 20_000 });
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();

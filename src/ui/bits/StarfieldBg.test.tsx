@@ -4,7 +4,7 @@
 // constant regardless of star density. These tests pin the pure grouping logic and the
 // resulting animating-node budget so the win can't silently regress.
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import StarfieldBg, {
   buildFieldStars,
@@ -13,6 +13,15 @@ import StarfieldBg, {
   FIELD_GROUPS,
   MILKY_GROUPS,
 } from './StarfieldBg';
+
+// The render-budget cases below synchronously mount the full ~560-node starfield.
+// Their asserted values are seeded-deterministic (they pass identically every run),
+// but the render itself costs ~0.5s in isolation and inflates 3-4x when the full
+// suite saturates every core — occasionally past vitest's 5s default per-test
+// timeout, which surfaced as a load-only flake. A generous ceiling removes the
+// contention timeout without touching any assertion: a real value regression still
+// fails its expect() immediately, timeout or not.
+vi.setConfig({ testTimeout: 20_000 });
 
 afterEach(cleanup);
 
