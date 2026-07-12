@@ -778,7 +778,13 @@ export class WeeRelayClient extends EventTarget {
 			const hda = obj.value as HdataResult;
 			for (const item of hda.items) {
 				const bufPtr = item.pointers[0] ?? '0x0';
-				const diffType = String(item.objects['_diff'] ?? '');
+				// WeeChat's `chr` type decodes as an Int8 char *code* (parser.ts), so
+				// `_diff` is a number like 43/45/42 — normalize it back to the '+'/'-'/'*'
+				// character before comparing, or every diff falls through to the update
+				// branch and removals (part/quit) are never applied to the nicklist.
+				const diffRaw = item.objects['_diff'];
+				const diffType =
+					typeof diffRaw === 'number' ? String.fromCharCode(diffRaw) : String(diffRaw ?? '');
 				const nick = itemToNick(item);
 
 				if (diffType === '+') {
