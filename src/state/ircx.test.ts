@@ -166,6 +166,37 @@ describe('ircx store', () => {
 
       expect(isActiveOrochi()).toBe(false);
     });
+
+    it('isActiveOrochi falls back to the active buffer network name', () => {
+      clearBuffers();
+      upsertBuffer(makeBuffer('ptr-network-only', {
+        number: 4,
+        localVars: { type: 'channel', network: 'meshnet', channel: '#mesh' },
+      }));
+      setActiveBuffer('ptr-network-only');
+      markOrochi('meshnet');
+
+      expect(isActiveOrochi()).toBe(true);
+    });
+
+    it('isActiveOrochi is false when the active buffer has no server identity', () => {
+      upsertBuffer(makeBuffer('ptr-no-server-id', {
+        number: 5,
+        localVars: { type: 'channel', channel: '#floating' },
+      }));
+      setActiveBuffer('ptr-no-server-id');
+      markOrochi('esh');
+
+      expect(isActiveOrochi()).toBe(false);
+    });
+
+    it('isOrochiServer treats empty or undefined server names as non-matches', () => {
+      markOrochi('');
+
+      expect(isOrochiServer('')).toBe(false);
+      expect(isOrochiServer(undefined)).toBe(false);
+      expect(ircxState.orochiServers['']).toBe(true);
+    });
   });
 
   describe('PROP flow', () => {
