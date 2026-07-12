@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, cleanup } from '@solidjs/testing-library';
-import ThemeBg, { type ThemeName } from './ThemeBg';
+import ThemeBg, { shimmerLayers, type ThemeName } from './ThemeBg';
 
 afterEach(() => {
   cleanup();
@@ -58,4 +58,67 @@ describe('ThemeBg reduced-motion SMIL gate', () => {
       cleanup();
     }
   });
+});
+
+// ── Compositor-cost consolidation ──────────────────────────────────────────────
+// The dense fields (star twinkle, city-window blink, aurora sparks) used to hang one
+// CSS opacity animation on EVERY node. They now paint nodes STATIC and shimmer a
+// handful of grouped wrappers, so the always-animating compositor-node count is a
+// small constant regardless of node density (mirrors the StarfieldBg 563→41 win).
+// These pin both the pure grouping helper and the per-scene animating-node budgets
+// so the win can't silently regress.
+
+describe('shimmerLayers', () => {
+  it('collapses N items into at most `groups` layers while preserving every item', () => {
+    const items = Array.from({ length: 60 }, (_, i) => i);
+    const layers = shimmerLayers(items, 6);
+    expect(layers).toHaveLength(6);
+    expect(layers.flat().sort((a, b) => a - b)).toEqual(items);
+  });
+
+  it('round-robins by index so spatial neighbours land in different layers', () => {
+    const layers = shimmerLayers([0, 1, 2, 3, 4, 5, 6, 7], 4);
+    expect(layers).toEqual([[0, 4], [1, 5], [2, 6], [3, 7]]);
+  });
+
+  it('never produces more layers than items and never fewer than one', () => {
+    expect(shimmerLayers([1, 2], 5)).toHaveLength(2);
+    expect(shimmerLayers([], 5)).toHaveLength(1);
+    expect(shimmerLayers([1], 1)).toHaveLength(1);
+  });
+});
+
+describe('ThemeBg animating-node budget (consolidated scenes)', () => {
+  function animatingCount(container: HTMLElement): number {
+    return container.querySelectorAll('[style*="animation"]').length;
+  }
+  // Static leaf dots/panes carry a percentage `top` but NO animation — the wrapper
+  // above them owns the shimmer.
+  function staticDots(container: HTMLElement): number {
+    return Array.from(container.querySelectorAll('[style*="top"]')).filter(
+      (el) => !el.getAttribute('style')?.includes('animation'),
+    ).length;
+  }
+
+  // { theme: [animating-cap, baseline-before, min-static-density] }
+  const CASES: Record<string, [number, number, number]> = {
+    'tokyo-night': [170, 257, 120], // ~180 windows → grouped blink wrappers
+    midnight: [60, 151, 100], // 115 stars + 17 dots → grouped shimmer wrappers
+    aurora: [60, 115, 55], // 60 stars + 20 sparks → grouped shimmer wrappers
+  };
+
+  for (const [theme, [cap, baseline, minStatic]] of Object.entries(CASES)) {
+    it(`${theme}: animating nodes well below the ${baseline}-node baseline, density preserved`, () => {
+      stubMatchMedia(false);
+      const { container } = render(() => <ThemeBg theme={theme as ThemeName} />);
+      const animating = animatingCount(container);
+      // Materially fewer animating nodes than the per-element baseline…
+      expect(animating).toBeLessThanOrEqual(cap);
+      expect(animating).toBeLessThan(baseline * 0.75);
+      // …but the decorative motion is not stripped entirely.
+      expect(animating).toBeGreaterThan(10);
+      // …and the visual density (static dots/panes) is retained, not thinned out.
+      expect(staticDots(container)).toBeGreaterThan(minStatic);
+    });
+  }
 });

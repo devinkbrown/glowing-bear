@@ -23,6 +23,44 @@ function seededRand(seed: number) {
   return () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; };
 }
 
+/**
+ * Round-robin bucket a flat list into a small fixed number of shimmer layers.
+ *
+ * The dense decorative fields (star twinkle, city-window blink, aurora sparks) used
+ * to hang one CSS opacity animation on EVERY node — hundreds of always-animating
+ * compositor layers. Instead we paint every node STATIC and shimmer a whole layer at
+ * a time from a single animated wrapper, mirroring the StarfieldBg consolidation
+ * (563 -> 41 animating nodes). The compositor then animates a fixed handful of
+ * wrappers regardless of node density. Round-robin by index keeps spatially adjacent
+ * nodes in different layers, so a grouped field never visibly pulses in bands.
+ *
+ * Exported for the compositor-budget test.
+ */
+export function shimmerLayers<T>(items: readonly T[], groups: number): T[][] {
+  const g = Math.max(1, Math.min(groups, items.length || 1));
+  const out: T[][] = Array.from({ length: g }, () => []);
+  items.forEach((item, i) => out[i % g]!.push(item));
+  return out;
+}
+
+/** Desynced per-layer shimmer timings (opacity only). Negative delays start each
+ *  layer mid-cycle so a grouped field never pulses in unison. `mul` scales duration
+ *  for tiered fields (near stars shimmer fast, far stars slow). */
+const SHIMMER_TIMING = [
+  { dur: 3.4, delay: 0 },
+  { dur: 4.3, delay: -0.9 },
+  { dur: 5.1, delay: -1.7 },
+  { dur: 4.7, delay: -2.5 },
+  { dur: 6.2, delay: -1.2 },
+  { dur: 3.8, delay: -3.1 },
+];
+
+/** CSS `animation` shorthand for shimmer layer `g` of a grouped field. */
+function shimmerAnim(name: string, g: number, mul = 1): string {
+  const t = SHIMMER_TIMING[g % SHIMMER_TIMING.length]!;
+  return `${name} ${(t.dur * mul).toFixed(2)}s ease-in-out ${(t.delay * mul).toFixed(2)}s infinite`;
+}
+
 // Whether decorative SMIL motion may run. Under prefers-reduced-motion: reduce the
 // provider flips this to false and the gated <Anim>/<AnimMotion> wrappers render
 // nothing, so the scene SVGs hold no SMIL nodes at all. CSS `animation:none` (the
@@ -279,8 +317,6 @@ function MidnightBg() {
       x: rand() * 100, y: rand() * 100,
       size: 1.4 + rand() * 1.8,
       opacity: 0.35 + rand() * 0.55,
-      dur: 2 + rand() * 3,
-      delay: rand() * 6,
       blue: rand() > 0.55,
     }));
   })();
@@ -290,8 +326,6 @@ function MidnightBg() {
       x: rand() * 100, y: rand() * 100,
       size: 0.8 + rand() * 1.1,
       opacity: 0.25 + rand() * 0.45,
-      dur: 4 + rand() * 5,
-      delay: rand() * 9,
       blue: rand() > 0.65,
     }));
   })();
@@ -301,8 +335,6 @@ function MidnightBg() {
       x: rand() * 100, y: rand() * 100,
       size: 0.3 + rand() * 0.7,
       opacity: 0.15 + rand() * 0.25,
-      dur: 7 + rand() * 8,
-      delay: rand() * 12,
     }));
   })();
   const milkyWayStars = (() => {
@@ -363,27 +395,36 @@ function MidnightBg() {
             background: '#c0caff', opacity: s.opacity,
             'box-shadow': '0 0 4px rgba(192,202,255,0.6)' }} />
       ))}
-      {/* Far stars */}
-      {starsFar.map((s, i) => (
-        <div class="absolute rounded-full"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
-            background: '#d0d8ff', opacity: s.opacity,
-            animation: `mn-twinkle-slow ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
+      {/* Far stars — static dots, shimmered a whole layer at a time (slow). */}
+      {shimmerLayers(starsFar, 4).map((layer, g) => (
+        <div class="absolute inset-0" style={{ animation: shimmerAnim('mn-shimmer', g, 1.7) }}>
+          {layer.map((s) => (
+            <div class="absolute rounded-full"
+              style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
+                background: '#d0d8ff', opacity: s.opacity }} />
+          ))}
+        </div>
       ))}
-      {/* Mid stars */}
-      {starsMid.map((s, i) => (
-        <div class="absolute rounded-full"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
-            background: s.blue ? '#9aaeff' : '#e0e4ff', opacity: s.opacity,
-            animation: `mn-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
+      {/* Mid stars (normal shimmer). */}
+      {shimmerLayers(starsMid, 5).map((layer, g) => (
+        <div class="absolute inset-0" style={{ animation: shimmerAnim('mn-shimmer', g, 1) }}>
+          {layer.map((s) => (
+            <div class="absolute rounded-full"
+              style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
+                background: s.blue ? '#9aaeff' : '#e0e4ff', opacity: s.opacity }} />
+          ))}
+        </div>
       ))}
-      {/* Near bright stars */}
-      {starsNear.map((s, i) => (
-        <div class="absolute rounded-full"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
-            background: s.blue ? '#8b9cf8' : '#f0f2ff', opacity: s.opacity,
-            'box-shadow': s.size > 2 ? `0 0 ${s.size * 4}px rgba(139,156,248,0.6)` : undefined,
-            animation: `mn-twinkle-fast ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
+      {/* Near bright stars (fast shimmer). */}
+      {shimmerLayers(starsNear, 5).map((layer, g) => (
+        <div class="absolute inset-0" style={{ animation: shimmerAnim('mn-shimmer', g, 0.7) }}>
+          {layer.map((s) => (
+            <div class="absolute rounded-full"
+              style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
+                background: s.blue ? '#8b9cf8' : '#f0f2ff', opacity: s.opacity,
+                'box-shadow': s.size > 2 ? `0 0 ${s.size * 4}px rgba(139,156,248,0.6)` : undefined }} />
+          ))}
+        </div>
       ))}
       {/* Nebula breathing clouds */}
       {nebulae.map((n, i) => (
@@ -417,14 +458,16 @@ function MidnightBg() {
             stroke="rgba(139,156,248,0.4)" stroke-width="1.2"
             style={{ animation: `mn-line ${l.dur}s ease-in-out ${l.delay}s infinite` }} />
         ))}
-        {/* Constellation node dots */}
-        {[
+        {/* Constellation node dots — static, shimmered a layer at a time. */}
+        {shimmerLayers([
           [12,18],[22,10],[30,20],[65,30],[75,30],[70,25],[70,35],
           [8,62],[14,55],[20,63],[26,56],[32,64],[48,15],[56,22],[62,16],[82,42],[90,50],
-        ].map(([x,y], i) => (
-          <circle cx={`${x}%`} cy={`${y}%`} r="1.2"
-            fill="rgba(180,196,255,0.6)"
-            style={{ animation: `mn-twinkle ${8 + i * 1.1}s ease-in-out ${i * 0.7}s infinite` }} />
+        ] as [number, number][], 3).map((layer, g) => (
+          <g style={{ animation: shimmerAnim('mn-shimmer', g, 1.5) }}>
+            {layer.map(([x, y]) => (
+              <circle cx={`${x}%`} cy={`${y}%`} r="1.2" fill="rgba(180,196,255,0.6)" />
+            ))}
+          </g>
         ))}
         {/* Shooting stars */}
         {shooters.map((s, i) => (
@@ -447,9 +490,8 @@ function MidnightBg() {
       <div class="absolute bottom-0 left-0 right-0 h-[18%]"
         style={{ background: 'linear-gradient(to top, rgba(80,60,120,0.2), transparent)', filter: 'blur(4px)' }} />
       <style>{`
-        @keyframes mn-twinkle-fast { 0%,100%{opacity:inherit} 35%{opacity:0.1} 65%{opacity:0.1} }
-        @keyframes mn-twinkle      { 0%,100%{opacity:inherit} 40%{opacity:0.15} 60%{opacity:0.15} }
-        @keyframes mn-twinkle-slow { 0%,100%{opacity:inherit} 45%{opacity:0.08} 55%{opacity:0.08} }
+        /* Grouped star/dot shimmer — opacity only, drives a whole static layer. */
+        @keyframes mn-shimmer      { 0%,100%{opacity:1} 50%{opacity:0.3} }
         @keyframes mn-breathe      { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.35);opacity:0.7} }
         @keyframes mn-line         { 0%,100%{opacity:1} 50%{opacity:0.3} }
         @keyframes mn-moon-glow    { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.7;transform:scale(1.2)} }
@@ -1391,8 +1433,6 @@ function AuroraBg() {
       x: rand() * 100, y: rand() * 70,
       size: 0.8 + rand() * 2,
       opacity: 0.3 + rand() * 0.7,
-      dur: 2 + rand() * 5,
-      delay: rand() * 10,
     }));
   })();
   const particles = (() => {
@@ -1400,8 +1440,6 @@ function AuroraBg() {
     return Array.from({ length: 20 }, () => ({
       x: rand() * 100, y: rand() * 60,
       size: 2 + rand() * 4,
-      dur: 3 + rand() * 6,
-      delay: rand() * 10,
       color: rand() > 0.4 ? '#a78bfa' : rand() > 0.2 ? '#34d399' : '#22d3ee',
     }));
   })();
@@ -1430,14 +1468,22 @@ function AuroraBg() {
       {/* Deep space background */}
       <div class="absolute top-0 left-0 right-0 h-[50%]"
         style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(100,60,180,0.25), rgba(50,30,100,0.15) 50%, transparent 80%)', filter: 'blur(6px)' }} />
-      {/* Bright star field */}
-      {stars.map((s, i) => (
-        <div class="absolute rounded-full"
-          style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
-            background: i % 4 === 0 ? '#c4b5fd' : i % 3 === 0 ? '#a78bfa' : '#e2e8f0',
-            opacity: s.opacity,
-            'box-shadow': `0 0 4px ${i % 4 === 0 ? '#c4b5fd' : '#e2e8f0'}`,
-            animation: `au-twinkle ${s.dur}s ease-in-out ${s.delay}s infinite` }} />
+      {/* Bright star field — static dots, shimmered a layer at a time. */}
+      {shimmerLayers(
+        stars.map((s, i) => ({
+          ...s,
+          fill: i % 4 === 0 ? '#c4b5fd' : i % 3 === 0 ? '#a78bfa' : '#e2e8f0',
+          glow: i % 4 === 0 ? '#c4b5fd' : '#e2e8f0',
+        })),
+        6,
+      ).map((layer, g) => (
+        <div class="absolute inset-0" style={{ animation: shimmerAnim('au-shimmer', g) }}>
+          {layer.map((s) => (
+            <div class="absolute rounded-full"
+              style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.size}px`, height: `${s.size}px`,
+                background: s.fill, opacity: s.opacity, 'box-shadow': `0 0 4px ${s.glow}` }} />
+          ))}
+        </div>
       ))}
       {/* Aurora curtain bands */}
       {[
@@ -1470,13 +1516,18 @@ function AuroraBg() {
           style={{ background: 'linear-gradient(to bottom, rgba(167,139,250,0.3), rgba(52,211,153,0.2) 30%, rgba(34,211,238,0.15) 60%, transparent)',
             filter: 'blur(4px)', animation: 'au-reflect 12s ease-in-out infinite' }} />
       </div>
-      {/* Floating aurora particles */}
-      {particles.map((p, i) => (
-        <div class="absolute rounded-full"
-          style={{ left: `${p.x}%`, top: `${p.y}%`, width: `${p.size}px`, height: `${p.size}px`,
-            background: p.color, opacity: 0,
-            'box-shadow': `0 0 ${p.size * 8}px ${p.color}`,
-            animation: `au-spark ${p.dur}s ease-in-out ${p.delay}s infinite` }} />
+      {/* Floating aurora particles — grouped: one au-spark wrapper drifts+fades a
+          whole static layer instead of one animation per mote. */}
+      {shimmerLayers(particles, 4).map((layer, g) => (
+        <div class="absolute inset-0"
+          style={{ animation: `au-spark ${(3.5 + g * 0.9).toFixed(2)}s ease-in-out ${(-g * 0.8).toFixed(2)}s infinite` }}>
+          {layer.map((p) => (
+            <div class="absolute rounded-full"
+              style={{ left: `${p.x}%`, top: `${p.y}%`, width: `${p.size}px`, height: `${p.size}px`,
+                background: p.color, opacity: 0.75,
+                'box-shadow': `0 0 ${p.size * 8}px ${p.color}` }} />
+          ))}
+        </div>
       ))}
       {/* Electric aurora crackles */}
       <svg class="absolute inset-0 w-full h-full" style={{ 'pointer-events': 'none' }}>
@@ -1494,7 +1545,7 @@ function AuroraBg() {
           fill="rgba(5,5,12,0.95)" />
       </svg>
       <style>{`
-        @keyframes au-twinkle { 0%,100%{opacity:inherit} 50%{opacity:0.2} }
+        @keyframes au-shimmer { 0%,100%{opacity:1} 50%{opacity:0.35} }
         @keyframes au-curtain { 0%,100%{transform:scaleY(1) translateY(0);opacity:1} 30%{transform:scaleY(1.4) translateY(-8%);opacity:0.7} 70%{transform:scaleY(0.8) translateY(6%);opacity:1} }
         @keyframes au-col { 0%,100%{transform:scaleY(1) skewX(0deg);opacity:1} 50%{transform:scaleY(2.2) skewX(4deg);opacity:0.6} }
         @keyframes au-spark { 0%,100%{opacity:0} 25%{opacity:0.8;transform:translateY(-15px)} 75%{opacity:0.7;transform:translateY(10px)} }
@@ -1656,6 +1707,8 @@ function CatppuccinBg() {
 }
 
 /* -- Tokyo Night: Dense cityscape, rain, puddles, fog, clouds, neon, lightning -- */
+const WINDOW_COLORS = ['#7aa2f7', '#ff9e64', '#9ece6a', '#bb9af7', '#7dcfff', '#e0af68', '#f7768e'];
+
 function TokyoNightBg() {
   const buildings = (() => {
     const rand = seededRand(779);
@@ -1764,14 +1817,24 @@ function TokyoNightBg() {
               background: 'rgba(122,162,247,0.6)',
               'box-shadow': '0 0 6px rgba(122,162,247,0.8)' }} />
           )}
-          {Array.from({ length: b.windows }).map((_, wi) => (
-            <div class="absolute"
-              style={{ left: '12%', right: '12%', height: '5px',
-                top: `${6 + wi * (85 / b.windows)}%`,
-                background: ['#7aa2f7', '#ff9e64', '#9ece6a', '#bb9af7', '#7dcfff', '#e0af68', '#f7768e'][wi % 7],
-                opacity: 0, 'border-radius': '2px',
-                'box-shadow': `0 0 8px ${['#7aa2f7', '#ff9e64', '#9ece6a', '#bb9af7', '#7dcfff', '#e0af68', '#f7768e'][wi % 7]}`,
-                animation: `tn-blink ${1.5 + (wi + i) * 0.3}s ease-in-out ${i * 0.15 + wi * 0.25}s infinite` }} />
+          {/* Windows — static lit panes; each building blinks a few desynced layers
+              at a time (one wrapper per layer) instead of one animation per window. */}
+          {shimmerLayers(
+            Array.from({ length: b.windows }, (_, wi) => ({
+              top: 6 + wi * (85 / b.windows),
+              color: WINDOW_COLORS[wi % 7]!,
+            })),
+            Math.min(3, b.windows),
+          ).map((layer, g) => (
+            <div class="absolute inset-0"
+              style={{ animation: `tn-blink ${(1.6 + g * 0.7).toFixed(2)}s ease-in-out ${(i * 0.15 + g * 0.5).toFixed(2)}s infinite` }}>
+              {layer.map((w) => (
+                <div class="absolute"
+                  style={{ left: '12%', right: '12%', height: '5px', top: `${w.top}%`,
+                    background: w.color, opacity: 0.85, 'border-radius': '2px',
+                    'box-shadow': `0 0 8px ${w.color}` }} />
+              ))}
+            </div>
           ))}
         </div>
       ))}
