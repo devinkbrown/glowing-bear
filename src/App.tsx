@@ -80,6 +80,64 @@ const CUSTOM_COLOR_VARS: Array<[keyof typeof import('@/types').DEFAULT_CUSTOM_CO
 
 const SHEET_DISMISS_PX = 72;
 
+// Mobile slide-in sheets are modal dialogs, but the shared <Modal> shell centers
+// its own backdrop + panel and cannot host a bottom-anchored, drag-dismissable
+// sheet — so the same a11y guarantees (focus-in, Escape, Tab-wrap, focus
+// restore) are provided inline here. This mirrors Modal.tsx's focusable filter.
+const SHEET_FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+function sheetFocusables(panel: HTMLElement): HTMLElement[] {
+  return Array.from(panel.querySelectorAll<HTMLElement>(SHEET_FOCUSABLE)).filter((el) => {
+    if ((el as HTMLButtonElement | HTMLInputElement).disabled) return false;
+    if (el.hasAttribute('disabled')) return false;
+    if (el.getAttribute('aria-hidden') === 'true') return false;
+    if (el.hidden || el.closest('[hidden]')) return false;
+    return true;
+  });
+}
+
+// Trap focus + Escape inside an open sheet. Returns a disposer that removes the
+// listener and restores focus to whatever held it when the sheet opened (the
+// trigger). Caller owns clearing any `inert` on the region behind BEFORE this
+// disposer runs, so the restore-focus target is reachable again.
+function activateSheetDialog(panel: HTMLElement, close: () => void): () => void {
+  const previouslyFocused = document.activeElement as HTMLElement | null;
+  const initial = sheetFocusables(panel);
+  // Fallback to the panel (tabindex=-1) so a sheet with no focusable child still
+  // moves focus into the dialog rather than leaving it behind the backdrop.
+  (initial[0] ?? panel).focus();
+
+  const onKeydown = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const nodes = sheetFocusables(panel);
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (!first || !last) {
+      e.preventDefault();
+      panel.focus();
+      return;
+    }
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+  window.addEventListener('keydown', onKeydown);
+
+  return () => {
+    window.removeEventListener('keydown', onKeydown);
+    previouslyFocused?.focus?.();
+  };
+}
+
 function setupServiceWorkerRefresh(): () => void {
   if (!('serviceWorker' in navigator)) return () => undefined;
   let reloaded = false;
@@ -120,6 +178,13 @@ export default function App() {
           '-webkit-backdrop-filter': 'blur(var(--surface-blur, 14px))',
         };
   let sheetDrag: { startY: number; currentY: number; sheet: HTMLElement } | null = null;
+
+  // Refs for the mobile dialog wiring: <main> is the region behind an open
+  // sheet (made inert so AT/focus can't reach it); the sheets themselves get
+  // focus-trap + Escape while open.
+  let mainRef: HTMLElement | undefined;
+  let bufferSheetRef: HTMLElement | undefined;
+  let userSheetRef: HTMLElement | undefined;
 
   const beginSheetDrag = (ev: TouchEvent & { currentTarget: HTMLElement }): void => {
     const target = ev.target as HTMLElement | null;
@@ -204,6 +269,38 @@ export default function App() {
   // column and make the keyboard path feel broken.
   createEffect(() => {
     if (!isDesktop() && uiState.splitMode !== 'none') setSplitMode('none');
+  });
+
+  // Mobile drawer a11y. Order matters: this main-inert effect is created BEFORE
+  // the per-sheet dialog effects, so on close it clears `inert` on <main> first,
+  // then each sheet effect's cleanup restores focus to a now-reachable trigger.
+  createEffect(() => {
+    const sheetOpen = !isDesktop() && (uiState.sidebarOpen || uiState.userListOpen);
+    const el = mainRef;
+    if (!el) return;
+    el.inert = sheetOpen;
+  });
+
+  // Buffers sheet: the <aside> is always mounted on mobile (it slides via a
+  // transform and keeps a full <Sidebar> inside), so when closed it must be
+  // `inert` — otherwise its buttons stay tabbable behind everything. When open
+  // it becomes the focus-trapped dialog.
+  createEffect(() => {
+    const open = !isDesktop() && uiState.sidebarOpen;
+    const panel = bufferSheetRef;
+    if (!panel) return;
+    panel.inert = !open;
+    if (!open) return;
+    onCleanup(activateSheetDialog(panel, () => setSidebarOpen(false)));
+  });
+
+  // Users sheet: only mounted (via <Show>) while open, so it needs no
+  // closed-state inert — just the dialog wiring while present.
+  createEffect(() => {
+    const open = !isDesktop() && uiState.userListOpen;
+    const panel = userSheetRef;
+    if (!open || !panel) return;
+    onCleanup(activateSheetDialog(panel, () => setUserListOpen(false)));
   });
 
   // Connect modal follows the relay state (see connectModalPolicy): close it
@@ -299,6 +396,11 @@ export default function App() {
                 <div class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
               </Show>
               <aside
+                ref={(el) => (bufferSheetRef = el)}
+                role={uiState.sidebarOpen ? 'dialog' : undefined}
+                aria-modal={uiState.sidebarOpen ? 'true' : undefined}
+                aria-label="Buffers"
+                tabindex="-1"
                 class="mobile-sheet mobile-buffer-sheet fixed bottom-0 left-0 right-0 z-50 flex h-[min(84vh,780px)] transform flex-col overflow-hidden rounded-t-3xl border-t border-white/[0.08] transition-transform duration-200"
                 classList={{ 'translate-y-full': !uiState.sidebarOpen, 'translate-y-0': uiState.sidebarOpen }}
                 onTouchStart={beginSheetDrag}
@@ -341,7 +443,7 @@ export default function App() {
         </Show>
 
         {/* Main column */}
-        <main class="relative z-10 flex h-full min-w-0 flex-1 flex-col">
+        <main ref={(el) => (mainRef = el)} class="relative z-10 flex h-full min-w-0 flex-1 flex-col">
           <Header />
           <div
             class="flex min-h-0 flex-1"
@@ -430,6 +532,11 @@ export default function App() {
                 <>
                   <div class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={() => setUserListOpen(false)} />
                   <aside
+                    ref={(el) => (userSheetRef = el)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Users"
+                    tabindex="-1"
                     class="mobile-sheet fixed bottom-0 left-0 right-0 z-50 flex h-[min(72vh,660px)] flex-col overflow-hidden rounded-t-3xl border-t border-white/[0.08]"
                     onTouchStart={beginSheetDrag}
                     onTouchMove={moveSheetDrag}
