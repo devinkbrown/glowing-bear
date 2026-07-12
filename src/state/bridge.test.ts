@@ -20,6 +20,7 @@ import {
   _ingestEncryptedDm,
   _storeDecryptedOverlay,
   _resetBridgeCrypto,
+  _bridgeCryptoSizes,
   type BridgeBackend,
 } from './bridge';
 import { updateBridge, resetSettings } from './settings';
@@ -170,6 +171,62 @@ describe('_resetBridgeCrypto / session teardown', () => {
 
     expect(canE2ee('peer')).toBe(false);
     expect(decryptedFor('MID2', 'ENV2')).toBeNull();
+  });
+});
+
+describe('per-session growth bounds (H1 retention window)', () => {
+  // Mirrors MAX_OVERLAYS in bridge.ts (tied to buffers' MAX_LINES = 5000).
+  const MAX_OVERLAYS = 5000;
+
+  it('caps the decrypted-overlay index and evicts the oldest plaintext FIFO', () => {
+    const overshoot = 50;
+    for (let i = 0; i < MAX_OVERLAYS + overshoot; i++) {
+      _storeDecryptedOverlay(`MID${i}`, `TSUMUGI1 c${i}`, `plain${i}`);
+    }
+
+    const sizes = _bridgeCryptoSizes();
+    // Bounded: never more records than the retention window.
+    expect(sizes.overlayRecords).toBe(MAX_OVERLAYS);
+    expect(sizes.overlayKeys).toBe(MAX_OVERLAYS * 2); // m: + c: per record
+
+    // Oldest overshoot records evicted — their plaintext no longer resident.
+    expect(decryptedFor('MID0', 'TSUMUGI1 c0')).toBeNull();
+    expect(decryptedFor(`MID${overshoot - 1}`, `TSUMUGI1 c${overshoot - 1}`)).toBeNull();
+    // Newest still resolvable.
+    const last = MAX_OVERLAYS + overshoot - 1;
+    expect(decryptedFor(`MID${last}`, `TSUMUGI1 c${last}`)).toBe(`plain${last}`);
+  });
+
+  it('caps the attempted-envelope guard so undecryptable envelopes cannot grow it without bound', () => {
+    // No peer keys: every decrypt attempt fails, so each cipher stays "attempted"
+    // — exactly the path that would leak one guard entry per envelope forever.
+    for (let i = 0; i < MAX_OVERLAYS + 100; i++) {
+      decryptedFor(`Q${i}`, `TSUMUGI1 q${i}`);
+    }
+    expect(_bridgeCryptoSizes().attempted).toBeLessThanOrEqual(MAX_OVERLAYS);
+  });
+
+  it('_resetBridgeCrypto empties every bounded container (no cross-session residue)', () => {
+    _storeDecryptedOverlay('MIDx', 'TSUMUGI1 cx', 'plainx');
+    _setPeerDmKey('peerx', 'BKeyB64');
+    _ingestEncryptedDm('unkeyed', 'DID', 'TSUMUGI1 parked'); // parks (no key)
+    decryptedFor('Qy', 'TSUMUGI1 qy'); // marks an attempt
+
+    const before = _bridgeCryptoSizes();
+    expect(before.overlayRecords).toBeGreaterThan(0);
+    expect(before.peerKeys).toBeGreaterThan(0);
+    expect(before.pendingPeers).toBeGreaterThan(0);
+    expect(before.attempted).toBeGreaterThan(0);
+
+    _resetBridgeCrypto();
+
+    expect(_bridgeCryptoSizes()).toEqual({
+      overlayKeys: 0,
+      overlayRecords: 0,
+      attempted: 0,
+      peerKeys: 0,
+      pendingPeers: 0,
+    });
   });
 });
 

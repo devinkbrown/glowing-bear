@@ -144,8 +144,34 @@ const [peerKeys, setPeerKeys] = createStore<Record<string, string>>({});
  */
 const [overlays, setOverlays] = createStore<Record<string, string>>({});
 
-/** Envelopes we already tried against every known key (avoid re-scheduling). */
-const attemptedCiphers = new Set<string>();
+/**
+ * Retention window for decrypted-DM plaintext held in memory this session.
+ * Mirrors buffers' MAX_LINES: even inside one long-lived tab the overlay index
+ * (and the attempted-envelope guard) must not grow without bound, or decrypted
+ * plaintext of every DM ever seen stays resident for the tab's whole life.
+ */
+const MAX_OVERLAYS = 5000;
+
+/**
+ * Envelopes we already tried against every known key (avoid re-scheduling),
+ * as an insertion-ordered Map so it can be FIFO-bounded — a decrypt that FAILS
+ * (no matching key) still records the cipher here, so an unbounded set would
+ * leak one entry per undecryptable envelope for the life of the session.
+ */
+const attemptedCiphers = new Map<string, true>();
+
+/** FIFO record of stored overlays so the oldest plaintext is evicted at the cap. */
+const overlayOrder: Array<{ keys: string[]; cipher: string }> = [];
+
+/** Mark an envelope as attempted, evicting the oldest guard entry past the cap. */
+function markAttempted(cipher: string): void {
+  if (attemptedCiphers.has(cipher)) return;
+  attemptedCiphers.set(cipher, true);
+  if (attemptedCiphers.size > MAX_OVERLAYS) {
+    const oldest = attemptedCiphers.keys().next().value;
+    if (oldest !== undefined) attemptedCiphers.delete(oldest);
+  }
+}
 
 /** peer (lowercased) → encrypted DMs parked until their key arrives. */
 const pendingByPeer = new Map<string, Array<{ msgid?: string; cipher: string }>>();
@@ -162,8 +188,26 @@ const MAX_PENDING_PER_PEER = 200;
 export function _resetBridgeCrypto(): void {
   setPeerKeys(reconcile({}));
   setOverlays(reconcile({}));
+  overlayOrder.length = 0;
   attemptedCiphers.clear();
   pendingByPeer.clear();
+}
+
+/** Internal (tests only): live sizes of the bounded per-session crypto state. */
+export function _bridgeCryptoSizes(): {
+  overlayKeys: number;
+  overlayRecords: number;
+  attempted: number;
+  peerKeys: number;
+  pendingPeers: number;
+} {
+  return {
+    overlayKeys: Object.keys(overlays).length,
+    overlayRecords: overlayOrder.length,
+    attempted: attemptedCiphers.size,
+    peerKeys: Object.keys(peerKeys).length,
+    pendingPeers: pendingByPeer.size,
+  };
 }
 
 /** True when the peer's E2EE device key is known (reactive). */
@@ -177,10 +221,20 @@ export function _storeDecryptedOverlay(
   cipher: string,
   plaintext: string,
 ): void {
+  const keys: string[] = [];
   setOverlays(produce((o) => {
-    if (msgid) o[`m:${msgid}`] = plaintext;
-    o[`c:${cipher}`] = plaintext;
+    if (msgid) { o[`m:${msgid}`] = plaintext; keys.push(`m:${msgid}`); }
+    o[`c:${cipher}`] = plaintext; keys.push(`c:${cipher}`);
   }));
+  overlayOrder.push({ keys, cipher });
+  // Bound the session-resident plaintext: evict oldest records past the window.
+  while (overlayOrder.length > MAX_OVERLAYS) {
+    const old = overlayOrder.shift()!;
+    setOverlays(produce((o) => { for (const k of old.keys) delete o[k]; }));
+    // Drop the guard too so a still-visible envelope can cleanly re-decrypt
+    // (decryptedFor re-schedules only when the cipher is not marked attempted).
+    attemptedCiphers.delete(old.cipher);
+  }
 }
 
 async function decryptWith(peerKey: string, msgid: string | undefined, cipher: string): Promise<void> {
@@ -213,7 +267,7 @@ export function decryptedFor(msgid: string | undefined, text: string): string | 
   const byCipher = overlays[`c:${text}`];
   if (byCipher !== undefined) return byCipher;
   if (isEnvelope(text) && !attemptedCiphers.has(text)) {
-    attemptedCiphers.add(text);
+    markAttempted(text);
     void tryDecryptWithKnownKeys(msgid, text);
   }
   return null;
