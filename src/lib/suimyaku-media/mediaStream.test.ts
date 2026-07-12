@@ -41,6 +41,46 @@ describe('MediaStreamRouter', () => {
     expect(r.resolve(mediaStreamId('#call', 'carol', 'audio'))).toEqual({ nick: 'carol', kind: 'audio' });
   });
 
+  it('ignores add and remove operations before a roster channel is known', () => {
+    const r = new MediaStreamRouter();
+
+    r.addParticipant('alice');
+    r.removeParticipant('alice');
+
+    expect(r.resolve(mediaStreamId('', 'alice', 'audio'))).toBeNull();
+    expect(r.resolve(mediaStreamId('#call', 'alice', 'video'))).toBeNull();
+  });
+
+  it('removeParticipant drops both stream kinds for only that nick', () => {
+    const r = new MediaStreamRouter();
+    r.setRoster('#call', ['alice', 'bob']);
+
+    r.removeParticipant('ALICE');
+
+    expect(r.resolve(mediaStreamId('#call', 'alice', 'audio'))).toBeNull();
+    expect(r.resolve(mediaStreamId('#call', 'alice', 'video'))).toBeNull();
+    expect(r.resolve(mediaStreamId('#call', 'bob', 'audio'))).toEqual({ nick: 'bob', kind: 'audio' });
+    expect(r.resolve(mediaStreamId('#call', 'bob', 'video'))).toEqual({ nick: 'bob', kind: 'video' });
+  });
+
+  it('setRoster replaces the old channel and stale participants fail closed', () => {
+    const r = new MediaStreamRouter();
+    r.setRoster('#old', ['alice']);
+
+    r.setRoster('#new', ['carol']);
+
+    expect(r.resolve(mediaStreamId('#old', 'alice', 'audio'))).toBeNull();
+    expect(r.resolve(mediaStreamId('#new', 'carol', 'audio'))).toEqual({ nick: 'carol', kind: 'audio' });
+  });
+
+  it('returns null for malformed numeric stream ids', () => {
+    const r = new MediaStreamRouter();
+    r.setRoster('#call', ['alice']);
+
+    expect(r.resolve(Number.NaN)).toBeNull();
+    expect(r.resolve(Number.POSITIVE_INFINITY)).toBeNull();
+  });
+
   it('clear empties the map', () => {
     const r = new MediaStreamRouter();
     r.setRoster('#call', ['alice']);
