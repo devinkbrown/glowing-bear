@@ -45,6 +45,19 @@ const WIDTH_MAP: Record<string, string> = {
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
+// The Tab wrap must only ever land on a node that can actually take focus.
+// The raw selector matches disabled/hidden controls too, so a disabled first
+// or last child would let Tab escape the trap — filter them out.
+function focusableIn(panel: HTMLElement): HTMLElement[] {
+  return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+    if ((el as HTMLButtonElement | HTMLInputElement).disabled) return false;
+    if (el.hasAttribute('disabled')) return false;
+    if (el.getAttribute('aria-hidden') === 'true') return false;
+    if (el.hidden || el.closest('[hidden]')) return false;
+    return true;
+  });
+}
+
 export default function Modal(props: ModalProps) {
   return (
     <Show when={props.open ?? true}>
@@ -69,8 +82,11 @@ function ModalShell(props: ModalProps) {
     const panel = panelRef;
     if (!panel) return;
 
-    const focusable = panel.querySelectorAll<HTMLElement>(FOCUSABLE);
-    focusable[0]?.focus();
+    // Fallback to the panel itself (tabindex=-1) so a modal with no focusable
+    // child still moves focus into the dialog rather than leaving it outside.
+    const initial = focusableIn(panel);
+    if (initial.length > 0) initial[0]!.focus();
+    else panel.focus();
 
     function onKeydown(e: KeyboardEvent) {
       if (e.key === 'Escape' && props.onClose) {
@@ -79,10 +95,15 @@ function ModalShell(props: ModalProps) {
         return;
       }
       if (e.key === 'Tab' && panel) {
-        const nodes = panel.querySelectorAll<HTMLElement>(FOCUSABLE);
+        const nodes = focusableIn(panel);
         const first = nodes[0];
         const last = nodes[nodes.length - 1];
-        if (!first || !last) return;
+        // No focusable child: keep focus pinned to the panel, never let Tab out.
+        if (!first || !last) {
+          e.preventDefault();
+          panel.focus();
+          return;
+        }
         if (e.shiftKey && document.activeElement === first) {
           e.preventDefault();
           last.focus();
@@ -122,6 +143,7 @@ function ModalShell(props: ModalProps) {
         ref={(el) => (panelRef = el)}
         role="dialog"
         aria-modal="true"
+        tabindex="-1"
         aria-labelledby={props.title ? titleId : undefined}
         class={`relative w-full rounded-2xl border border-white/[0.06] bg-gray-900 overflow-hidden ${props.class ?? ''}`}
         style={{

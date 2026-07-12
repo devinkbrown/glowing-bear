@@ -91,4 +91,32 @@ describe('Modal', () => {
     // First focusable in the panel is the title-bar close button.
     expect(document.activeElement).toBe(getByLabelText('Close'));
   });
+
+  it('falls back to the panel when no focusable child exists', () => {
+    // No title bar (no close button) and inert content: nothing focusable.
+    const { getByRole } = render(() => (
+      <Modal open>
+        <p>read-only content</p>
+      </Modal>
+    ));
+
+    const dialog = getByRole('dialog');
+    expect(dialog).toHaveAttribute('tabindex', '-1');
+    // Focus lands on the dialog itself rather than escaping the modal.
+    expect(document.activeElement).toBe(dialog);
+  });
+
+  it('skips a disabled first child when placing initial focus', () => {
+    const { getByRole, getByText } = render(() => (
+      <Modal open>
+        <button disabled>Disabled first</button>
+        <button>Enabled second</button>
+      </Modal>
+    ));
+
+    const dialog = getByRole('dialog');
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    // The disabled control must not receive focus; the enabled one does.
+    expect(document.activeElement).toBe(getByText('Enabled second'));
+  });
 });

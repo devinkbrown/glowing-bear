@@ -20,7 +20,7 @@ import { createVirtualizer } from '@tanstack/solid-virtual';
 import { buffersState, setReadMarker, requestHistory, settings, uiState, setSearchOpen } from '@/state';
 import type { Reaction, WeeChatLine } from '@/types';
 import { bufferKind, type BufferKind } from '@/lib/bufferKind';
-import { extractEmbeds, type MediaEmbed } from '@/lib/irc-classic/formatter';
+import { extractEmbeds, stripFormatting, type MediaEmbed } from '@/lib/irc-classic/formatter';
 import { createMediaQuery } from '@/primitives/mediaQuery';
 import MessageLine from './MessageLine';
 import MessageEmbed from './MessageEmbed';
@@ -41,9 +41,19 @@ const GROUP_WINDOW_MS = 300_000; // same-nick grouping window (5 min)
 const HISTORY_TOP_PX = 200; // scrollTop threshold that triggers history load
 const AT_BOTTOM_PX = 40;
 const HISTORY_PAGE = 100;
+const ANNOUNCE_MAX = 30; // cap the live-region node count (old nodes are removals, unspoken)
 
 function getDayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+// Screen-reader text for one newly-arrived line: nick + plain-text body, with
+// mIRC/ANSI control codes stripped so the announcement isn't garbled.
+function announceText(line: WeeChatLine): string {
+  const body = stripFormatting(line.message).trim();
+  if (line.isJoin || line.isPart || line.isQuit || line.isNotice || !line.nick) return body;
+  if (line.isAction) return `${line.nick} ${body}`;
+  return `${line.nick}: ${body}`;
 }
 
 // ── extractEmbeds LRU (rows remount on scroll; avoid re-scanning URLs) ──────
@@ -133,6 +143,14 @@ export default function MessageView(props: MessageViewProps) {
   const [showScrollBtn, setShowScrollBtn] = createSignal(false);
   const [missedCount, setMissedCount] = createSignal(0);
   const [searchQuery, setSearchQuery] = createSignal('');
+
+  // Live-region feed (SC 4.1.3): only NEW tail lines land here. History
+  // prepends (requestHistory), buffer switches, and virtual row remounts must
+  // never re-announce the transcript, so this is fed by tail-id diffing — not
+  // by the virtualized container, which stays out of the live region entirely.
+  const [announced, setAnnounced] = createSignal<{ id: string; text: string }[]>([]);
+  let announceBufferPtr: string | undefined;
+  let lastAnnouncedId: string | undefined;
 
   const filteredLines = createMemo<WeeChatLine[]>(() => {
     const lines = entry()?.lines ?? [];
@@ -234,6 +252,32 @@ export default function MessageView(props: MessageViewProps) {
       requestAnimationFrame(() => scrollToEnd());
     }
     prevLineCount = count;
+  }));
+
+  // Announce new-tail messages only. Keyed on line count (reactive on push,
+  // unlike the raw memo when join/part filtering is off) plus bufferPtr, so a
+  // buffer switch always re-baselines silently.
+  createEffect(on([() => props.bufferPtr, () => filteredLines().length], () => {
+    const ptr = props.bufferPtr;
+    const lines = untrack(filteredLines);
+    // Buffer switch or first mount: adopt the current tail as the baseline and
+    // stay silent — the existing transcript is never announced.
+    if (ptr !== announceBufferPtr) {
+      announceBufferPtr = ptr;
+      lastAnnouncedId = lines[lines.length - 1]?.id;
+      return;
+    }
+    const newLast = lines[lines.length - 1]?.id;
+    // Unchanged tail => a prepend (requestHistory), reconcile, or no-op. Silent.
+    if (newLast === undefined || newLast === lastAnnouncedId) return;
+    const prevIdx = lastAnnouncedId === undefined ? -1 : lines.findIndex((l) => l.id === lastAnnouncedId);
+    // Known baseline: announce everything after it. Unknown baseline (trimmed
+    // away or was empty): announce only the final line, never the transcript.
+    const tail = prevIdx >= 0 ? lines.slice(prevIdx + 1) : lines.slice(-1);
+    lastAnnouncedId = newLast;
+    if (tail.length === 0) return;
+    const additions = tail.map((l) => ({ id: l.id, text: announceText(l) }));
+    setAnnounced((prev) => [...prev, ...additions].slice(-ANNOUNCE_MAX));
   }));
 
   // Buffer switch — scroll to bottom, reset state, stamp the read marker
@@ -356,6 +400,12 @@ export default function MessageView(props: MessageViewProps) {
   return (
     <Show when={entry()} fallback={<EmptyState />}>
       <div class="flex-1 flex flex-col min-h-0 relative">
+        {/* Live region (SC 4.1.3) — fed new-tail-only; kept OUT of the virtual
+            list so scroll/history-prepend/buffer-switch never re-announce. */}
+        <div role="log" aria-live="polite" aria-relevant="additions" aria-atomic="false" class="sr-only">
+          <For each={announced()}>{(a) => <div>{a.text}</div>}</For>
+        </div>
+
         {/* Search bar */}
         <Show when={uiState.searchOpen}>
           <div class="flex items-center gap-2 px-3 sm:px-4 py-2.5 border-b border-white/[0.04] bg-gray-950/90 backdrop-blur-sm shrink-0 animate-slide-down">

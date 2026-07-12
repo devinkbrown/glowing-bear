@@ -1,9 +1,22 @@
+import { createSignal, onCleanup, onMount } from 'solid-js';
+
 function seededRand(seed: number) {
   let s = seed;
   return () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; };
 }
 
 export default function StarfieldBg() {
+  // Cheap visibility pause: freeze the ~500-700 animating nodes while the tab
+  // is backgrounded. Reduced-motion is handled entirely in CSS below so it
+  // still holds when JS is idle.
+  const [hidden, setHidden] = createSignal(
+    typeof document !== 'undefined' && document.visibilityState === 'hidden',
+  );
+  onMount(() => {
+    const onVis = () => setHidden(document.visibilityState === 'hidden');
+    document.addEventListener('visibilitychange', onVis);
+    onCleanup(() => document.removeEventListener('visibilitychange', onVis));
+  });
   const stars = (() => {
     const rand = seededRand(7);
     return Array.from({ length: 280 }, () => {
@@ -48,7 +61,7 @@ export default function StarfieldBg() {
   })();
 
   return (
-    <div class="absolute inset-0 pointer-events-none" aria-hidden="true">
+    <div class="sf-root absolute inset-0 pointer-events-none" classList={{ 'sf-paused': hidden() }} aria-hidden="true">
       {/* Milky Way band — diagonal haze */}
       <div class="absolute inset-0" style={{
         background: 'linear-gradient(135deg, transparent 15%, rgba(160,180,255,0.04) 30%, rgba(200,180,255,0.06) 45%, rgba(180,190,255,0.05) 55%, rgba(160,180,255,0.03) 70%, transparent 85%)',
@@ -254,6 +267,13 @@ export default function StarfieldBg() {
         style={{ 'background-image': `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")` }} />
 
       <style>{`
+        /* Reduced motion: freeze every node in this scene (Starfield is NOT
+           wrapped in ThemeBg's Shell, so it needs its own guard). */
+        @media (prefers-reduced-motion: reduce) {
+          .sf-root, .sf-root * { animation: none !important; }
+        }
+        /* Tab backgrounded: pause instead of tearing down the DOM. */
+        .sf-paused, .sf-paused * { animation-play-state: paused !important; }
         @keyframes sf-twinkle {
           0%, 100% { opacity: inherit; transform: scale(1); }
           40% { opacity: 0.02; transform: scale(0.3); }

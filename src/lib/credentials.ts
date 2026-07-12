@@ -2,10 +2,18 @@
  * lib/credentials.ts
  * DarkBear — login credential persistence
  *
- * Storage layout (localStorage key: 'darkbear:credentials'):
- *   version     — storage schema version
- *   activeKey   — last-used credential key
- *   entries     — saved credentials keyed by normalized server + nick
+ * Storage split (by threat model):
+ *   - localStorage 'darkbear:credentials' — the account password + metadata
+ *     (nick / server / savedAt / activeKey). The password is stored in plain
+ *     text, the same accepted tradeoff every desktop IRC client config makes;
+ *     it survives across browser restarts so auto-connect keeps working.
+ *   - sessionStorage 'darkbear:tokens' — the session/mesh BEARER reclaim tokens
+ *     (sessionToken / meshToken / tokenExpiry), keyed by the same credential
+ *     key. These are true bearer credentials that can resume/hijack a session,
+ *     so they are kept in sessionStorage: they survive a reload but are cleared
+ *     when the browser session ends, bounding their lifetime.
+ * The public SavedCredentials shape is unchanged — read/write transparently
+ * merge and split the two stores.
  *
  * Session tokens are issued by Orochi after successful SASL auth via:
  *   NOTE SESSION TOKEN :<token>
@@ -20,11 +28,25 @@
  * reclaims a detached session held locally or redirects to the owning node.
  *
  * When no token is present (first login or expired) the password is used
- * for SASL PLAIN / SCRAM.  The password is stored in plain text — same as
- * every desktop IRC client config file.
+ * for SASL PLAIN / SCRAM.
  */
 
 const KEY = 'darkbear:credentials';
+const TOKEN_KEY = 'darkbear:tokens';
+
+/**
+ * Conservative default lifetime for a mesh reclaim token that arrives with no
+ * explicit expiry. A cross-node bearer credential must never persist unbounded;
+ * this gives it a real deadline that `purgeExpiredTokens` can act on.
+ */
+const MESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/**
+ * Absolute backstop: any bearer token whose entry carries no usable
+ * `tokenExpiry` is aged out this long after `savedAt`. Fail-closed guarantee —
+ * a token that cannot otherwise be aged out is not kept indefinitely.
+ */
+const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export interface SavedCredentials {
   nick: string;
@@ -72,12 +94,59 @@ function isSavedCredentials(value: unknown): value is SavedCredentials {
     && candidate.server.length > 0;
 }
 
-function readStore(): CredentialsStore | null {
-  if (typeof window === 'undefined') return null;
+/** Bearer-token fields, persisted separately from the localStorage password. */
+interface TokenFields {
+  sessionToken?: string;
+  meshToken?: string;
+  tokenExpiry?: string;
+}
+
+/**
+ * Read the sessionStorage bearer-token map. Best-effort: a private-mode /
+ * disabled / corrupt sessionStorage degrades to no tokens (user re-auths with
+ * the password) rather than throwing.
+ */
+function readTokenMap(): Record<string, TokenFields> {
+  try {
+    const raw = sessionStorage.getItem(TOKEN_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return {};
+    const out: Record<string, TokenFields> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object') continue;
+      const t = value as Partial<TokenFields>;
+      const fields: TokenFields = {};
+      if (typeof t.sessionToken === 'string') fields.sessionToken = t.sessionToken;
+      if (typeof t.meshToken === 'string') fields.meshToken = t.meshToken;
+      if (typeof t.tokenExpiry === 'string') fields.tokenExpiry = t.tokenExpiry;
+      if (fields.sessionToken || fields.meshToken) out[key] = fields;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Persist the sessionStorage bearer-token map, removing the key when empty. */
+function writeTokenMap(map: Record<string, TokenFields>): void {
+  try {
+    if (Object.keys(map).length === 0) sessionStorage.removeItem(TOKEN_KEY);
+    else sessionStorage.setItem(TOKEN_KEY, JSON.stringify(map));
+  } catch { /* private mode / quota — degrade to no persisted tokens */ }
+}
+
+/** Parse the localStorage credential blob (password + metadata; tokens may be
+ * present inline only in a pre-split legacy blob). Returns the store plus
+ * whether legacy inline tokens were seen, so the caller can migrate them out. */
+function parseLocalStore(): { store: CredentialsStore; hadInlineTokens: boolean } | null {
   const raw = localStorage.getItem(KEY);
   if (!raw) return null;
-
   const parsed = JSON.parse(raw) as unknown;
+
+  const hasInlineToken = (c: SavedCredentials): boolean =>
+    Boolean(c.sessionToken || c.meshToken || c.tokenExpiry);
+
   if (
     parsed
     && typeof parsed === 'object'
@@ -86,35 +155,103 @@ function readStore(): CredentialsStore | null {
     && typeof (parsed as { entries: unknown }).entries === 'object'
   ) {
     const entries: Record<string, SavedCredentials> = {};
+    let hadInlineTokens = false;
     for (const [key, value] of Object.entries((parsed as CredentialsStore).entries)) {
-      if (isSavedCredentials(value)) entries[key] = value;
+      if (isSavedCredentials(value)) {
+        entries[key] = value;
+        if (hasInlineToken(value)) hadInlineTokens = true;
+      }
     }
     return {
-      version: 2,
-      activeKey: typeof (parsed as CredentialsStore).activeKey === 'string'
-        ? (parsed as CredentialsStore).activeKey
-        : undefined,
-      entries,
+      store: {
+        version: 2,
+        activeKey: typeof (parsed as CredentialsStore).activeKey === 'string'
+          ? (parsed as CredentialsStore).activeKey
+          : undefined,
+        entries,
+      },
+      hadInlineTokens,
     };
   }
 
   // Legacy single-credential object.
   if (isSavedCredentials(parsed)) {
     const key = credentialKey(parsed.server, parsed.nick);
-    return { version: 2, activeKey: key, entries: { [key]: parsed } };
+    return {
+      store: { version: 2, activeKey: key, entries: { [key]: parsed } },
+      hadInlineTokens: hasInlineToken(parsed),
+    };
   }
 
   return null;
 }
 
+function readStore(): CredentialsStore | null {
+  if (typeof window === 'undefined') return null;
+  const parsed = parseLocalStore();
+  if (!parsed) return null;
+
+  const { store, hadInlineTokens } = parsed;
+  const tokens = readTokenMap();
+  // sessionStorage is authoritative for token fields when present; otherwise a
+  // legacy inline token on the entry survives this read and is migrated below.
+  for (const [key, creds] of Object.entries(store.entries)) {
+    const t = tokens[key];
+    if (t) {
+      store.entries[key] = {
+        ...creds,
+        sessionToken: t.sessionToken,
+        meshToken:    t.meshToken,
+        tokenExpiry:  t.tokenExpiry,
+      };
+    }
+  }
+
+  // One-time migration: a pre-split blob carried tokens in localStorage. Writing
+  // now moves them into sessionStorage and strips them from localStorage.
+  if (hadInlineTokens) writeStore(store);
+  return store;
+}
+
+/** Split a merged store: password + metadata → localStorage, bearer tokens →
+ * sessionStorage. */
 function writeStore(store: CredentialsStore): void {
-  localStorage.setItem(KEY, JSON.stringify(store));
+  const tokenMap: Record<string, TokenFields> = {};
+  const stripped: CredentialsStore = {
+    version: 2,
+    activeKey: store.activeKey,
+    entries: {},
+  };
+  for (const [key, creds] of Object.entries(store.entries)) {
+    const { sessionToken, meshToken, tokenExpiry, ...rest } = creds;
+    stripped.entries[key] = rest;
+    if (sessionToken || meshToken) tokenMap[key] = { sessionToken, meshToken, tokenExpiry };
+  }
+  localStorage.setItem(KEY, JSON.stringify(stripped));
+  writeTokenMap(tokenMap);
+}
+
+/**
+ * Effective expiry deadline (ms) for an entry's bearer token. Prefers an
+ * explicit `tokenExpiry`; falls back to `savedAt + MAX_TOKEN_AGE_MS` so a token
+ * with no recorded expiry still ages out. A missing/invalid timestamp yields a
+ * past deadline (fail-closed: purge rather than keep an unbounded token).
+ */
+function tokenDeadlineMs(creds: SavedCredentials): number {
+  if (creds.tokenExpiry) {
+    const explicit = new Date(creds.tokenExpiry).getTime();
+    if (Number.isFinite(explicit)) return explicit;
+  }
+  const saved = new Date(creds.savedAt).getTime();
+  return (Number.isFinite(saved) ? saved : 0) + MAX_TOKEN_AGE_MS;
 }
 
 function purgeExpiredTokens(store: CredentialsStore): boolean {
   let changed = false;
+  const now = Date.now();
   for (const [key, creds] of Object.entries(store.entries)) {
-    if ((creds.sessionToken || creds.meshToken) && creds.tokenExpiry && Date.now() > new Date(creds.tokenExpiry).getTime()) {
+    if (!creds.sessionToken && !creds.meshToken) continue;
+    if (now > tokenDeadlineMs(creds)) {
       store.entries[key] = {
         ...creds,
         sessionToken: undefined,
@@ -192,7 +329,12 @@ export function storeSessionToken(token: string, expiresAt?: number, canonicalNi
     if (!activeKey) return;
     const existing = store.entries[activeKey];
     if (!existing) return;
-    const expiry = expiresAt ? new Date(expiresAt * 1000).toISOString() : undefined;
+    // Preserve any existing bound (e.g. a co-resident mesh token's server
+    // expiry) rather than erasing it when this call carries no expiresAt; the
+    // savedAt backstop still bounds a token that never had one.
+    const expiry = expiresAt
+      ? new Date(expiresAt * 1000).toISOString()
+      : existing.tokenExpiry;
     const nick = canonicalNick ?? existing.nick;
     const creds: SavedCredentials = {
       ...existing,
@@ -229,8 +371,12 @@ export function clearSessionToken(server?: string, nick?: string): void {
  * reclaim/redirect the session from ANY node in the mesh, so it survives a
  * reconnect that lands on a different node. Persisted against the active
  * credential entry; a no-op when no base credentials exist (guest sessions).
+ *
+ * expiresAt is a Unix timestamp (seconds). When omitted the token is recorded
+ * with a conservative default TTL — a cross-node bearer credential must never
+ * persist without a bound.
  */
-export function storeMeshToken(token: string): void {
+export function storeMeshToken(token: string, expiresAt?: number): void {
   if (typeof window === 'undefined') return;
   try {
     const store = readStore();
@@ -240,7 +386,10 @@ export function storeMeshToken(token: string): void {
     if (!activeKey) return;
     const existing = store.entries[activeKey];
     if (!existing) return;
-    store.entries[activeKey] = { ...existing, meshToken: token };
+    const expiry = expiresAt
+      ? new Date(expiresAt * 1000).toISOString()
+      : existing.tokenExpiry ?? new Date(Date.now() + MESH_TOKEN_TTL_MS).toISOString();
+    store.entries[activeKey] = { ...existing, meshToken: token, tokenExpiry: expiry };
     writeStore(store);
   } catch { /* quota */ }
 }
@@ -251,6 +400,9 @@ export function clearCredentials(): void {
   try {
     localStorage.removeItem(KEY);
     localStorage.removeItem('darkbear:saved-nick');
+  } catch { /* ignore */ }
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
   } catch { /* ignore */ }
 }
 
