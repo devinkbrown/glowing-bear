@@ -27,5 +27,11 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
+    // Heavy jsdom renders (scene backgrounds, PBKDF2, decode) cost ~0.5–1s each and
+    // inflate 2.5–3.8x when the box is CPU-oversubscribed (parallel fleet gates), which
+    // could push a test past vitest's 5s default and cause a false integrate revert.
+    // A generous project-level ceiling makes the suite load-insensitive; a real value
+    // regression still fails its assertion instantly, well under this bound.
+    testTimeout: 20_000,
   },
 });
