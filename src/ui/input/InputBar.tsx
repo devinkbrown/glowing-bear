@@ -2,7 +2,7 @@
 // history, tab completion, IRC formatting shortcuts, uploads, GIF picker,
 // typing notifications, and the E2EE DM send path.
 
-import { createEffect, createSignal, onCleanup, untrack, Show } from 'solid-js';
+import { createEffect, createSignal, lazy, onCleanup, untrack, Show, Suspense } from 'solid-js';
 import {
   buffersState,
   completionState,
@@ -22,7 +22,10 @@ import type { BridgeSettings, BufferEntry } from '@/state';
 import { sendTyping, canE2ee, sendE2eeDm } from '@/state/bridge';
 import { bufferKind } from '@/lib/bufferKind';
 import { uploadFile, UploadError } from '@/lib/upload/upload';
-import GifPicker from './GifPicker';
+// GifPicker is only mounted when the user opens the picker (Show gate below), so
+// defer its chunk off the first-paint fetch — the static import pulled the
+// ~28kB gif-picker chunk eagerly on boot even though it is on-demand UI.
+const GifPicker = lazy(() => import('./GifPicker'));
 
 const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 160;
@@ -436,14 +439,16 @@ export default function InputBar() {
 
       {/* GIF picker */}
       <Show when={showGif()}>
-        <GifPicker
-          apiKey={settings.tenorApiKey}
-          onSelect={(url) => {
-            const ptr = activeBuffer();
-            if (ptr) void deliver(url, ptr);
-          }}
-          onClose={closeGif}
-        />
+        <Suspense fallback={null}>
+          <GifPicker
+            apiKey={settings.tenorApiKey}
+            onSelect={(url) => {
+              const ptr = activeBuffer();
+              if (ptr) void deliver(url, ptr);
+            }}
+            onClose={closeGif}
+          />
+        </Suspense>
       </Show>
 
       {/* Input row */}
