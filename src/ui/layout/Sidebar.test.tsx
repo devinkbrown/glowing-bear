@@ -12,7 +12,9 @@ import type { WeeChatBuffer } from '@/types';
 import {
   buffersState,
   clearBuffers,
+  getNotifyMode,
   resetSettings,
+  setNotifyMode,
   updateHotlist,
   upsertBuffer,
 } from '@/state';
@@ -158,6 +160,50 @@ describe('Sidebar', () => {
     expect(queryByText('trev')).toBeNull();
     // The server group header survives as the group container.
     expect(getByText('eshmaki')).toBeInTheDocument();
+  });
+
+  it('renders the notify control at its default tier for channel rows', () => {
+    const { getAllByLabelText } = render(() => <Sidebar />);
+
+    // Both channels default to the 'mentions' tier (the pre-P3.4 behavior).
+    const controls = getAllByLabelText(/Notifications: mentions only/);
+    expect(controls).toHaveLength(2);
+    expect(controls[0]).toHaveAttribute('data-notify-mode', 'mentions');
+    // Mentions tier carries an accent dot on the bell.
+    expect(controls[0]?.querySelector('circle')).not.toBeNull();
+  });
+
+  it('renders the correct notify icon and label per tier', () => {
+    setNotifyMode('0x2', 'all');
+    setNotifyMode('0x3', 'mute');
+    const { getByLabelText } = render(() => <Sidebar />);
+
+    const allBtn = getByLabelText(/Notifications: all messages/);
+    expect(allBtn).toHaveAttribute('data-notify-mode', 'all');
+    expect(allBtn.querySelector('circle')).toBeNull();
+
+    const muteBtn = getByLabelText(/Notifications: muted/);
+    expect(muteBtn).toHaveAttribute('data-notify-mode', 'mute');
+    // Bell-slash: the diagonal slash stroke is what distinguishes the mute icon.
+    expect(muteBtn.querySelector('path[d="M3 3l10 10"]')).not.toBeNull();
+  });
+
+  it('cycles the notify tier on click without selecting the buffer', () => {
+    setNotifyMode('0x2', 'all');
+    const { getByLabelText } = render(() => <Sidebar />);
+
+    // Server buffer is active on mount; the notify click must not steal that.
+    expect(buffersState.activeBuffer).toBe('0x1');
+
+    const btn = getByLabelText(/Notifications: all messages/);
+    fireEvent.click(btn);
+
+    // all → mentions, and the row was NOT activated.
+    expect(getNotifyMode('0x2')).toBe('mentions');
+    expect(buffersState.activeBuffer).toBe('0x1');
+    // Label + icon update reactively to the new tier on the same element.
+    expect(btn).toHaveAttribute('data-notify-mode', 'mentions');
+    expect(btn.getAttribute('aria-label')).toMatch(/mentions only/);
   });
 
   it('filters the buffer deck by unread and DM modes', () => {

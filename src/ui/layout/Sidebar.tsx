@@ -7,10 +7,11 @@ import {
   buffersState,
   ConnectionState,
   connectionState,
+  cycleNotifyMode,
+  getNotifyMode,
   getTotalHighlights,
   getTotalUnread,
   getSorted,
-  isMuted,
   isPinned,
   nextHighlighted,
   openModal,
@@ -22,7 +23,7 @@ import {
   setSidebarOpen,
   settings,
 } from '@/state';
-import type { BufferEntry } from '@/state';
+import type { BufferEntry, NotifyMode } from '@/state';
 import BearLogo from '@/ui/bits/BearLogo';
 import { bufferKind, type BufferKind } from '@/lib/bufferKind';
 import { stripColors } from '@/lib/weechat/strip-colors';
@@ -371,7 +372,7 @@ export default function Sidebar(props: SidebarProps) {
                         onClick={(e) => selectBuffer(entry.buffer.id, e)}
                         indent
                         pinned={isPinned(entry.buffer.id)}
-                        muted={isMuted(entry.buffer.id)}
+                        notifyMode={getNotifyMode(entry.buffer.id)}
                       />
                     )}
                   </For>
@@ -424,7 +425,7 @@ function BufItem(props: {
   onClick: (e: MouseEvent) => void;
   indent?: boolean;
   pinned?: boolean;
-  muted?: boolean;
+  notifyMode?: NotifyMode;
 }) {
   const name = () => props.entry.buffer.shortName || props.entry.buffer.name;
   const kind = () => bufferKind(props.entry.buffer);
@@ -445,10 +446,21 @@ function BufItem(props: {
   };
 
   return (
-    <button
+    // Row is a keyboard-operable container (role=button), NOT a native <button>,
+    // so the inline notify control can be a real nested <button> without an
+    // invalid button-in-button. Enter/Space replay the row's own click.
+    <div
+      role="button"
+      tabindex={0}
       onClick={(e) => props.onClick(e)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.currentTarget.click();
+        }
+      }}
       title={props.entry.buffer.fullName}
-      class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-[transform,background-color,box-shadow,color] duration-150 ease-out text-[14px] sm:text-[13px] rounded-xl group relative active:scale-[0.985]"
+      class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-[transform,background-color,box-shadow,color] duration-150 ease-out text-[14px] sm:text-[13px] rounded-xl group relative active:scale-[0.985] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--custom-accent,#818cf8)]/50"
       classList={{
         'pl-6': props.indent,
         'pl-3': !props.indent,
@@ -493,8 +505,17 @@ function BufItem(props: {
       <Show when={props.pinned}>
         <span class="w-1 h-1 rounded-full bg-[var(--custom-accent,#818cf8)]/50 shrink-0" />
       </Show>
-      <Show when={props.muted}>
-        <span class="text-[10px] text-gray-600 shrink-0">/</span>
+      <Show when={props.notifyMode}>
+        {(mode) => (
+          <NotifyButton
+            mode={mode()}
+            onCycle={(e) => {
+              // Keep the notify toggle from also selecting the buffer.
+              e.stopPropagation();
+              cycleNotifyMode(props.entry.buffer.id);
+            }}
+          />
+        )}
       </Show>
       <Show when={props.entry.highlighted > 0} fallback={
         <Show when={props.entry.unread > 0}>
@@ -502,6 +523,70 @@ function BufItem(props: {
         </Show>
       }>
         <Pip count={props.entry.highlighted} hot />
+      </Show>
+    </div>
+  );
+}
+
+/**
+ * Per-buffer notification tier control — a real, keyboard-focusable button that
+ * cycles all → mentions → mute → all. Icon + semantics per tier:
+ *   all      → bell, kept faint until hover/focus so default rows stay calm
+ *   mentions → bell with an accent "mention" dot, always visible
+ *   mute     → bell-slash, always visible
+ * Motion is opacity/colour/transform only (compositor-friendly), timed on the
+ * house 150ms ease-out. The label announces the current tier for a screen
+ * reader and updates reactively as the tier changes.
+ */
+function NotifyButton(props: { mode: NotifyMode; onCycle: (e: MouseEvent) => void }) {
+  const label = () => {
+    switch (props.mode) {
+      case 'all':
+        return 'Notifications: all messages — click to change';
+      case 'mentions':
+        return 'Notifications: mentions only — click to change';
+      case 'mute':
+        return 'Notifications: muted — click to change';
+    }
+  };
+  const iconCls = 'w-[13px] h-[13px] sm:w-3 sm:h-3';
+  return (
+    <button
+      type="button"
+      aria-label={label()}
+      title={label()}
+      data-notify-mode={props.mode}
+      onClick={(e) => props.onCycle(e)}
+      class="shrink-0 flex items-center justify-center w-6 h-6 -my-0.5 rounded-md transition-[opacity,color,transform] duration-150 ease-out hover:bg-white/[0.06] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--custom-accent,#818cf8)]/60"
+      classList={{
+        // Default tier: unobtrusive until the row is hovered or the control focused.
+        'opacity-40 text-gray-600 group-hover:opacity-90 group-hover:text-gray-400 focus-visible:opacity-100':
+          props.mode === 'all',
+        // Mentions-only: present and legible, the accent dot carries the meaning.
+        'opacity-100 text-gray-400 hover:text-gray-200': props.mode === 'mentions',
+        // Muted: present but quiet, the slash carries the meaning.
+        'opacity-100 text-gray-600 hover:text-gray-400': props.mode === 'mute',
+      }}
+    >
+      <Show when={props.mode === 'all'}>
+        <svg class={iconCls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 2a1 1 0 0 0-1 1v.5C5.4 3.9 4.3 5.4 4.3 7.1c0 2.5-1 3.5-1 3.5h9.4s-1-1-1-3.5c0-1.7-1.1-3.2-2.7-3.6V3a1 1 0 0 0-1-1z" />
+          <path d="M6.7 11.4a1.4 1.4 0 0 0 2.6 0" />
+        </svg>
+      </Show>
+      <Show when={props.mode === 'mentions'}>
+        <svg class={iconCls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 2a1 1 0 0 0-1 1v.5C5.4 3.9 4.3 5.4 4.3 7.1c0 2.5-1 3.5-1 3.5h9.4s-1-1-1-3.5c0-1.7-1.1-3.2-2.7-3.6V3a1 1 0 0 0-1-1z" />
+          <path d="M6.7 11.4a1.4 1.4 0 0 0 2.6 0" />
+          <circle cx="12" cy="4" r="2.4" fill="var(--custom-accent,#818cf8)" stroke="none" />
+        </svg>
+      </Show>
+      <Show when={props.mode === 'mute'}>
+        <svg class={iconCls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 2a1 1 0 0 0-1 1v.5C5.4 3.9 4.3 5.4 4.3 7.1c0 2.5-1 3.5-1 3.5h9.4s-1-1-1-3.5c0-1.7-1.1-3.2-2.7-3.6V3a1 1 0 0 0-1-1z" opacity="0.7" />
+          <path d="M6.7 11.4a1.4 1.4 0 0 0 2.6 0" opacity="0.7" />
+          <path d="M3 3l10 10" />
+        </svg>
       </Show>
     </button>
   );
