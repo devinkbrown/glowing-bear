@@ -244,12 +244,88 @@ export function clearLines(pointer: string): void {
 const isOptimistic = (id: string) => id.startsWith('_opt_');
 
 /**
+ * Client-side highlight-word match. Returns a highlighted COPY when a trimmed
+ * word occurs in the message, otherwise the original line untouched.
+ */
+function markHighlight(line: WeeChatLine, highlightWords: string[]): WeeChatLine {
+  if (line.highlight || !line.message || highlightWords.length === 0) return line;
+  const lcMsg = line.message.toLowerCase();
+  for (const word of highlightWords) {
+    const lc = word.trim().toLowerCase();
+    if (lc && lcMsg.includes(lc)) return { ...line, highlight: true };
+  }
+  return line;
+}
+
+/**
+ * Content-based dedup: true when a recent non-optimistic line (last
+ * CONTENT_DEDUP_SCAN, within CONTENT_DEDUP_WINDOW_MS) has the same nick+message.
+ * Catches the same message arriving under a different pointer id.
+ */
+function isContentDuplicate(lines: WeeChatLine[], line: WeeChatLine): boolean {
+  if (!line.message || lines.length === 0) return false;
+  const cutoff = line.date.getTime() - CONTENT_DEDUP_WINDOW_MS;
+  for (let i = lines.length - 1; i >= Math.max(0, lines.length - CONTENT_DEDUP_SCAN); i--) {
+    const l = lines[i];
+    if (!l) break;
+    if (l.date.getTime() < cutoff) break;
+    if (isOptimistic(l.id)) continue;
+    if (l.nick === line.nick && l.message === line.message) return true;
+  }
+  return false;
+}
+
+/**
+ * Fold one line into a buffer-entry draft: msgIndex, optimistic-echo
+ * replacement, append, lineIds, and the inactive-buffer unread/highlight bump.
+ * Shared by addLine and addLineBatch so both produce identical state. The caller
+ * trims to MAX_LINES afterwards (see trimEntry).
+ */
+function insertLine(e: BufferEntry, line: WeeChatLine, inactive: boolean, opt: boolean): void {
+  if (line.msgid) e.msgIndex[line.msgid] = line;
+
+  // Replace optimistic placeholder on confirmed echo
+  if (!opt) {
+    const optIdx = e.lines.findIndex((l) =>
+      isOptimistic(l.id) && l.message === line.message &&
+      (line.isSelf || l.nick === line.nick));
+    if (optIdx !== -1) e.lines.splice(optIdx, 1);
+  }
+
+  e.lines.push(line);
+  if (!opt) e.lineIds[line.id] = true;
+
+  if (inactive && line.displayed && !opt) {
+    e.unread += 1;
+    if (line.highlight) e.highlighted += 1;
+  }
+}
+
+/**
+ * Trim a draft entry's lines to MAX_LINES, rebuilding lineIds (and msgIndex when
+ * it has grown past the cap) from the survivors so both maps stay bounded.
+ */
+function trimEntry(e: BufferEntry): void {
+  if (e.lines.length <= MAX_LINES) return;
+  e.lines = e.lines.slice(-MAX_LINES);
+  const ids: Record<string, true> = {};
+  for (const l of e.lines) if (!isOptimistic(l.id)) ids[l.id] = true;
+  e.lineIds = ids;
+  if (Object.keys(e.msgIndex).length > MAX_LINES) {
+    const keep = new Set(e.lines.map((l) => l.msgid).filter(Boolean));
+    const idx: Record<string, WeeChatLine> = {};
+    for (const [k, v] of Object.entries(e.msgIndex)) if (keep.has(k)) idx[k] = v;
+    e.msgIndex = idx;
+  }
+}
+
+/**
  * Append a single live line.
  *
- * Dedup: O(1) id lookup, then a content scan over the last 10 lines within a
- * 3s window (same nick + message). Confirmed echoes replace their `_opt_`
- * optimistic placeholder. Client-side highlight words mark the line
- * highlighted before insertion. Unread/highlight counters bump when the
+ * Dedup: O(1) id lookup, then a content scan over the last CONTENT_DEDUP_SCAN
+ * lines within CONTENT_DEDUP_WINDOW_MS (same nick + message). Confirmed echoes
+ * replace their `_opt_` optimistic placeholder. Client-side highlight words mark
+ * the line highlighted before insertion. Unread/highlight counters bump when the
  * buffer is not active.
  */
 export function addLine(pointer: string, line: WeeChatLine, highlightWords: string[]): void {
@@ -261,71 +337,50 @@ export function addLine(pointer: string, line: WeeChatLine, highlightWords: stri
 
   const opt = isOptimistic(line.id);
 
-  // Deduplicate: O(1) id lookup
+  // Deduplicate: O(1) id lookup, then recent-content scan
   if (!opt && entry.lineIds[line.id]) return;
+  if (!opt && isContentDuplicate(entry.lines, line)) return;
 
-  // Content-based dedup: skip if a recent line has identical nick+message
-  // (catches cases where the same message arrives with different pointer IDs)
-  if (!opt && line.message && entry.lines.length > 0) {
-    const tail = entry.lines;
-    const cutoff = line.date.getTime() - CONTENT_DEDUP_WINDOW_MS;
-    for (let i = tail.length - 1; i >= Math.max(0, tail.length - CONTENT_DEDUP_SCAN); i--) {
-      const l = tail[i];
-      if (!l) break;
-      if (l.date.getTime() < cutoff) break;
-      if (isOptimistic(l.id)) continue;
-      if (l.nick === line.nick && l.message === line.message) return;
-    }
-  }
-
-  // Client-side highlight words (applied before insertion so the stored line
-  // carries the highlight flag)
-  if (!line.highlight && line.message && highlightWords.length > 0) {
-    const lcMsg = line.message.toLowerCase();
-    for (const word of highlightWords) {
-      const lc = word.trim().toLowerCase();
-      if (lc && lcMsg.includes(lc)) {
-        line = { ...line, highlight: true };
-        break;
-      }
-    }
-  }
+  const marked = markHighlight(line, highlightWords);
 
   setState(produce((s) => {
     const e = s.buffers[pointer];
     if (!e) return;
+    insertLine(e, marked, s.activeBuffer !== pointer, opt);
+    trimEntry(e);
+  }));
+}
 
-    if (line.msgid) e.msgIndex[line.msgid] = line;
+/**
+ * Fold a burst of live lines (one WeeChat _buffer_line_added frame delivers each
+ * line-added item, e.g. a netsplit rejoin or flood) into ONE store write.
+ *
+ * Observably identical to calling addLine for each line in order — same
+ * ignored-nick suppression, id/content dedup, optimistic-echo replacement,
+ * highlight-word marking, unread/highlight fold, ordering, MAX_LINES cap and
+ * lineIds/msgIndex rebuild — but a single produce, so one reactive pass instead
+ * of N. Dedup and opt-replacement run against the GROWING draft, so earlier
+ * lines in the batch are visible to later ones exactly as sequential addLine
+ * calls would see them.
+ */
+export function addLineBatch(pointer: string, lines: WeeChatLine[], highlightWords: string[]): void {
+  if (lines.length === 0) return;
+  const entry = state.buffers[pointer];
+  if (!entry) return;
 
-    // Replace optimistic placeholder on confirmed echo
-    if (!opt) {
-      const optIdx = e.lines.findIndex((l) =>
-        isOptimistic(l.id) && l.message === line.message &&
-        (line.isSelf || l.nick === line.nick));
-      if (optIdx !== -1) e.lines.splice(optIdx, 1);
+  setState(produce((s) => {
+    const e = s.buffers[pointer];
+    if (!e) return;
+    const inactive = s.activeBuffer !== pointer;
+    for (const raw of lines) {
+      // Suppress ignored nicks
+      if (raw.nick && s.ignoredNicks[raw.nick.toLowerCase()]) continue;
+      const opt = isOptimistic(raw.id);
+      if (!opt && e.lineIds[raw.id]) continue;
+      if (!opt && isContentDuplicate(e.lines, raw)) continue;
+      insertLine(e, markHighlight(raw, highlightWords), inactive, opt);
     }
-
-    e.lines.push(line);
-    if (!opt) e.lineIds[line.id] = true;
-
-    if (e.lines.length > MAX_LINES) {
-      e.lines = e.lines.slice(-MAX_LINES);
-      // Rebuild the index from the trimmed array to prevent unbounded growth
-      const ids: Record<string, true> = {};
-      for (const l of e.lines) if (!isOptimistic(l.id)) ids[l.id] = true;
-      e.lineIds = ids;
-      if (Object.keys(e.msgIndex).length > MAX_LINES) {
-        const keep = new Set(e.lines.map((l) => l.msgid).filter(Boolean));
-        const idx: Record<string, WeeChatLine> = {};
-        for (const [k, v] of Object.entries(e.msgIndex)) if (keep.has(k)) idx[k] = v;
-        e.msgIndex = idx;
-      }
-    }
-
-    if (s.activeBuffer !== pointer && line.displayed && !opt) {
-      e.unread += 1;
-      if (line.highlight) e.highlighted += 1;
-    }
+    trimEntry(e);
   }));
 }
 

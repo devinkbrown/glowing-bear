@@ -39,6 +39,7 @@ import {
   removeBuffer,
   addLine,
   addLines,
+  addLineBatch,
   addLocalSystemLine,
   setNicklist,
   addNick,
@@ -320,6 +321,51 @@ function detectOrochiForEntry(entry: BufferEntry, line?: WeeChatLine): void {
 // lineAdded pipeline
 // ---------------------------------------------------------------------------
 
+// A single WeeChat `_buffer_line_added` frame dispatches one `lineAdded` event
+// per line, synchronously. We coalesce a burst (netsplit rejoin / flood) per
+// buffer and flush on a microtask, so one frame folds into ONE store write per
+// buffer instead of N — identical final state, a single reactive pass. The
+// per-line side-effects (typing/oper/tag detection, notifications) stay
+// synchronous; only the store insert and the title recompute are deferred.
+const pendingLines = new Map<string, WeeChatLine[]>();
+let lineFlushScheduled = false;
+let titleDirty = false;
+
+function enqueueLine(line: WeeChatLine): void {
+  let arr = pendingLines.get(line.buffer);
+  if (!arr) { arr = []; pendingLines.set(line.buffer, arr); }
+  arr.push(line);
+  titleDirty = true;
+  if (!lineFlushScheduled) {
+    lineFlushScheduled = true;
+    queueMicrotask(flushLineBatch);
+  }
+}
+
+/** Fold every coalesced burst into one store write per buffer, then retitle. */
+function flushLineBatch(): void {
+  lineFlushScheduled = false;
+  if (pendingLines.size > 0) {
+    const words = settings.highlightWords;
+    for (const [ptr, lines] of pendingLines) addLineBatch(ptr, lines, words);
+    pendingLines.clear();
+  }
+  if (titleDirty) {
+    titleDirty = false;
+    updateTitle(getTotalHighlights(), getTotalUnread());
+  }
+}
+
+/** Drop any pending coalesced lines — teardown, before buffers are cleared. */
+function resetLineBatch(): void {
+  pendingLines.clear();
+  lineFlushScheduled = false;
+  titleDirty = false;
+}
+
+/** Test hook: synchronously flush the coalesced line batch. */
+export { flushLineBatch as _flushLineBatch };
+
 function handleLineAdded(line: WeeChatLine): void {
   // TAGMSGs (+typing / +react) never render — route to buffer state
   if (line.isTagMsg) {
@@ -407,9 +453,12 @@ function handleLineAdded(line: WeeChatLine): void {
   // Clear typing on regular message
   if (line.nick) setTyping(line.buffer, line.nick, 'done');
 
-  addLine(line.buffer, line, settings.highlightWords);
+  // Coalesce the store insert into the current frame's batch (flushed on a
+  // microtask). The title is recomputed once per flush, not per line.
+  enqueueLine(line);
 
-  // Notifications
+  // Notifications fire per line, synchronously — they depend only on the line
+  // and buffer metadata, not on the (deferred) store insertion.
   if (line.highlight && settings.notifications && !isMuted(line.buffer)) {
     const bufName = entry.buffer.shortName || entry.buffer.name;
     const entryType = entry.buffer.localVars['type'];
@@ -417,8 +466,6 @@ function handleLineAdded(line: WeeChatLine): void {
     notify(title, stripCodes(line.message), undefined, line.buffer);
     if (settings.notificationSound) playSound();
   }
-
-  updateTitle(getTotalHighlights(), getTotalUnread());
 }
 
 // ---------------------------------------------------------------------------
@@ -584,6 +631,7 @@ export function connect(): void {
 
 export function disconnect(): void {
   stopPing();
+  resetLineBatch(); // drop any coalesced burst; buffers are about to be cleared
   if (queryNickTimer) { clearTimeout(queryNickTimer); queryNickTimer = null; }
   pendingQueryNick = null;
   pendingJoinChannel = null;

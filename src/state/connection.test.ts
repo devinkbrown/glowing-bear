@@ -70,6 +70,7 @@ import {
   requestHistory,
   setActive,
   openQuery,
+  _flushLineBatch,
   type MediaCommandSink,
 } from './connection';
 import { buffersState, upsertBuffer, setActiveBuffer, addLine } from './buffers';
@@ -455,6 +456,7 @@ describe('connection store', () => {
       }) });
 
       emit(c, 'lineAdded', { line: makeLine({ buffer: CHAN, nick: 'alice', message: 'here it is' }) });
+      _flushLineBatch(); // drain the coalesced live-line burst
 
       expect(entry(CHAN).typing['alice']).toBeUndefined();
       expect(entry(CHAN).lines).toHaveLength(1);
@@ -701,6 +703,7 @@ describe('connection store', () => {
         buffer: CHAN, nick: 'kain', message: 'hello world',
         tags: ['self_msg'], isSelf: true,
       }) });
+      _flushLineBatch(); // drain the coalesced live-line burst
 
       const lines = entry(CHAN).lines;
       expect(lines).toHaveLength(1);

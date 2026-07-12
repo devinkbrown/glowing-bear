@@ -40,6 +40,7 @@ import {
   clearLines,
   addLine,
   addLines,
+  addLineBatch,
   addLocalSystemLine,
   setNicklist,
   addNick,
@@ -370,6 +371,93 @@ describe('buffers store', () => {
       expect(entry(A).lines[4999]?.id).toBe('one-more');
       expect(entry(A).lineIds['bulk-0']).toBeUndefined();
       expect(entry(A).lineIds['one-more']).toBe(true);
+    });
+  });
+
+  describe('addLineBatch (coalesced live burst)', () => {
+    // A mixed burst exercising every addLine code path in one array: a normal
+    // line, an optimistic echo + its confirmation, an id duplicate, a content
+    // duplicate, and a highlight-word hit — all on an INACTIVE buffer.
+    function burst(target: string): WeeChatLine[] {
+      return [
+        makeLine({ buffer: target, id: 'n1', nick: 'alice', message: 'first', date: new Date(T0) }),
+        makeLine({ buffer: target, id: '_opt_1', nick: 'kain', message: 'mine', isSelf: true, date: new Date(T0 + 100) }),
+        makeLine({ buffer: target, id: 'r1', nick: 'kain', message: 'mine', isSelf: true, date: new Date(T0 + 200) }),
+        makeLine({ buffer: target, id: 'n1', nick: 'alice', message: 'dupe-id', date: new Date(T0 + 300) }), // id dup
+        makeLine({ buffer: target, id: 'c1', nick: 'alice', message: 'first', date: new Date(T0 + 1000) }),  // content dup
+        makeLine({ buffer: target, id: 'h1', nick: 'bob', message: 'ping KAIN there', date: new Date(T0 + 2000) }),
+      ];
+    }
+
+    beforeEach(() => {
+      upsertBuffer(makeBuffer(A, { number: 1 })); // batch target
+      upsertBuffer(makeBuffer(B, { number: 2 })); // sequential control
+      upsertBuffer(makeBuffer(C, { number: 3 })); // active — keeps A and B inactive
+      setActiveBuffer(C);
+    });
+
+    it('K line-added items fold to the same final state as K sequential addLine calls', () => {
+      const words = ['kain'];
+
+      // Control: K sequential addLine calls into B.
+      for (const l of burst(B)) addLine(B, l, words);
+
+      // Batch: one addLineBatch into A.
+      addLineBatch(A, burst(A), words);
+
+      const a = entry(A);
+      const b = entry(B);
+
+      // Same surviving lines, in the same order (opt replaced, dups dropped).
+      expect(a.lines.map((l) => l.id)).toEqual(['n1', 'r1', 'h1']);
+      expect(a.lines.map((l) => l.id)).toEqual(b.lines.map((l) => l.id));
+
+      // Same unread/highlight fold on the inactive buffer.
+      expect(a.unread).toBe(b.unread);
+      expect(a.highlighted).toBe(b.highlighted);
+      expect(a.unread).toBe(3); // n1 + r1 + h1 (opt/id-dup/content-dup excluded)
+      expect(a.highlighted).toBe(1); // only the highlight-word hit
+
+      // Same lineIds index (optimistic id never indexed).
+      expect(Object.keys(a.lineIds).sort()).toEqual(['h1', 'n1', 'r1']);
+      expect(Object.keys(a.lineIds).sort()).toEqual(Object.keys(b.lineIds).sort());
+
+      // Highlight-word marking survived the fold.
+      expect(a.lines.find((l) => l.id === 'h1')?.highlight).toBe(true);
+      expect(a.lines.find((l) => l.id === 'h1')?.highlight)
+        .toBe(b.lines.find((l) => l.id === 'h1')?.highlight);
+    });
+
+    it('a batch that crosses MAX_LINES trims to the newest and rebuilds the index', () => {
+      // Seed near the cap via the fast bulk path, then push the boundary over
+      // with a small live batch so trimEntry runs inside addLineBatch.
+      const seed: WeeChatLine[] = [];
+      for (let i = 0; i < 4999; i++) {
+        seed.push(makeLine({ buffer: A, id: `s-${i}`, message: `m${i}`, date: new Date(T0 + i * 10_000) }));
+      }
+      addLines(A, seed);
+      expect(entry(A).lines).toHaveLength(4999);
+
+      addLineBatch(A, [
+        makeLine({ buffer: A, id: 'b-0', message: 'b0', date: new Date(T0 + 5000 * 10_000) }),
+        makeLine({ buffer: A, id: 'b-1', message: 'b1', date: new Date(T0 + 5001 * 10_000) }),
+        makeLine({ buffer: A, id: 'b-2', message: 'b2', date: new Date(T0 + 5002 * 10_000) }),
+      ], []); // 4999 + 3 = 5002 → trim to newest 5000
+
+      const a = entry(A);
+      expect(a.lines).toHaveLength(5000);
+      expect(a.lines[0]?.id).toBe('s-2');            // oldest 2 dropped
+      expect(a.lines[4999]?.id).toBe('b-2');         // newest kept
+      expect(a.lineIds['s-0']).toBeUndefined();      // trimmed id gone from index
+      expect(a.lineIds['s-2']).toBe(true);
+      expect(a.lineIds['b-2']).toBe(true);
+      expect(Object.keys(a.lineIds)).toHaveLength(5000); // index rebuilt, bounded
+    });
+
+    it('is a no-op for an empty batch or an unknown buffer', () => {
+      expect(() => addLineBatch(A, [], [])).not.toThrow();
+      expect(entry(A).lines).toHaveLength(0);
+      expect(() => addLineBatch('ptr-nope', [makeLine({ buffer: 'ptr-nope', message: 'x' })], [])).not.toThrow();
     });
   });
 
