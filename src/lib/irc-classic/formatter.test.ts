@@ -370,6 +370,23 @@ describe('formatText / extractEmbeds — input length cap (DoS bound)', () => {
     expect(out.length).toBeLessThan(MAX_FORMAT_LENGTH * 8);
   });
 
+  it('keeps escaping intact when hostile markup is truncated at the cap', () => {
+    // Live markup sits before the boundary; a long tail is sliced off. The cut
+    // must not strand a raw tag: escapeHtml runs after the slice, so the payload
+    // survives only as inert escaped text and the tail is gone.
+    const sentinel = 'PASTCAPSENTINEL';
+    const out = formatText('<img src=x onerror=alert(1)>' + 'a'.repeat(MAX_FORMAT_LENGTH) + sentinel);
+    expect(out).not.toContain('<img');
+    expect(out).toContain('&lt;img');
+    expect(out).not.toContain(sentinel);
+    expect(out).toContain('…');
+  });
+
+  it('passes a normal sub-cap line through unaffected (no truncation)', () => {
+    expect(formatText('hello world')).toBe('hello world');
+    expect(formatText('hello world')).not.toContain('…');
+  });
+
   it('does not stall formatText on a hostile multi-KB URL-shaped line', () => {
     const payload = 'https://youtube.com/watch?' + 'a'.repeat(200_000);
     const start = performance.now();
