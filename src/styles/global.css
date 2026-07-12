@@ -30,12 +30,68 @@ body {
   text-size-adjust: 100%;
 }
 
+/* ── Self-hosted webfonts ──────────────────────────────────────────────────
+   Inter (UI/body) + JetBrains Mono (code/relay) are shipped as subsetted latin
+   woff2 under public/fonts/ (served at /darkbear/fonts/ — vite `base`). No
+   third-party origin, so CSP `font-src 'self'` covers them and no preconnect is
+   needed. `font-display: swap` paints immediately in the fallback stack, then
+   swaps in the real face — the --app-font / --mono-font stacks below stay a
+   deliberate, legible fallback if a face fails to load (never silent system-ui
+   by accident). Only Inter 400 (body text) is <link rel=preload>ed in
+   index.html; the rest fetch on first use.
+   To refresh binaries: fontsource `@fontsource/inter` (400/500/600) and
+   `@fontsource/jetbrains-mono` (400/500) latin `*-normal.woff2`, dropped in
+   public/fonts/ under the same names. ──────────────────────────────────────── */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/darkbear/fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/darkbear/fonts/inter-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/darkbear/fonts/inter-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/darkbear/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/darkbear/fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+}
+
 /* ── Base vars ─────────────────────────────────────────────────────────── */
 :root {
   --app-font: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --mono-font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
   --sidebar-w: 260px;
   --app-radius: 12px;
+  /* Translucency surface tokens for darkbear-ui panels/overlays. Derived from
+     the active theme's own ground ramp via color-mix, so a single definition
+     re-colours per theme by construction (the [data-theme] blocks re-price
+     --color-gray-800/900, and these recompute with them). --surface-veil is a
+     semi-opaque panel fill to lay over a scene; --surface-blur is the paired
+     backdrop-filter radius. A theme may override either in its own block. */
+  --surface-veil: color-mix(in srgb, var(--color-gray-900, #07071a) 74%, transparent);
+  --surface-blur: 14px;
   --input-bottom-pad: max(0.5rem, env(safe-area-inset-bottom));
   --mobile-dock-h: 76px;
   --irc-white:   #ffffff;

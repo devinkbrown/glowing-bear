@@ -24,6 +24,16 @@
     <meta name="theme-color" content="#0a0b10" />
     <title>DarkBear</title>
     <meta name="description" content="DarkBear IRC client — WeeChat relay + direct Orochi with realtime voice/video" />
+    <!-- Preload ONLY the critical body weight (Inter 400). Other weights and
+         JetBrains Mono fetch on first use. Same-origin, so CSP font-src 'self'
+         covers it; crossorigin is still required on font preloads. -->
+    <link
+      rel="preload"
+      href="/darkbear/fonts/inter-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="manifest" href="/darkbear/manifest.json" />
     <link rel="icon" href="/darkbear/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/darkbear/favicon.svg" />
