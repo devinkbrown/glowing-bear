@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
 import { fileURLToPath, URL } from 'node:url';
+import { realpathSync } from 'node:fs';
 
 // Test config — jsdom for store/DOM-adjacent suites; pure protocol suites
 // run fine under jsdom too. Solid plugin so .tsx under test transforms.
@@ -9,6 +10,19 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     conditions: ['development', 'browser'],
+  },
+  // A git-worktree's node_modules is a symlink into the main tree; Vite's default
+  // fs.allow is rooted at the worktree, so it blocks the symlink's resolved real
+  // path and every suite fails to load @testing-library/jest-dom. Allow the
+  // resolved node_modules so worktree-isolated fleet workers can gate. In the main
+  // tree realpath('node_modules') resolves to itself — harmless.
+  server: {
+    fs: {
+      allow: [
+        fileURLToPath(new URL('.', import.meta.url)),
+        realpathSync('node_modules'),
+      ],
+    },
   },
   test: {
     environment: 'jsdom',
