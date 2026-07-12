@@ -888,7 +888,7 @@ select:focus-visible {
   --color-gray-200: #d4d4d4;
   --color-gray-300: #b4b4b4;
   --color-gray-400: #909090;
-  --color-gray-500: #707070;
+  --color-gray-500: #787878;
   --color-gray-600: #565656;
   --color-gray-700: #3a3a3a;
   --color-gray-800: #171717;
@@ -905,7 +905,7 @@ select:focus-visible {
   --color-gray-200: #d8dee9;
   --color-gray-300: #bcc4d4;
   --color-gray-400: #8c96ae;
-  --color-gray-500: #6e7c94;
+  --color-gray-500: #7b8ba6;
   --color-gray-600: #545e72;
   --color-gray-700: #434c5e;
   --color-gray-800: #343a4a;
@@ -939,7 +939,7 @@ select:focus-visible {
   --color-gray-200: #d2d0ea;
   --color-gray-300: #b8b5d0;
   --color-gray-400: #908caa;
-  --color-gray-500: #736f8d;
+  --color-gray-500: #7f7b9c;
   --color-gray-600: #524e6a;
   --color-gray-700: #3a3650;
   --color-gray-800: #211f34;
@@ -973,7 +973,7 @@ select:focus-visible {
   --color-gray-200: #e0c0a0;
   --color-gray-300: #c8a080;
   --color-gray-400: #a88060;
-  --color-gray-500: #8c6c48;
+  --color-gray-500: #92714b;
   --color-gray-600: #5c3e28;
   --color-gray-700: #341c10;
   --color-gray-800: #1a0e08;
@@ -991,7 +991,7 @@ select:focus-visible {
   --color-gray-200: #d0c0ee;
   --color-gray-300: #b4a0d4;
   --color-gray-400: #9480b8;
-  --color-gray-500: #7460a0;
+  --color-gray-500: #816bb2;
   --color-gray-600: #5c4880;
   --color-gray-700: #3c2c58;
   --color-gray-800: #1c122e;
@@ -1026,7 +1026,7 @@ select:focus-visible {
   --color-gray-200: #c0caf5;
   --color-gray-300: #a9b1d6;
   --color-gray-400: #8890b4;
-  --color-gray-500: #6a7498;
+  --color-gray-500: #717ca2;
   --color-gray-600: #4c5476;
   --color-gray-700: #383f5c;
   --color-gray-800: #1f2335;
@@ -1043,7 +1043,7 @@ select:focus-visible {
   --color-gray-200: #e4e4e0;
   --color-gray-300: #ccccd4;
   --color-gray-400: #a8acc4;
-  --color-gray-500: #7680a4;
+  --color-gray-500: #7882a6;
   --color-gray-600: #585c78;
   --color-gray-700: #44475a;
   --color-gray-800: #2f3140;
@@ -1060,7 +1060,7 @@ select:focus-visible {
   --color-gray-200: #c8d4d0;
   --color-gray-300: #93a1a1;
   --color-gray-400: #839496;
-  --color-gray-500: #687c82;
+  --color-gray-500: #768c93;
   --color-gray-600: #466068;
   --color-gray-700: #244650;
   --color-gray-800: #0e3138;
@@ -1077,7 +1077,7 @@ select:focus-visible {
   --color-gray-200: #b8c4dc;
   --color-gray-300: #90a0c0;
   --color-gray-400: #6880a8;
-  --color-gray-500: #587096;
+  --color-gray-500: #5e78a0;
   --color-gray-600: #425478;
   --color-gray-700: #263248;
   --color-gray-800: #0c1222;
@@ -1096,7 +1096,7 @@ select:focus-visible {
   --color-gray-200: #c8cce8;
   --color-gray-300: #a0a8c8;
   --color-gray-400: #7880a8;
-  --color-gray-500: #626888;
+  --color-gray-500: #6e7599;
   --color-gray-600: #484e6e;
   --color-gray-700: #2a2e4a;
   --color-gray-800: #0f1124;
@@ -1118,7 +1118,7 @@ select:focus-visible {
   --color-gray-200: #f0d8b0;
   --color-gray-300: #d4b080;
   --color-gray-400: #b08850;
-  --color-gray-500: #8a6438;
+  --color-gray-500: #9a6f3e;
   --color-gray-600: #704e30;
   --color-gray-700: #402c18;
   --color-gray-800: #190e07;
@@ -1136,8 +1136,8 @@ select:focus-visible {
   --color-gray-100: #c0e8c0;
   --color-gray-200: #a0d0a0;
   --color-gray-300: #70a870;
-  --color-gray-400: #508050;
-  --color-gray-500: #487848;
+  --color-gray-400: #578a57;
+  --color-gray-500: #4f844f;
   --color-gray-600: #2e5030;
   --color-gray-700: #183018;
   --color-gray-800: #091009;
@@ -1281,7 +1281,7 @@ nav, aside, header, .video-controls {
   --color-gray-200: #374151;
   --color-gray-300: #4b5563;
   --color-gray-400: #6b7280;
-  --color-gray-500: #9ca3af;
+  --color-gray-500: #71767f;
   --color-gray-600: #d1d5db;
   --color-gray-700: #e5e7eb;
   --color-gray-800: #f3f4f6;

@@ -117,6 +117,49 @@ function parseVeils(): Veil[] {
   return out;
 }
 
+// ── Muted body text (gray-500) ─────────────────────────────────────────────
+// gray-500 is the "muted text" ramp step (text-gray-500 is used ~130x as text
+// and ~0x decoratively). It must clear WCAG AA body contrast (>=4.5:1) against
+// its own theme ground, and stay dimmer than gray-400 (tertiary text) so the
+// text hierarchy holds. Both directions matter: dark themes darken the ramp,
+// the light theme inverts it (gray-400 carries MORE contrast than gray-500).
+
+type Muted = { name: string; ground: string; g400: string; g500: string };
+
+function parseMuted(): Muted[] {
+  const blocks = css.match(/(:root[^{]*|\[data-theme="[^"]+"\])\s*\{[^}]*\}/g) ?? [];
+  const out: Muted[] = [];
+  for (const block of blocks) {
+    const ground = block.match(/--color-gray-950:\s*(#[0-9a-fA-F]{6});/)?.[1];
+    const g400 = block.match(/--color-gray-400:\s*(#[0-9a-fA-F]{6});/)?.[1];
+    const g500 = block.match(/--color-gray-500:\s*(#[0-9a-fA-F]{6});/)?.[1];
+    if (!ground || !g400 || !g500) continue;
+    const name = block.match(/data-theme="([^"]+)"/)?.[1] ?? 'darkbear';
+    if (out.some((m) => m.name === name)) continue;
+    out.push({ name, ground, g400, g500 });
+  }
+  return out;
+}
+
+describe('muted body text contrast (WCAG relative luminance)', () => {
+  const muted = parseMuted();
+
+  it('defines a gray-500 muted-text step for every theme', () => {
+    expect(muted.length).toBeGreaterThanOrEqual(18);
+  });
+
+  for (const m of muted) {
+    it(`${m.name}: gray-500 muted text clears 4.5:1 on its ground`, () => {
+      expect(contrast(m.ground, m.g500)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`${m.name}: gray-500 stays dimmer than gray-400 (hierarchy holds)`, () => {
+      // Dimmer == lower contrast against the ground the muted step is read on.
+      expect(contrast(m.ground, m.g500)).toBeLessThanOrEqual(contrast(m.ground, m.g400));
+    });
+  }
+});
+
 describe('reading-surface veil contrast (WCAG relative luminance)', () => {
   const veils = parseVeils();
 
