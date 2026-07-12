@@ -45,17 +45,34 @@ const WIDTH_MAP: Record<string, string> = {
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-// The Tab wrap must only ever land on a node that can actually take focus.
-// The raw selector matches disabled/hidden controls too, so a disabled first
-// or last child would let Tab escape the trap — filter them out.
+// The Tab wrap and initial focus must only ever land on a node that can truly
+// take focus. The raw selector also matches disabled/hidden/inert/off-layout
+// controls; any of those as the computed first or last child would let Tab
+// escape the trap or dump focus on a dead control — filter them out.
 function focusableIn(panel: HTMLElement): HTMLElement[] {
-  return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
-    if ((el as HTMLButtonElement | HTMLInputElement).disabled) return false;
-    if (el.hasAttribute('disabled')) return false;
-    if (el.getAttribute('aria-hidden') === 'true') return false;
-    if (el.hidden || el.closest('[hidden]')) return false;
-    return true;
-  });
+  return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(isFocusable);
+}
+
+function isFocusable(el: HTMLElement): boolean {
+  if ((el as HTMLButtonElement | HTMLInputElement).disabled) return false;
+  if (el.hasAttribute('disabled')) return false;
+  if (el.getAttribute('aria-hidden') === 'true') return false;
+  if (el.hidden || el.closest('[hidden]')) return false;
+  // `inert` on the node or any ancestor removes it from the tab order.
+  if (el.closest('[inert]')) return false;
+  // No layout box (display:none up the chain, or visibility:hidden) means the
+  // node cannot receive focus. offsetParent is unreliable under jsdom, so this
+  // resolves through computed style, which honours inline styles/stylesheets.
+  if (isVisuallyHidden(el)) return false;
+  return true;
+}
+
+function isVisuallyHidden(el: HTMLElement): boolean {
+  if (getComputedStyle(el).visibility === 'hidden') return true;
+  for (let node: HTMLElement | null = el; node; node = node.parentElement) {
+    if (getComputedStyle(node).display === 'none') return true;
+  }
+  return false;
 }
 
 export default function Modal(props: ModalProps) {

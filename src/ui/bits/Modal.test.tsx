@@ -4,7 +4,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
+import { createSignal } from 'solid-js';
 import Modal from './Modal';
+
+const tab = (shiftKey = false) =>
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey }));
 
 afterEach(() => {
   cleanup();
@@ -118,5 +122,94 @@ describe('Modal', () => {
     expect(dialog.contains(document.activeElement)).toBe(true);
     // The disabled control must not receive focus; the enabled one does.
     expect(document.activeElement).toBe(getByText('Enabled second'));
+  });
+
+  it('wraps Tab from the last focusable to the first ENABLED one', () => {
+    const { getByText } = render(() => (
+      <Modal open>
+        <button disabled>Disabled first</button>
+        <button>Enabled A</button>
+        <button>Enabled B</button>
+      </Modal>
+    ));
+
+    const enabledA = getByText('Enabled A');
+    const enabledB = getByText('Enabled B');
+    enabledB.focus();
+    expect(document.activeElement).toBe(enabledB);
+
+    // Forward Tab off the last node wraps to the first ENABLED node, skipping
+    // the disabled first child entirely.
+    tab();
+    expect(document.activeElement).toBe(enabledA);
+
+    // Shift+Tab off the first ENABLED node wraps back to the last.
+    tab(true);
+    expect(document.activeElement).toBe(enabledB);
+  });
+
+  it('pins Tab to the panel when there is no focusable child', () => {
+    const { getByRole } = render(() => (
+      <Modal open>
+        <p>static content</p>
+      </Modal>
+    ));
+
+    const dialog = getByRole('dialog');
+    expect(document.activeElement).toBe(dialog);
+    // Tab must not escape the dialog — focus stays pinned to the panel.
+    tab();
+    expect(document.activeElement).toBe(dialog);
+  });
+
+  it('excludes an inert-subtree control from the focus order', () => {
+    const { getByText } = render(() => (
+      <Modal open>
+        <div ref={(el) => el.setAttribute('inert', '')}>
+          <button>Inert child</button>
+        </div>
+        <button>Reachable</button>
+      </Modal>
+    ));
+
+    // Initial focus skips the inert control and lands on the reachable one.
+    expect(document.activeElement).toBe(getByText('Reachable'));
+  });
+
+  it('excludes a display:none control from the focus order', () => {
+    const { getByText } = render(() => (
+      <Modal open>
+        <button style={{ display: 'none' }}>Hidden</button>
+        <button>Visible</button>
+      </Modal>
+    ));
+
+    expect(document.activeElement).toBe(getByText('Visible'));
+  });
+
+  it('closes on Escape and restores focus to the opener', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+
+    const [open, setOpen] = createSignal(true);
+    const { queryByRole } = render(() => (
+      <Modal open={open()} title="Restore" onClose={() => setOpen(false)}>
+        <button>Inside</button>
+      </Modal>
+    ));
+
+    // Focus moved into the dialog on open.
+    expect(queryByRole('dialog')).not.toBeNull();
+    expect(opener.contains(document.activeElement)).toBe(false);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    // Escape drove onClose, which unmounted the dialog.
+    expect(queryByRole('dialog')).toBeNull();
+    // Unmount cleanup restores focus to the element that opened the modal.
+    expect(document.activeElement).toBe(opener);
+
+    opener.remove();
   });
 });
