@@ -10,12 +10,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, waitFor } from '@solidjs/testing-library';
+import { createSignal } from 'solid-js';
 import type { WeeChatBuffer } from '@/lib/weechat/model';
 import type { WeeChatLine } from '@/types';
 import { addLine, addLines, clearBuffers, upsertBuffer, resetSettings } from '@/state';
 import MessageView, { buildRenderItems, type RenderItemInput } from './MessageView';
 
 const PTR = '0xchan';
+const PTR2 = '0xchan2';
 
 // jsdom has no matchMedia; MessageView's createMediaQuery needs it.
 function stubMatchMedia(): void {
@@ -31,13 +33,13 @@ function stubMatchMedia(): void {
   })) as unknown as typeof window.matchMedia;
 }
 
-function channelBuffer(): WeeChatBuffer {
+function channelBuffer(id = PTR, name = 'alpha'): WeeChatBuffer {
   return {
-    id: PTR,
+    id,
     number: 1,
-    name: 'alpha',
-    fullName: 'irc.net.#alpha',
-    shortName: '#alpha',
+    name,
+    fullName: `irc.net.#${name}`,
+    shortName: `#${name}`,
     title: '',
     type: 0,
     nicksCount: 2,
@@ -307,5 +309,36 @@ describe('MessageView live region', () => {
     expect(text).not.toContain('ancient prepended two');
     // The only announced line remains the real tail message.
     expect(text).toContain('fresh incoming');
+  });
+
+  it('does NOT replay a buffer transcript into the live region on switch', async () => {
+    // Two channels, each with pre-existing backlog.
+    upsertBuffer(channelBuffer(PTR, 'alpha'));
+    upsertBuffer(channelBuffer(PTR2, 'beta'));
+    addLine(PTR, makeLine({ nick: 'bob', message: 'alpha baseline', buffer: PTR }), []);
+    addLine(PTR2, makeLine({ nick: 'zoe', message: 'beta backlog line', buffer: PTR2 }), []);
+
+    const [ptr, setPtr] = createSignal(PTR);
+    const { container } = render(() => <MessageView bufferPtr={ptr()} />);
+
+    // Confirm the region is live on the first buffer.
+    addLine(PTR, makeLine({ nick: 'carol', message: 'alpha fresh', buffer: PTR }), []);
+    await waitFor(() =>
+      expect(liveRegion(container).textContent).toContain('alpha fresh'),
+    );
+
+    // Switch buffers — the second buffer's whole transcript must stay silent.
+    setPtr(PTR2);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const text = liveRegion(container).textContent ?? '';
+    expect(text).not.toContain('beta backlog line');
+
+    // ...and a genuinely new tail on the now-active buffer still announces.
+    addLine(PTR2, makeLine({ nick: 'ivy', message: 'beta fresh after switch', buffer: PTR2 }), []);
+    await waitFor(() =>
+      expect(liveRegion(container).textContent).toContain('beta fresh after switch'),
+    );
+    expect(liveRegion(container).textContent).not.toContain('beta backlog line');
   });
 });
