@@ -85,8 +85,10 @@ function loadKeys(key: string): Record<string, true> {
   try {
     const raw = localStorage.getItem(key);
     if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return {};
       const out: Record<string, true> = {};
-      for (const name of JSON.parse(raw) as string[]) out[name] = true;
+      for (const name of parsed) if (typeof name === 'string') out[name] = true;
       return out;
     }
   } catch { /* ignore */ }
@@ -490,7 +492,16 @@ export function clearUnread(pointer: string): void {
   }));
 }
 
-/** Map WeeChat hotlist counts onto unread/highlight counters (skips active). */
+/**
+ * Reconcile the WeeChat server hotlist onto unread/highlight counters (skips
+ * the active buffer). Unread is double-sourced — `addLine` increments locally
+ * as lines arrive, and the hotlist reports server-authoritative totals — so a
+ * hotlist snapshot generated *before* a line the client already counted would,
+ * if applied verbatim, visibly regress the counter. Reconcile with `max`: the
+ * hotlist may only *raise* a still-listed buffer's counters, never lower them.
+ * A genuine read drops the buffer from the hotlist entirely (handled by
+ * `clearUnread` on activation), so it never flows through here as a lower count.
+ */
 export function updateHotlist(items: HotlistEntry[]): void {
   setState(produce((s) => {
     for (const item of items) {
@@ -498,8 +509,8 @@ export function updateHotlist(items: HotlistEntry[]): void {
       if (!e || item.buffer === s.activeBuffer) continue;
       const messages = item.count[1] + item.count[2];
       const highlights = item.count[3];
-      e.unread = messages + highlights;
-      e.highlighted = highlights;
+      e.unread = Math.max(e.unread, messages + highlights);
+      e.highlighted = Math.max(e.highlighted, highlights);
     }
   }));
 }

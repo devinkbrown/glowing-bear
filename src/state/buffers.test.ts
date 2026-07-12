@@ -543,6 +543,26 @@ describe('buffers store', () => {
       expect(entry(A).highlighted).toBe(0);
     });
 
+    it('updateHotlist never regresses a counter a stale snapshot would lower', () => {
+      setActiveBuffer(A);
+      // Local increments outpace the server: three new lines land on inactive B.
+      addLine(B, makeLine({ buffer: B, nick: 'x', message: '1', msgid: 'h1', highlight: true }), []);
+      addLine(B, makeLine({ buffer: B, nick: 'x', message: '2', msgid: 'h2', highlight: true }), []);
+      addLine(B, makeLine({ buffer: B, nick: 'x', message: '3', msgid: 'h3' }), []);
+      expect(entry(B).unread).toBe(3);
+      expect(entry(B).highlighted).toBe(2);
+
+      // A hotlist snapshot generated before those lines must not regress it.
+      updateHotlist([{ buffer: B, count: [0, 1, 0, 0] }]); // msgs=1, highlights=0
+      expect(entry(B).unread).toBe(3);
+      expect(entry(B).highlighted).toBe(2);
+
+      // A fresher, higher snapshot is still allowed to raise the counters.
+      updateHotlist([{ buffer: B, count: [0, 4, 0, 3] }]); // msgs=4, highlights=3
+      expect(entry(B).unread).toBe(7);
+      expect(entry(B).highlighted).toBe(3);
+    });
+
     it('setReadMarker records the current line count', () => {
       addLine(A, makeLine({ buffer: A, message: 'one' }), []);
       addLine(A, makeLine({ buffer: A, message: 'two', date: new Date(T0 + 5000) }), []);

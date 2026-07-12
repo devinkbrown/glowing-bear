@@ -22,8 +22,89 @@ function freshDefaults(): AppSettings {
   };
 }
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function clampNum(v: unknown, min: number, max: number, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback;
+}
+
+function finiteNum(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
+/**
+ * Strip network-reaching constructs from user-supplied CSS: `@import` rules and
+ * external `url(...)` references (absolute http(s) and protocol-relative). These
+ * are the two vectors by which injected CSS can exfiltrate/beacon or pull remote
+ * resources; data: and same-origin/relative urls are left intact.
+ */
+export function sanitizeCustomCss(css: string): string {
+  if (typeof css !== 'string') return '';
+  return css
+    // Drop @import at-rules whole (with or without trailing ';').
+    .replace(/@import\b[^;]*;?/gi, '')
+    // Neutralise external url() targets, keeping the property syntactically valid.
+    .replace(/url\(\s*(['"]?)\s*(?:https?:)?\/\/[^)]*?\1\s*\)/gi, 'url()');
+}
+
+const NUMERIC_CLAMPS: Partial<Record<keyof AppSettings, [number, number]>> = {
+  sidebarWidth: [120, 400],
+  fontSize: [12, 20],
+};
+
+const NUMERIC_FIELDS: (keyof AppSettings)[] = [
+  'watermarkOpacity', 'bgOpacity', 'bgBlur', 'bgTintOpacity',
+];
+
+function isRelayProfile(v: unknown): v is RelayProfile {
+  return isPlainObject(v) && typeof v.name === 'string' && isPlainObject(v.relay);
+}
+
+/**
+ * Coerce untrusted data (localStorage blob or imported JSON) into a fully-formed
+ * AppSettings: unknown top-level keys are dropped, each nested block is
+ * deep-merged over its DEFAULT_*, arrays are shape-guarded, numeric fields are
+ * clamped/finite-checked, and customCSS is sanitized. Never throws.
+ */
+function normalizeSettings(input: unknown): AppSettings {
+  const data = isPlainObject(input) ? input : {};
+  const merged = freshDefaults();
+
+  // Copy only known primitive/scalar top-level keys; nested blocks handled below.
+  for (const key of Object.keys(merged) as (keyof AppSettings)[]) {
+    if (key === 'relay' || key === 'customColors' || key === 'bridge' ||
+        key === 'profiles' || key === 'highlightWords') continue;
+    if (key in data && data[key] !== undefined) {
+      (merged as unknown as Record<string, unknown>)[key] = data[key];
+    }
+  }
+
+  merged.relay = { ...DEFAULT_RELAY, ...(isPlainObject(data.relay) ? data.relay : {}) };
+  merged.customColors = { ...DEFAULT_CUSTOM_COLORS, ...(isPlainObject(data.customColors) ? data.customColors : {}) };
+  merged.bridge = { ...DEFAULT_BRIDGE, ...(isPlainObject(data.bridge) ? data.bridge : {}) };
+  merged.profiles = Array.isArray(data.profiles) ? data.profiles.filter(isRelayProfile) : [];
+  merged.highlightWords = Array.isArray(data.highlightWords)
+    ? data.highlightWords.filter((w): w is string => typeof w === 'string')
+    : [];
+
+  for (const [field, [min, max]] of Object.entries(NUMERIC_CLAMPS) as [keyof AppSettings, [number, number]][]) {
+    (merged as unknown as Record<string, number>)[field] = clampNum(merged[field], min, max, DEFAULT_SETTINGS[field] as number);
+  }
+  for (const field of NUMERIC_FIELDS) {
+    (merged as unknown as Record<string, number>)[field] = finiteNum(merged[field], DEFAULT_SETTINGS[field] as number);
+  }
+
+  merged.customCSS = sanitizeCustomCss(merged.customCSS);
+  if (!merged.uploadUrl) merged.uploadUrl = DEFAULT_SETTINGS.uploadUrl;
+  return merged;
+}
+
 function migrateV1(raw: string): AppSettings {
-  const data = JSON.parse(raw) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(raw);
+  if (!isPlainObject(parsed)) return freshDefaults();
+  const data = parsed;
   // Drop ZNC/irssi fields, keep the rest
   const migrated = freshDefaults();
   if (data['relay']) migrated.relay = { ...DEFAULT_RELAY, ...(data['relay'] as Partial<RelaySettings>) };
@@ -53,7 +134,8 @@ function migrateV1(raw: string): AppSettings {
   if (data['bgBlur'] !== undefined) migrated.bgBlur = data['bgBlur'] as number;
   if (data['bgTint'] !== undefined) migrated.bgTint = data['bgTint'] as string;
   if (data['bgTintOpacity'] !== undefined) migrated.bgTintOpacity = data['bgTintOpacity'] as number;
-  return migrated;
+  // Final pass: sanitize CSS, clamp numerics, shape-guard arrays uniformly.
+  return normalizeSettings(migrated);
 }
 
 function loadFromStorage(): AppSettings {
@@ -66,18 +148,10 @@ function loadFromStorage(): AppSettings {
       if (v1) return migrateV1(v1);
       return freshDefaults();
     }
-    const data = JSON.parse(raw) as Partial<AppSettings>;
-    const merged: AppSettings = {
-      ...freshDefaults(),
-      ...data,
-      relay: { ...DEFAULT_RELAY, ...data.relay },
-      customColors: { ...DEFAULT_CUSTOM_COLORS, ...data.customColors },
-      // Additive: pre-bridge saves are forward compatible.
-      bridge: { ...DEFAULT_BRIDGE, ...data.bridge },
-    };
-    // Backfill upload URL if empty (added after initial release)
-    if (!merged.uploadUrl) merged.uploadUrl = DEFAULT_SETTINGS.uploadUrl;
-    return merged;
+    // Deep-merges nested blocks over DEFAULT_*, shape-guards arrays, clamps
+    // numerics, sanitizes customCSS, and backfills additive fields (e.g. bridge,
+    // uploadUrl) for forward compatibility with pre-bridge saves.
+    return normalizeSettings(JSON.parse(raw));
   } catch {
     return freshDefaults();
   }
@@ -192,16 +266,23 @@ export function exportSettings(): string {
 }
 
 /**
- * Import settings from a JSON string (as produced by exportSettings).
- * Returns false when the JSON is invalid; partial objects are merged.
+ * Import settings from a JSON string (as produced by exportSettings). Untrusted
+ * input is run through the same normalizer as `loadFromStorage`: unknown keys
+ * dropped, nested blocks deep-merged over DEFAULT_*, numerics clamped, customCSS
+ * sanitized. Missing fields fall back to defaults (not the current values), so a
+ * partial or older export lands a fully-formed, valid settings object. The whole
+ * store is replaced via `reconcile` (surgical diff), then persisted immediately.
+ * Returns false only when the JSON itself is unparseable or not an object.
  */
 export function importSettings(json: string): boolean {
+  let parsed: unknown;
   try {
-    const data = JSON.parse(json) as Partial<AppSettings>;
-    if (typeof data !== 'object' || data === null) return false;
-    updateSettings(data);
-    return true;
+    parsed = JSON.parse(json);
   } catch {
     return false;
   }
+  if (!isPlainObject(parsed)) return false;
+  setSettings(reconcile(normalizeSettings(parsed)));
+  saveSettings();
+  return true;
 }

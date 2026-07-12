@@ -37,6 +37,7 @@ import {
   saveSettings,
   exportSettings,
   importSettings,
+  sanitizeCustomCss,
 } from './settings';
 
 const STORAGE_KEY = 'darkbear_settings_v2';
@@ -294,6 +295,63 @@ describe('settings store', () => {
       expect(importSettings('null')).toBe(false);
       expect(importSettings('42')).toBe(false);
       expect(importSettings('"str"')).toBe(false);
+    });
+
+    it('deep-defaults a partial import instead of leaving nested blocks undefined', () => {
+      resetSettings();
+      // Export shape with only a partial bridge block and no customColors/relay.
+      const ok = importSettings(JSON.stringify({ theme: 'nord', bridge: { enabled: true } }));
+
+      expect(ok).toBe(true);
+      expect(settings.theme).toBe('nord');
+      expect(settings.bridge.enabled).toBe(true);
+      // Missing nested fields fall back to defaults, not undefined.
+      expect(settings.bridge.wsUrl).toBe(DEFAULT_BRIDGE.wsUrl);
+      expect(settings.bridge.e2eeDms).toBe(DEFAULT_BRIDGE.e2eeDms);
+      expect(settings.relay).toEqual(DEFAULT_RELAY);
+      expect(typeof settings.customColors.accent).toBe('string'); // nested block present
+      expect(settings.uploadUrl).toBe(DEFAULT_SETTINGS.uploadUrl);
+    });
+
+    it('drops unknown keys and clamps out-of-range numerics on import', () => {
+      resetSettings();
+      const ok = importSettings(JSON.stringify({
+        fontSize: 999, sidebarWidth: 5, evilKey: 'boom', profiles: 'not-an-array',
+      }));
+
+      expect(ok).toBe(true);
+      expect(settings.fontSize).toBe(20);       // clamped to max
+      expect(settings.sidebarWidth).toBe(120);  // clamped to min
+      expect(settings.profiles).toEqual([]);    // bad shape → default
+      expect(settings as unknown as Record<string, unknown>).not.toHaveProperty('evilKey');
+    });
+
+    it('sanitizes malicious customCSS on import', () => {
+      resetSettings();
+      const css = '@import url("https://evil.example/x.css");\n.a{background:url(https://evil.example/beacon.png)}';
+      importSettings(JSON.stringify({ customCSS: css }));
+
+      expect(settings.customCSS).not.toContain('@import');
+      expect(settings.customCSS).not.toContain('evil.example');
+    });
+  });
+
+  describe('sanitizeCustomCss', () => {
+    it('strips @import at-rules', () => {
+      expect(sanitizeCustomCss('@import "x.css";\n.a{color:red}')).not.toContain('@import');
+      expect(sanitizeCustomCss('@import url(https://e/x);.a{color:red}')).toContain('color:red');
+    });
+
+    it('neutralises external and protocol-relative url() targets', () => {
+      expect(sanitizeCustomCss('.a{background:url(https://e/p.png)}')).not.toContain('https://e');
+      expect(sanitizeCustomCss(".a{background:url('//e/p.png')}")).not.toContain('//e/');
+    });
+
+    it('leaves data: and relative url() intact', () => {
+      const css = '.a{background:url(data:image/png;base64,AAAA)} .b{background:url(/local.png)}';
+      const out = sanitizeCustomCss(css);
+      expect(out).toContain('data:image/png');
+      expect(out).toContain('url(/local.png)');
     });
   });
 

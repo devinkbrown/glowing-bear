@@ -7,7 +7,7 @@
 // BridgeBackend seam below — so this module never imports the controller and
 // the import graph stays acyclic (core → state, never the reverse).
 
-import { createStore, produce } from 'solid-js/store';
+import { createStore, produce, reconcile } from 'solid-js/store';
 import { isEnvelope, openDm, sealDm } from '@/lib/e2ee/dmCipher';
 import { settings } from './settings';
 import { addLocalSystemLine, addReaction, buffersState } from './buffers';
@@ -41,6 +41,11 @@ export { bridgeState };
 /** Internal: controller-side state updates (src/core/bridge.ts only). */
 export function _setBridgeState(partial: Partial<BridgeStateShape>): void {
   setBridgeStateStore(partial);
+  // The session is the trust boundary for E2EE key/plaintext material: as soon
+  // as the bridge goes 'off' (disconnect / teardown / bridge disable) drop all
+  // decrypted plaintext, cached peer keys and parked envelopes so nothing
+  // leaks into (or is matched against) a later, different session.
+  if (partial.status === 'off') _resetBridgeCrypto();
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +150,21 @@ const attemptedCiphers = new Set<string>();
 /** peer (lowercased) → encrypted DMs parked until their key arrives. */
 const pendingByPeer = new Map<string, Array<{ msgid?: string; cipher: string }>>();
 const MAX_PENDING_PER_PEER = 200;
+
+/**
+ * Internal: wipe all per-session E2EE state — cached peer device keys, both
+ * decrypted-plaintext overlay indexes, the attempted-envelope guard set, and
+ * any envelopes parked awaiting a key. Called from `_setBridgeState` whenever
+ * the session drops to 'off' so decrypted plaintext never outlives the
+ * conversation and stale peer keys cannot bleed across a reconnect or a switch
+ * to a different relay/bridge server.
+ */
+export function _resetBridgeCrypto(): void {
+  setPeerKeys(reconcile({}));
+  setOverlays(reconcile({}));
+  attemptedCiphers.clear();
+  pendingByPeer.clear();
+}
 
 /** True when the peer's E2EE device key is known (reactive). */
 export function canE2ee(nick: string): boolean {

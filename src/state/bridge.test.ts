@@ -19,6 +19,7 @@ import {
   _setPeerDmKey,
   _ingestEncryptedDm,
   _storeDecryptedOverlay,
+  _resetBridgeCrypto,
   type BridgeBackend,
 } from './bridge';
 import { updateBridge, resetSettings } from './settings';
@@ -145,6 +146,30 @@ describe('canE2ee', () => {
     _setPeerDmKey('trev', 'BSomeKeyB64');
     _setPeerDmKey('trev', null);
     expect(canE2ee('trev')).toBe(false);
+  });
+});
+
+describe('_resetBridgeCrypto / session teardown', () => {
+  it('wipes cached peer keys and decrypted overlays', () => {
+    _setPeerDmKey('trev', 'BSomeKeyB64');
+    _storeDecryptedOverlay('MID', 'ENVELOPE', 'secret');
+    expect(canE2ee('trev')).toBe(true);
+    expect(decryptedFor('MID', 'ENVELOPE')).toBe('secret');
+
+    _resetBridgeCrypto();
+
+    expect(canE2ee('trev')).toBe(false);
+    expect(decryptedFor('MID', 'ENVELOPE')).toBeNull();
+  });
+
+  it('is triggered when the session drops to off (no cross-session leak)', () => {
+    _setPeerDmKey('peer', 'BSomeKeyB64');
+    _storeDecryptedOverlay('MID2', 'ENV2', 'plain');
+
+    _setBridgeState({ status: 'off' });
+
+    expect(canE2ee('peer')).toBe(false);
+    expect(decryptedFor('MID2', 'ENV2')).toBeNull();
   });
 });
 
