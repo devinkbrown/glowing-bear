@@ -1,8 +1,12 @@
 {
+  "id": "/darkbear/",
   "name": "DarkBear",
   "short_name": "DarkBear",
   "description": "DarkBear IRC client with Orochi media controls",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/darkbear/",
+  "scope": "/darkbear/",
   "display": "standalone",
   "background_color": "#0a0b10",
   "theme_color": "#0a0b10",
@@ -11,7 +15,13 @@
       "src": "/darkbear/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/darkbear/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }
