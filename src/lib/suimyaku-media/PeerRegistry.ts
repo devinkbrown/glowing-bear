@@ -6,6 +6,7 @@ import {
   type KaguraVoxQuality,
 } from './OpcodecWasm';
 import type { SuimyakuPeerState, MediaKind } from './types';
+import { bumpDrop } from './mediaDropCounter';
 
 // -------------------------------------------------------------------
 // Per-peer decoder state
@@ -112,7 +113,7 @@ export class PeerRegistry {
   }
 
   private safeClose(ctx: AudioContext | null): void {
-    try { ctx?.close().catch(() => {}); } catch { /* teardown best-effort */ }
+    try { ctx?.close().catch(() => { bumpDrop('peer-audioctx-close'); }); } catch { bumpDrop('peer-audioctx-close'); }
   }
 
   private safeStopStream(stream: MediaStream | null): void {
@@ -214,8 +215,8 @@ export class PeerRegistry {
     for (const pm of this.peers.values()) {
       if (pm.outputGain) pm.outputGain.gain.value = deafened ? 0 : this.outputVolume;
       if (pm.audCtx) {
-        if (deafened) pm.audCtx.suspend().catch(() => {});
-        else pm.audCtx.resume().catch(() => {});
+        if (deafened) pm.audCtx.suspend().catch(() => { bumpDrop('peer-audioctx-suspend'); });
+        else pm.audCtx.resume().catch(() => { bumpDrop('peer-audioctx-resume'); });
       }
     }
   }
@@ -329,7 +330,7 @@ export class PeerRegistry {
     if (!pm.audCtx) return;
     const ctxWithSink = pm.audCtx as AudioContext & { setSinkId?: (sinkId: string) => Promise<void> };
     if (typeof ctxWithSink.setSinkId !== 'function') return;
-    ctxWithSink.setSinkId(this.outputDeviceId ?? '').catch(() => {});
+    ctxWithSink.setSinkId(this.outputDeviceId ?? '').catch(() => { bumpDrop('peer-setsinkid'); });
   }
 
   async decodeVideo(pm: PeerMedia, frame: Uint8Array, ftype: string): Promise<void> {

@@ -13,6 +13,7 @@ import { PeerRegistry } from './PeerRegistry';
 import { KaguraCodec, type KaguraCodecTag, type KaguraFrame, decodeKaguraFrame, encodeKaguraFrame, KAGURA_MIN_FRAME_BYTES } from './kaguraFrame';
 import { appendMediaMac, importMediaMacKey, mediaMacTag, mediaMacEqual, MEDIA_MAC_TAG_BYTES } from './mediaMac';
 import { MediaStreamRouter, mediaStreamId, type MediaStreamSource } from './mediaStream';
+import { bumpDrop } from './mediaDropCounter';
 import type { IRCMessage } from '@/lib/irc/types';
 import type {
   CallState, VoiceCallState, MediaKind,
@@ -610,7 +611,7 @@ export class SuimyakuMediaEngine {
   private stopAudioCapture() {
     if (this.audioWorklet) (this.audioWorklet as AudioWorkletNode | ScriptProcessorNode).disconnect();
     this.audioWorklet = null;
-    this.audioCtx?.close().catch(() => {});
+    this.audioCtx?.close().catch(() => { bumpDrop('audioctx-close'); });
     this.audioCtx = null;
     this.audEnc?.destroy();
     this.audEnc = null;
@@ -663,7 +664,7 @@ export class SuimyakuMediaEngine {
   ): Promise<void> {
     /* Pre-load WASM on the main thread too (for VIDEO_KEYREQ fallback and
      * any future main-thread codec use). Fire-and-forget. */
-    this.ensureWasm().catch(() => {});
+    this.ensureWasm().catch(() => { bumpDrop('wasm-preload'); });
 
     const videoTrack = stream.getVideoTracks()[0];
     if (!videoTrack) {
@@ -902,7 +903,7 @@ export class SuimyakuMediaEngine {
   private stopSpeakingMeter() {
     if (this.speakingTimer) clearInterval(this.speakingTimer);
     this.speakingTimer = null;
-    this.speakingCtx?.close().catch(() => {});
+    this.speakingCtx?.close().catch(() => { bumpDrop('speakingctx-close'); });
     this.speakingCtx = null;
   }
 
@@ -955,7 +956,7 @@ export class SuimyakuMediaEngine {
     const key = this.wsMediaKey;
     appendMediaMac(key, frame)
       .then((datagram) => { if (this.client === client) client.sendBinary(datagram); })
-      .catch(() => { /* a MAC failure drops one media frame; loss-tolerant */ });
+      .catch(() => { bumpDrop('mac-append'); /* a MAC failure drops one media frame; loss-tolerant */ });
   }
 
   /** Observe Event Spine MEDIA control events to drive the WS media plane.
@@ -991,8 +992,8 @@ export class SuimyakuMediaEngine {
               this.wsStreamMacKeys.set(mediaStreamId(channel, nick, 'video'), k);
             }
           })
-          .catch(() => {});
-      } catch { /* malformed key — stay a no-op */ }
+          .catch(() => { bumpDrop('mackey-import'); });
+      } catch { bumpDrop('mackey-import'); }
     } else if (verb === 'JOIN' || verb === 'ROSTER') {
       if (arg) {
         const kind: MediaKind = detail === 'video' || detail === 'screen' ? detail : 'voice';
@@ -1054,7 +1055,7 @@ export class SuimyakuMediaEngine {
       const frameByteLen = KAGURA_MIN_FRAME_BYTES + frame.payload.length;
       verifyMediaDatagramMac(macKey, data, frameByteLen)
         .then((ok) => { if (ok && this.activeRoom === room) this.dispatchDecodedFrame(frame, src, room); })
-        .catch(() => { /* verification error drops one frame; fail-closed */ });
+        .catch(() => { bumpDrop('mac-verify'); /* verification error drops one frame; fail-closed */ });
       return;
     }
     this.dispatchDecodedFrame(frame, src, room);
@@ -1071,7 +1072,7 @@ export class SuimyakuMediaEngine {
           const pm = this.registry.getOrCreate(src.nick, room, 'voice');
           void this.registry.decodeAudio(pm, pcm);
         })
-        .catch(() => {});
+        .catch(() => { bumpDrop('tsumugi-group-decrypt'); });
       return;
     }
     if (src.kind === 'audio') {
@@ -1124,7 +1125,7 @@ export class SuimyakuMediaEngine {
       this.setActiveRoom(channel);
       this.mediaframeCmd(channel, 'VOICE_JOIN', `${SAMPLE_RATE} ${AUDIO_CHANNELS}`);
       this.mediaframeCmd(channel, 'ROSTER');
-      this.sendTsumugiHandshake(channel).catch(() => {});
+      this.sendTsumugiHandshake(channel).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       await this.startAudioCapture(stream);
       this.startSpeakingMeter(stream);
       this.startGc();
@@ -1143,7 +1144,7 @@ export class SuimyakuMediaEngine {
       this.mediaframeCmd(channel, 'VIDEO_JOIN',
         `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}`);
       this.mediaframeCmd(channel, 'ROSTER');
-      this.sendTsumugiHandshake(channel).catch(() => {});
+      this.sendTsumugiHandshake(channel).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       await this.startAudioCapture(stream);
       await this.startVideoCapture(stream, profile);
       this.startSpeakingMeter(stream);
@@ -1248,7 +1249,7 @@ export class SuimyakuMediaEngine {
       this.mediaframeCmd(target, 'VIDEO_JOIN',
         `${profile.width} ${profile.height} ${profile.quality} ${profile.fps} screen`);
       this.mediaframeCmd(target, 'ROSTER');
-      this.sendTsumugiHandshake(target).catch(() => {});
+      this.sendTsumugiHandshake(target).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       if (this.localStream) await this.startVideoCapture(this.localStream, profile);
     } catch (err) {
       this.cb.onError(`Screen share failed: ${err}`);
@@ -1270,7 +1271,7 @@ export class SuimyakuMediaEngine {
       this.mediaframeCmd(channel, 'VIDEO_JOIN',
         `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}${profile.screenShare ? ' screen' : ''}`);
       this.mediaframeCmd(channel, 'ROSTER');
-      this.sendTsumugiHandshake(channel).catch(() => {});
+      this.sendTsumugiHandshake(channel).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       await this.startVideoCapture(stream, profile);
       this.startGc();
     } catch (err) {
@@ -1299,7 +1300,7 @@ export class SuimyakuMediaEngine {
       this.setCallState('ringing_out', nick, null);
       this.startRingTimer(nick);
       void nick; void kind;
-      this.sendTsumugiHandshake(nick).catch(() => {});
+      this.sendTsumugiHandshake(nick).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       if (kind === 'voice' || kind === 'video') { await this.startAudioCapture(stream); this.startSpeakingMeter(stream); }
       if (kind === 'video') await this.startVideoCapture(stream);
     } catch (err) { this.cb.onError(`Call start failed: ${err}`); }
@@ -1334,7 +1335,7 @@ export class SuimyakuMediaEngine {
         const profile = videoProfileFor('video');
         this.mediaframeCmd(this.callWith, 'VIDEO_JOIN', `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}`);
       }
-      this.sendTsumugiHandshake(this.callWith).catch(() => {});
+      this.sendTsumugiHandshake(this.callWith).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       if (kind === 'voice' || kind === 'video') {
         await this.startAudioCapture(stream); this.startSpeakingMeter(stream);
       }
@@ -1608,8 +1609,8 @@ export class SuimyakuMediaEngine {
           }
           /* When all known peers have TSUMUGI sessions and we're in a room,
            * create/refresh the group key and distribute it. */
-          if (this.activeRoom) this.maybeDistributeTsumugiGroup().catch(() => {});
-        }).catch(() => {});
+          if (this.activeRoom) this.maybeDistributeTsumugiGroup().catch(() => { bumpDrop('tsumugi-group-distribute'); });
+        }).catch(() => { bumpDrop('tsumugi-handshake-recv'); });
         break;
       }
       case 'TSUMUGI_RATCHET': {
@@ -1619,7 +1620,7 @@ export class SuimyakuMediaEngine {
             const fp = await vs.getFingerprint();
             this.cb.onTsumugiState(fromNick, vs.epoch, fp);
           }
-        }).catch(() => {});
+        }).catch(() => { bumpDrop('tsumugi-ratchet'); });
         break;
       }
       case 'TSUMUGI_DATA': {
@@ -1632,12 +1633,12 @@ export class SuimyakuMediaEngine {
               /* Fall back to per-peer session */
               const vs = this.tsumugiSessions.get(fromNick.toLowerCase());
               if (vs?.established)
-                vs.decrypt(ct).then(pt => this.dispatchFrame(fromNick, channel, 'AUDIO', pt)).catch(() => {});
+                vs.decrypt(ct).then(pt => this.dispatchFrame(fromNick, channel, 'AUDIO', pt)).catch(() => { bumpDrop('tsumugi-peer-decrypt'); });
             });
         } else {
           const vs = this.tsumugiSessions.get(fromNick.toLowerCase());
           if (!vs?.established) break;
-          vs.decrypt(ct).then(pt => this.dispatchFrame(fromNick, channel, 'AUDIO', pt)).catch(() => {});
+          vs.decrypt(ct).then(pt => this.dispatchFrame(fromNick, channel, 'AUDIO', pt)).catch(() => { bumpDrop('tsumugi-peer-decrypt'); });
         }
         break;
       }
@@ -1653,7 +1654,7 @@ export class SuimyakuMediaEngine {
         if (vs?.established) {
           TsumugiGroup.importKey(wrapped, vs).then(group => {
             this.tsumugiGroupKey = group;
-          }).catch(() => {});
+          }).catch(() => { bumpDrop('tsumugi-group-import'); });
         }
         break;
       }
@@ -1705,7 +1706,7 @@ export class SuimyakuMediaEngine {
           const profile = this.localVideoProfile ?? videoProfileFor('video');
           this.mediaframeCmd(fromNick, 'VIDEO_JOIN', `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}`);
         }
-        this.sendTsumugiHandshake(fromNick).catch(() => {});
+        this.sendTsumugiHandshake(fromNick).catch(() => { bumpDrop('tsumugi-handshake-send'); });
         break;
       case 'REJECT':
       case 'HANGUP':
@@ -1878,7 +1879,7 @@ export class SuimyakuMediaEngine {
           const c: MediaTrackConstraints =
             tier === 0 ? {} : tier === 1 ? { width: 1280, height: 720 }
             : tier === 2 ? { width: 854, height: 480 } : { width: 640, height: 360 };
-          videoTrack.applyConstraints(c).catch(() => {});
+          videoTrack.applyConstraints(c).catch(() => { bumpDrop('screen-constraints'); });
         }
       }
       const targetQ: KaguraVoxQuality = tier <= 1 ? 2 : tier === 2 ? 1 : 0;
