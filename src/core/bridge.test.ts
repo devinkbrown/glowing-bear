@@ -11,12 +11,16 @@ import {
   findChannelPtr,
   hasReaction,
   randomGuestNick,
+  readMarkerRecord,
+  replyRawArgs,
   relayOwnNick,
   resolveMappedPtr,
   serverNameOf,
   sweepChannelBuffers,
 } from './bridge';
 import { _storeDecryptedOverlay, decryptedFor } from '@/state/bridge';
+import { readMarkerFor, recordReadMarker, resetThreads } from '@/state/threads';
+import { formatIRCLine } from '@/lib/irc/parser';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
@@ -168,6 +172,85 @@ describe('hasReaction', () => {
   it('handles missing reaction state', () => {
     expect(hasReaction(undefined, 'abc123', '👍', 'kain')).toBe(false);
     expect(hasReaction({}, 'abc123', '👍', 'kain')).toBe(false);
+  });
+});
+
+// ── read-marker fold (onReadMarker → threads store) ─────────────────────────
+
+describe('readMarkerRecord', () => {
+  const map = new Map([['#root', '0x2']]);
+  const ts = '2026-07-12T10:00:00Z';
+
+  it('keys a mirrored channel marker by its relay buffer pointer', () => {
+    expect(readMarkerRecord(map, buffers, '#Root', ts)).toEqual({
+      bufferKey: '0x2',
+      ms: Date.parse(ts),
+    });
+  });
+
+  it('maps a DM nick to its private buffer pointer', () => {
+    expect(readMarkerRecord(new Map(), buffers, 'Trev', ts)?.bufferKey).toBe('0x6');
+  });
+
+  it('drops an unmapped target so the store stays a single (pointer) key domain', () => {
+    expect(readMarkerRecord(new Map(), buffers, '#Unknown', ts)).toBeNull();
+  });
+
+  it('ignores a null (no-marker) timestamp', () => {
+    expect(readMarkerRecord(map, buffers, '#root', null)).toBeNull();
+  });
+
+  it('fails closed on a malformed timestamp', () => {
+    expect(readMarkerRecord(map, buffers, '#root', 'not-a-time')).toBeNull();
+    expect(readMarkerRecord(map, buffers, '#root', '2026-07-12 10:00')).toBeNull();
+  });
+
+  it('folds into the threads store and never rewinds (monotonic)', () => {
+    resetThreads();
+    const newer = readMarkerRecord(map, buffers, '#root', ts)!;
+    recordReadMarker(newer.bufferKey, newer.ms);
+    expect(readMarkerFor('0x2')).toBe(Date.parse(ts));
+
+    // A reordered older marker must not move the position backwards.
+    const older = readMarkerRecord(map, buffers, '#root', '2026-07-12T09:00:00Z')!;
+    recordReadMarker(older.bufferKey, older.ms);
+    expect(readMarkerFor('0x2')).toBe(Date.parse(ts));
+  });
+});
+
+// ── reply linkage framing (+draft/reply PRIVMSG over the direct bridge) ──────
+
+describe('replyRawArgs', () => {
+  it('frames a channel reply as a single well-formed IRCv3 tagged PRIVMSG', () => {
+    const args = replyRawArgs('#root', 'my reply', 'm1');
+    expect(args).toEqual(['@+draft/reply=m1 PRIVMSG', '#root', 'my reply']);
+    // The whole point: it must produce exactly ONE frame with one trailing CRLF.
+    const line = formatIRCLine(...args!);
+    expect(line).toBe('@+draft/reply=m1 PRIVMSG #root :my reply\r\n');
+    expect(line.match(/\r\n/g)).toHaveLength(1);
+  });
+
+  it('accepts & channels too', () => {
+    expect(replyRawArgs('&local', 'hi', 'm2')?.[1]).toBe('&local');
+  });
+
+  it('rejects a non-channel (DM) target — reply linkage is channel-scoped', () => {
+    expect(replyRawArgs('trev', 'hi', 'm1')).toBeNull();
+    expect(replyRawArgs(null, 'hi', 'm1')).toBeNull();
+  });
+
+  it('fails closed on an unsafe msgid so no second tag/command can be smuggled', () => {
+    expect(replyRawArgs('#root', 'hi', 'm1 PRIVMSG #evil :pwn')).toBeNull(); // space
+    expect(replyRawArgs('#root', 'hi', 'a;+b=c')).toBeNull();                // ; second tag
+    expect(replyRawArgs('#root', 'hi', 'a\r\nQUIT')).toBeNull();            // CRLF injection
+    expect(replyRawArgs('#root', 'hi', 'a\x00b')).toBeNull();               // NUL
+    expect(replyRawArgs('#root', 'hi', '')).toBeNull();                      // empty
+  });
+
+  it('a rejected msgid never reaches the wire even if CR/LF sneaks past framing', () => {
+    // Defence-in-depth: even a crafted msgid that passes the regex would still
+    // be CR/LF-stripped by formatIRCLine, but the regex rejects it first.
+    expect(replyRawArgs('#root', 'hi', 'a\nb')).toBeNull();
   });
 });
 
