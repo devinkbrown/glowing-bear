@@ -21,7 +21,7 @@ import { buffersState, setReadMarker, requestHistory, settings, uiState, setSear
 import type { Reaction, WeeChatLine } from '@/types';
 import { bufferKind, type BufferKind } from '@/lib/bufferKind';
 import { extractEmbeds, stripFormatting, type MediaEmbed } from '@/lib/irc-classic/formatter';
-import { parseSearchQuery } from '@/lib/search/grammar';
+import { parseSearchQuery, type SearchQuery } from '@/lib/search/grammar';
 import { matchesQuery, type SearchRecord } from '@/lib/search/matcher';
 import { createMediaQuery } from '@/primitives/mediaQuery';
 import MessageLine from './MessageLine';
@@ -180,6 +180,81 @@ function lineToRecord(line: WeeChatLine, channel: string): SearchRecord {
   };
 }
 
+// ── Cross-buffer match count (bounded rescan) ──────────────────────────────
+// The search bar shows "N here · M across buffers"; M sums matches across every
+// LOADED buffer. A naive memo rescans the WHOLE loaded corpus (up to MAX_LINES
+// × #buffers) on ANY line into ANY buffer while search is open — the hottest
+// waste once several busy channels are open. Messages are never edited in place
+// (buffers only append / optimistic-splice / trim / prepend — see buffers.ts),
+// so a buffer's match contribution can only change when its
+// (length, first-id, last-id) signature moves. We cache each buffer's partial
+// count keyed on that signature and rescan only buffers whose signature changed,
+// dropping the per-tick cost from O(whole corpus) to O(the one changed buffer +
+// #buffers). The returned total is identical to a from-scratch sum in every case.
+
+export interface GlobalCountState {
+  query: SearchQuery | null;
+  skipMeta: boolean;
+  perBuffer: Map<string, { sig: string; count: number }>;
+}
+
+export function createGlobalCountState(): GlobalCountState {
+  return { query: null, skipMeta: false, perBuffer: new Map() };
+}
+
+export interface CountBuffer {
+  ptr: string;
+  channel: string;
+  lines: readonly WeeChatLine[];
+}
+
+// Cheap change-signal for one buffer's line set. Because lines are append-only
+// (never mutated in place), any add/splice/trim/prepend shifts length and/or a
+// boundary id, so this triple detects every content change that matters.
+function bufferSig(lines: readonly WeeChatLine[]): string {
+  const n = lines.length;
+  if (n === 0) return '0';
+  return `${n} ${lines[0]!.id} ${lines[n - 1]!.id}`;
+}
+
+export function globalMatchTotal(
+  state: GlobalCountState,
+  query: SearchQuery,
+  skipMeta: boolean,
+  buffers: Iterable<CountBuffer>,
+  match: (line: WeeChatLine, channel: string) => boolean,
+): number {
+  // A query or meta-filter change invalidates every cached partial count.
+  if (state.query !== query || state.skipMeta !== skipMeta) {
+    state.perBuffer.clear();
+    state.query = query;
+    state.skipMeta = skipMeta;
+  }
+  const seen = new Set<string>();
+  let total = 0;
+  for (const b of buffers) {
+    seen.add(b.ptr);
+    const sig = bufferSig(b.lines);
+    const cached = state.perBuffer.get(b.ptr);
+    if (cached && cached.sig === sig) {
+      total += cached.count; // unchanged buffer — reuse, no rescan
+      continue;
+    }
+    let count = 0;
+    for (const line of b.lines) {
+      if (skipMeta && (line.isJoin || line.isPart || line.isQuit)) continue;
+      if (match(line, b.channel)) count++;
+    }
+    state.perBuffer.set(b.ptr, { sig, count });
+    total += count;
+  }
+  // Evict counts for buffers that closed so the cache can't grow across a session.
+  if (state.perBuffer.size > seen.size) {
+    for (const k of state.perBuffer.keys()) if (!seen.has(k)) state.perBuffer.delete(k);
+  }
+  return total;
+}
+
 // ── extractEmbeds LRU (rows remount on scroll; avoid re-scanning URLs) ──────
 const EMBED_CACHE_MAX = 400;
 const embedCache = new Map<string, { text: string; embeds: MediaEmbed[] }>();
@@ -315,22 +390,23 @@ export default function MessageView(props: MessageViewProps) {
   // Boundary: this searches only lines already fetched into the store, not full
   // server-side history; a persistent index would be needed to search further
   // back than what has been loaded.
+  const gcState = createGlobalCountState();
   const globalMatchCount = createMemo<number | null>(() => {
     const query = parsedQuery();
     if (query.isEmpty) return null;
     const skipMeta = !settings.joinPartMsgs;
-    let count = 0;
     const bufs = buffersState.buffers;
+    const list: CountBuffer[] = [];
     for (const ptr in bufs) {
       const e = bufs[ptr];
       if (!e) continue;
-      const channel = e.buffer.shortName || e.buffer.name;
-      for (const line of e.lines) {
-        if (skipMeta && (line.isJoin || line.isPart || line.isQuit)) continue;
-        if (matchesQuery(lineToRecord(line, channel), query)) count++;
-      }
+      list.push({ ptr, channel: e.buffer.shortName || e.buffer.name, lines: e.lines });
     }
-    return count;
+    // Cached per-buffer counts: only buffers whose line-set signature moved get
+    // rescanned, so a line into buffer B doesn't re-count buffers A/C/…
+    return globalMatchTotal(gcState, query, skipMeta, list, (line, channel) =>
+      matchesQuery(lineToRecord(line, channel), query),
+    );
   });
 
   // Incremental render-item cache. buildRenderItems reuses the previously built
