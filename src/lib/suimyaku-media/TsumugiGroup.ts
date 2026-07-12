@@ -20,6 +20,8 @@
  *   const pt = await group.decrypt(ct);
  */
 
+import { ReplayWindow } from './replayWindow';
+
 const GCM_ALG = 'AES-GCM';
 const GCM_LEN = 256;
 const GCM_TAG = 128;
@@ -30,7 +32,13 @@ export class TsumugiGroup {
   private groupKey: CryptoKey | null;
   private readonly sendIvPrefix = crypto.getRandomValues(new Uint8Array(IV_PREFIX_LEN));
   private sendIvCounter = 0;
-  private readonly seenReceiveIvs = new Set<string>();
+  /**
+   * Bounded per-sender sliding-window replay guard over inbound IVs. Group
+   * media never ratchets, so an unbounded Set here grew ~1 entry/frame
+   * (~180k strings/hour at 50 fps). ReplayWindow keeps O(senders × window)
+   * state with a hard prefix cap instead — while still rejecting replays.
+   */
+  private readonly replay = new ReplayWindow();
   private destroyed = false;
 
   private constructor(groupKey: CryptoKey) {
@@ -110,22 +118,31 @@ export class TsumugiGroup {
     const key = this.requireKey();
     if (frame.length < IV_LEN + 16) throw new Error('TsumugiGroup: frame too short');
     const iv = frame.slice(0, IV_LEN);
-    if (this.seenReceiveIvs.has(ivKey(iv))) throw new Error('TsumugiGroup: replayed frame');
+    // Read-only probe first: never advance the window on an unauthenticated IV,
+    // so a forged GCM tag can neither replay nor poison the guard.
+    if (this.replay.seen(iv)) throw new Error('TsumugiGroup: replayed frame');
     const ct = frame.slice(IV_LEN);
     const pt = await crypto.subtle.decrypt(
       { name: GCM_ALG, iv: toArrayBuffer(iv), tagLength: GCM_TAG },
       key,
       toArrayBuffer(ct),
     );
-    this.seenReceiveIvs.add(ivKey(iv));
+    // Record only after a successful decrypt; fail closed if it raced past seen().
+    if (!this.replay.remember(iv)) throw new Error('TsumugiGroup: replayed frame');
     return new Uint8Array(pt);
   }
 
   /** Clear group key material and reject future use of this object. */
   destroy(): void {
     this.groupKey = null;
-    this.seenReceiveIvs.clear();
+    this.replay.clear();
     this.destroyed = true;
+  }
+
+  /** Number of distinct sender prefixes the replay guard is tracking
+   *  (bounded by ReplayWindow's MAX_PREFIXES). Exposed for observability. */
+  get replayLaneCount(): number {
+    return this.replay.size;
   }
 
   private requireKey(): CryptoKey {
@@ -142,12 +159,6 @@ export class TsumugiGroup {
     new DataView(iv.buffer).setUint32(IV_PREFIX_LEN, this.sendIvCounter++, false);
     return iv;
   }
-}
-
-function ivKey(iv: Uint8Array): string {
-  let out = '';
-  for (let i = 0; i < IV_LEN; i++) out += iv[i]!.toString(16).padStart(2, '0');
-  return out;
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
