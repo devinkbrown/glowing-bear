@@ -10,6 +10,9 @@ import {
   type MultilineBatch,
 } from './multiline';
 
+const encoder = new TextEncoder();
+const utf8Bytes = (text: string): number => encoder.encode(text).length;
+
 describe('parseMultilineLimits', () => {
   it('parses the cap value orochi advertises in the live capture', () => {
     // draft/multiline=max-bytes=4096,max-lines=24
@@ -69,6 +72,26 @@ describe('planMultilineBatches', () => {
     const batches = planMultilineBatches('aaaaa\nbbbbb\ncc', { maxBytes: 10, maxLines: 24 });
 
     expect(batches!.map((b) => b.map((p) => p.text))).toEqual([['aaaaa', 'bbbbb'], ['cc']]);
+  });
+
+  it('keeps every batch at or below max-bytes after splitting overlong lines', () => {
+    // Arrange
+    const limits = { maxBytes: 6, maxLines: 24 };
+
+    // Act
+    const batches = planMultilineBatches('abcdefghi\njklmn\nop', limits)!;
+
+    // Assert
+    for (const batch of batches) {
+      const batchBytes = batch.reduce((sum, part) => sum + utf8Bytes(part.text), 0);
+      expect(batchBytes).toBeLessThanOrEqual(limits.maxBytes);
+    }
+    expect(batches.map((batch) => batch.map((part) => part.text))).toEqual([
+      ['abcdef'],
+      ['ghi'],
+      ['jklmn'],
+      ['op'],
+    ]);
   });
 
   it('explodes an overlong line into byte-limited fragments', () => {
@@ -135,6 +158,30 @@ describe('buildMultilineLines', () => {
     for (const line of plan.lines) {
       expect(line.slice(0, -2).includes('\n')).toBe(false);
       expect(line.slice(0, -2).includes('\r')).toBe(false);
+    }
+  });
+
+  it('does not let CRLF pasted into planned fragments create extra IRC messages', () => {
+    // Arrange
+    const batches = planMultilineBatches('hello\r\nJOIN #evil\nstill chat', {
+      maxBytes: 4096,
+      maxLines: 24,
+    })!;
+
+    // Act
+    const plan = buildMultilineLines('#chan', batches, refFactory('r1'));
+
+    // Assert
+    expect(plan.lines).toEqual([
+      'BATCH +r1 draft/multiline #chan\r\n',
+      '@batch=r1 PRIVMSG #chan :hello\r\n',
+      '@batch=r1 PRIVMSG #chan :JOIN #evil\r\n',
+      '@batch=r1 PRIVMSG #chan :still chat\r\n',
+      'BATCH -r1\r\n',
+    ]);
+    for (const line of plan.lines) {
+      expect(line.endsWith('\r\n')).toBe(true);
+      expect(line.slice(0, -2)).not.toMatch(/[\r\n]/);
     }
   });
 

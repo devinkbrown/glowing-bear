@@ -136,6 +136,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -172,6 +173,33 @@ describe('frame handling', () => {
 // ── CAP / SASL selection ───────────────────────────────────────────────────────
 
 describe('CAP negotiation', () => {
+  it('waits for the final multiline CAP LS before requesting accumulated caps', () => {
+    // Arrange
+    const c = makeClient();
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+    ws.sent.length = 0;
+
+    // Act: first CAP LS segment is explicitly continued with "*".
+    ws.message(':s CAP * LS * :sasl=PLAIN draft/multiline=max-bytes=1024,max-lines=8');
+
+    // Assert: no request is sent until the terminating LS segment arrives.
+    expect(ws.sent).toEqual([]);
+    expect(c.capValues.get('draft/multiline')).toBe('max-bytes=1024,max-lines=8');
+
+    // Act
+    ws.message(':s CAP * LS :message-tags server-time');
+
+    // Assert
+    const req = ws.sent.find((l) => l.startsWith('CAP REQ '));
+    expect(req).toBeDefined();
+    expect(req).toContain('sasl');
+    expect(req).toContain('draft/multiline');
+    expect(req).toContain('message-tags');
+    expect(req).toContain('server-time');
+  });
+
   it('requests sasl then begins SCRAM when the server offers it', () => {
     const c = makeClient();
     c.connect();
@@ -294,6 +322,57 @@ describe('SCRAM-SHA-256 mutual auth', () => {
 // ── session resume (prefers the mesh token) ────────────────────────────────────
 
 describe('session resume', () => {
+  it('requests a fresh token only after SASL success and 001, then forwards NOTE TOKEN', () => {
+    // Arrange
+    const c = makeClient();
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+
+    // Act: SASL success happens before registration.
+    ws.message(':s CAP * LS :sasl=PLAIN');
+    ws.message(':s CAP * ACK :sasl');
+    ws.message(':s 903 kain :SASL authentication successful');
+
+    // Assert: SESSION commands are post-registration only.
+    expect(ws.sent.some((line) => line.startsWith('SESSION '))).toBe(false);
+
+    // Act
+    ws.sent.length = 0;
+    ws.message(':s 001 kain :Welcome');
+    ws.message(':eshmaki.me NOTE SESSION TOKEN :tok-abc123');
+
+    // Assert
+    expect(ws.sent).toContain('SESSION TOKEN\r\n');
+    expect(ws.sent).not.toContain('SESSION RESUME tok-abc123\r\n');
+    expect(received.some((m) =>
+      m.command === 'NOTE' &&
+      m.params[0] === 'SESSION' &&
+      m.params[1] === 'TOKEN' &&
+      m.params[2] === 'tok-abc123'
+    )).toBe(true);
+  });
+
+  it('resumes with a token persisted from a prior NOTE TOKEN on the next client', () => {
+    // Arrange
+    const c = makeClient({ sessionToken: 'tok-abc123' });
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+
+    // Act
+    ws.message(':s CAP * LS :sasl=PLAIN');
+    ws.message(':s CAP * ACK :sasl');
+    ws.message(':s 903 kain :SASL authentication successful');
+    ws.sent.length = 0;
+    ws.message(':s 001 kain :Welcome');
+
+    // Assert
+    expect(ws.sent.indexOf('SESSION RESUME tok-abc123\r\n')).toBeLessThan(
+      ws.sent.indexOf('SESSION TOKEN\r\n'),
+    );
+  });
+
   it('prefers the mesh token over the local token on 001 after login', () => {
     const c = makeClient({ sessionToken: 'LOCAL', meshToken: 'MESH' });
     c.connect();
@@ -335,5 +414,48 @@ describe('903 numeric gating', () => {
     received.length = 0;
     ws.message(':s 903 kain #chan :ERR_BADLEVEL');
     expect(received.some((m) => m.command === '903')).toBe(true);
+  });
+});
+
+// ── reconnect ownership ──────────────────────────────────────────────────────
+
+describe('reconnect ownership', () => {
+  it('does not schedule a replacement socket on close', () => {
+    // Arrange
+    vi.useFakeTimers();
+    const disconnected: string[] = [];
+    const c = makeClient({ onDisconnected: (reason) => disconnected.push(reason) });
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+
+    // Act
+    ws.close(1006, 'network gone');
+    vi.advanceTimersByTime(60_000);
+
+    // Assert: reconnect is owned by the store, so the client creates no new ws.
+    expect(disconnected).toEqual(['network gone']);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it('detaches the previous socket before opening a replacement connection', () => {
+    // Arrange
+    const disconnected: string[] = [];
+    const c = makeClient({ onDisconnected: (reason) => disconnected.push(reason) });
+    c.connect();
+    const first = lastSocket();
+    first.open();
+
+    // Act
+    c.connect();
+    const second = lastSocket();
+    second.open();
+    expect(first.onclose).toBeNull();
+    first.close(1006, 'stale close');
+    second.close(1006, 'active close');
+
+    // Assert
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    expect(disconnected).toEqual(['active close']);
   });
 });
