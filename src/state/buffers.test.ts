@@ -57,6 +57,9 @@ import {
   applyModeChange,
   togglePin,
   toggleMute,
+  getNotifyMode,
+  setNotifyMode,
+  cycleNotifyMode,
   addIgnore,
   removeIgnore,
 } from './buffers';
@@ -814,6 +817,81 @@ describe('buffers store', () => {
 
       removeIgnore('badguy');
       expect(JSON.parse(localStorage.getItem('db-ignored') ?? '[]')).not.toContain('badguy');
+    });
+  });
+
+  describe('notify tiers (P3.4)', () => {
+    beforeEach(() => {
+      upsertBuffer(makeBuffer(A, { number: 1 }));
+      upsertBuffer(makeBuffer(B, { number: 2 }));
+      // In-memory mute/notify maps persist across tests (clearBuffers does not
+      // touch them); normalize every buffer to the default ('mentions', encoded
+      // by absence) before each case so leftovers never bleed in.
+      setNotifyMode(A, 'mentions');
+      setNotifyMode(B, 'mentions');
+    });
+
+    it('defaults to "mentions" for an unconfigured buffer and an unknown pointer', () => {
+      expect(getNotifyMode(A)).toBe('mentions');
+      expect(getNotifyMode('no-such-ptr')).toBe('mentions');
+    });
+
+    it('setNotifyMode("all") persists the non-default tier to db-notify-modes, not db-muted', () => {
+      setNotifyMode(A, 'all');
+
+      expect(getNotifyMode(A)).toBe('all');
+      expect(isMuted(A)).toBe(false);
+      expect(JSON.parse(localStorage.getItem('db-notify-modes') ?? '{}'))
+        .toEqual({ [`irc.esh.${A}`]: 'all' });
+      expect(JSON.parse(localStorage.getItem('db-muted') ?? '[]')).not.toContain(`irc.esh.${A}`);
+    });
+
+    it('setNotifyMode("mute") routes to db-muted and clears any override', () => {
+      setNotifyMode(A, 'all');
+      setNotifyMode(A, 'mute');
+
+      expect(getNotifyMode(A)).toBe('mute');
+      expect(isMuted(A)).toBe(true);
+      expect(JSON.parse(localStorage.getItem('db-muted') ?? '[]')).toContain(`irc.esh.${A}`);
+      // override dropped so mute is the single source of truth
+      expect(JSON.parse(localStorage.getItem('db-notify-modes') ?? '{}')[`irc.esh.${A}`]).toBeUndefined();
+    });
+
+    it('setNotifyMode("mentions") (the default) clears both stores back to default', () => {
+      setNotifyMode(A, 'mute');
+      setNotifyMode(A, 'mentions');
+
+      expect(getNotifyMode(A)).toBe('mentions');
+      expect(isMuted(A)).toBe(false);
+      expect(JSON.parse(localStorage.getItem('db-muted') ?? '[]')).not.toContain(`irc.esh.${A}`);
+      // default is encoded by absence, not a stored 'mentions' entry
+      expect(JSON.parse(localStorage.getItem('db-notify-modes') ?? '{}')[`irc.esh.${A}`]).toBeUndefined();
+    });
+
+    it('migrates a legacy muted buffer (db-muted / toggleMute) to the "mute" tier', () => {
+      // toggleMute is the pre-P3.4 mute path; getNotifyMode must read it as 'mute'.
+      toggleMute(B);
+      expect(isMuted(B)).toBe(true);
+      expect(getNotifyMode(B)).toBe('mute');
+
+      toggleMute(B);
+      expect(getNotifyMode(B)).toBe('mentions');
+    });
+
+    it('cycleNotifyMode advances all -> mentions -> mute -> all (order independent of default)', () => {
+      setNotifyMode(A, 'all'); // pin the starting tier so the order is deterministic
+      expect(cycleNotifyMode(A)).toBe('mentions');
+      expect(getNotifyMode(A)).toBe('mentions');
+      expect(cycleNotifyMode(A)).toBe('mute');
+      expect(getNotifyMode(A)).toBe('mute');
+      expect(cycleNotifyMode(A)).toBe('all');
+      expect(getNotifyMode(A)).toBe('all');
+    });
+
+    it('ignores an unknown-buffer set/cycle without throwing', () => {
+      expect(() => setNotifyMode('no-such-ptr', 'mute')).not.toThrow();
+      expect(cycleNotifyMode('no-such-ptr')).toBe('mentions');
+      expect(JSON.parse(localStorage.getItem('db-muted') ?? '[]')).not.toContain('irc.esh.no-such-ptr');
     });
   });
 

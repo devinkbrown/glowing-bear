@@ -73,7 +73,7 @@ import {
   _flushLineBatch,
   type MediaCommandSink,
 } from './connection';
-import { buffersState, upsertBuffer, setActiveBuffer, addLine } from './buffers';
+import { buffersState, upsertBuffer, setActiveBuffer, addLine, setNotifyMode } from './buffers';
 import { ircxState, isOrochiServer, markOrochi } from './ircx';
 import type { BufferEntry } from '@/types';
 
@@ -762,6 +762,50 @@ describe('connection store', () => {
 
       expect(vi.mocked(notify)).toHaveBeenCalledTimes(1);
       expect(vi.mocked(notify).mock.calls[0]?.[0]).toBe('Highlight in #general');
+    });
+  });
+
+  describe('per-channel notify tiers (P3.4)', () => {
+    // In-memory notify maps persist across cases; reset CHAN to the default.
+    afterEach(() => {
+      if (buffersState.buffers[CHAN]) setNotifyMode(CHAN, 'mentions');
+    });
+
+    it('tier "all" notifies on a plain (non-highlight) inactive-buffer line', () => {
+      const c = connectWithBuffers(); // SRV active, CHAN inactive
+      setNotifyMode(CHAN, 'all');
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: CHAN, nick: 'alice', message: 'just chatting', highlight: false,
+      }) });
+
+      expect(vi.mocked(notify)).toHaveBeenCalledTimes(1);
+    });
+
+    it('tier "mentions" notifies on a highlight but suppresses a plain line', () => {
+      const c = connectWithBuffers();
+      setNotifyMode(CHAN, 'mentions');
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: CHAN, nick: 'alice', message: 'just chatting', highlight: false,
+      }) });
+      expect(vi.mocked(notify)).not.toHaveBeenCalled();
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: CHAN, nick: 'alice', message: 'kain: ping', highlight: true,
+      }) });
+      expect(vi.mocked(notify)).toHaveBeenCalledTimes(1);
+    });
+
+    it('tier "mute" suppresses even a highlight line', () => {
+      const c = connectWithBuffers();
+      setNotifyMode(CHAN, 'mute');
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: CHAN, nick: 'alice', message: 'kain: ping', highlight: true,
+      }) });
+
+      expect(vi.mocked(notify)).not.toHaveBeenCalled();
     });
   });
 

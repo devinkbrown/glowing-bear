@@ -7,6 +7,9 @@
 import { createStore, produce } from 'solid-js/store';
 import type { WeeChatBuffer, WeeChatLine, WeeChatNick, HotlistEntry } from '@/lib/weechat/model';
 import type { BufferEntry, Reaction, TypingInfo } from '@/types';
+import { type NotifyMode, DEFAULT_NOTIFY_MODE, nextNotifyMode } from '@/lib/notifyDecision';
+
+export type { NotifyMode };
 
 const MAX_LINES = 5000;
 const CONTENT_DEDUP_WINDOW_MS = 3000;
@@ -18,6 +21,13 @@ const PIN_KEY = 'db-pinned';
 const MUTE_KEY = 'db-muted';
 const IGNORE_KEY = 'db-ignored';
 const LAST_BUFFER_KEY = 'db-last-buffer';
+// Per-buffer notify tier overrides, keyed by full name (same name-keyed
+// discipline as db-muted/db-pinned so it survives reconnect pointer churn).
+// Holds only NON-default, non-mute tiers (i.e. 'all' while the default is
+// 'mentions'): 'mute' lives in db-muted (legacy source of truth, so existing
+// muted buffers migrate to the 'mute' tier for free), and DEFAULT_NOTIFY_MODE
+// is stored implicitly by absence. See setNotifyMode/getNotifyMode.
+const NOTIFY_MODE_KEY = 'db-notify-modes';
 
 // Ordered privilege tiers, highest first -- checked against nick.prefix.trim().
 // Covers orochi's PREFIX=(YQqov)*!.@+ (Y=* network-oper, Q=! founder,
@@ -101,6 +111,31 @@ function saveKeys(key: string, keys: Record<string, true>): void {
   }
 }
 
+// Notify-mode overrides persist as a JSON object { fullName: 'mentions' }.
+// Untrusted on load: reject non-objects and validate every value against the
+// tier union, dropping anything unrecognized.
+function loadNotifyModes(): Record<string, NotifyMode> {
+  if (typeof localStorage === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(NOTIFY_MODE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, NotifyMode> = {};
+    for (const [name, mode] of Object.entries(parsed as Record<string, unknown>)) {
+      if (mode === 'all' || mode === 'mentions' || mode === 'mute') out[name] = mode;
+    }
+    return out;
+  } catch { /* ignore */ }
+  return {};
+}
+
+function saveNotifyModes(modes: Record<string, NotifyMode>): void {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(NOTIFY_MODE_KEY, JSON.stringify(modes));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -113,8 +148,15 @@ export interface BuffersState {
   pinnedBuffers: Record<string, true>;
   /** Ignored nicks, lowercase (persisted 'db-ignored'). */
   ignoredNicks: Record<string, true>;
-  /** Muted buffer full names (persisted 'db-muted'). */
+  /** Muted buffer full names (persisted 'db-muted'). Also the 'mute' tier. */
   mutedBuffers: Record<string, true>;
+  /**
+   * Per-buffer notify tier override by full name (persisted 'db-notify-modes').
+   * Holds non-default, non-mute tiers ('all' under the 'mentions' default);
+   * 'mute' is sourced from mutedBuffers and the default is absent. See
+   * getNotifyMode for the precedence.
+   */
+  notifyModes: Record<string, NotifyMode>;
   /** Buffer pointer -> line index of the read marker. */
   readMarkerPos: Record<string, number>;
 }
@@ -125,6 +167,7 @@ const [state, setState] = createStore<BuffersState>({
   pinnedBuffers: loadKeys(PIN_KEY),
   ignoredNicks: loadKeys(IGNORE_KEY),
   mutedBuffers: loadKeys(MUTE_KEY),
+  notifyModes: loadNotifyModes(),
   readMarkerPos: {},
 });
 
@@ -181,6 +224,19 @@ export function isMuted(pointer: string): boolean {
   const entry = state.buffers[pointer];
   if (!entry) return false;
   return !!state.mutedBuffers[entry.buffer.fullName || entry.buffer.name];
+}
+
+/**
+ * Effective notify tier for a buffer. Precedence: a muted buffer (legacy
+ * db-muted set) is always 'mute'; otherwise a stored 'db-notify-modes'
+ * override; otherwise the default 'all'. Unknown buffers default too.
+ */
+export function getNotifyMode(pointer: string): NotifyMode {
+  const entry = state.buffers[pointer];
+  if (!entry) return DEFAULT_NOTIFY_MODE;
+  const name = entry.buffer.fullName || entry.buffer.name;
+  if (state.mutedBuffers[name]) return 'mute';
+  return state.notifyModes[name] ?? DEFAULT_NOTIFY_MODE;
 }
 
 export function isIgnored(nick: string): boolean {
@@ -680,6 +736,41 @@ export function toggleMute(pointer: string): void {
     else s.mutedBuffers[name] = true;
   }));
   saveKeys(MUTE_KEY, state.mutedBuffers);
+}
+
+/**
+ * Set a buffer's notify tier. Keeps the two persisted stores consistent:
+ * 'mute' lives in db-muted, 'mentions' in db-notify-modes, and 'all' clears
+ * both (it is the default). A buffer is therefore never both muted and holding
+ * a stale 'mentions'/'all' override.
+ */
+export function setNotifyMode(pointer: string, mode: NotifyMode): void {
+  const entry = state.buffers[pointer];
+  if (!entry) return;
+  const name = entry.buffer.fullName || entry.buffer.name;
+  setState(produce((s) => {
+    if (mode === 'mute') {
+      s.mutedBuffers[name] = true;
+      delete s.notifyModes[name];
+    } else {
+      delete s.mutedBuffers[name];
+      // The default tier is encoded by absence; any other (i.e. 'all') is stored.
+      if (mode === DEFAULT_NOTIFY_MODE) delete s.notifyModes[name];
+      else s.notifyModes[name] = mode;
+    }
+  }));
+  saveKeys(MUTE_KEY, state.mutedBuffers);
+  saveNotifyModes(state.notifyModes);
+}
+
+/**
+ * Advance a buffer to the next tier (all -> mentions -> mute -> all) and return
+ * the effective mode. A no-op for an unknown pointer, so the returned mode is
+ * read back rather than assumed.
+ */
+export function cycleNotifyMode(pointer: string): NotifyMode {
+  setNotifyMode(pointer, nextNotifyMode(getNotifyMode(pointer)));
+  return getNotifyMode(pointer);
 }
 
 export function addIgnore(nick: string): void {

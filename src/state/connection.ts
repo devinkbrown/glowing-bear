@@ -29,6 +29,7 @@ import {
 } from '@/lib/weechat/client';
 import { stripColors } from '@/lib/weechat/strip-colors';
 import { notify, playSound, updateTitle } from '@/lib/notifications';
+import { shouldNotify } from '@/lib/notifyDecision';
 import { isChannelListNumeric, isIrcxNumeric, parseIrcxLine, buildPropEntry } from '@/lib/ircx/parser';
 import { NODES, wssUrlForOrochiHost } from '@/lib/irc/nodes';
 import type { BufferEntry } from '@/types';
@@ -51,7 +52,7 @@ import {
   setTyping,
   addReaction,
   applyModeChange,
-  isMuted,
+  getNotifyMode,
   getTotalHighlights,
   getTotalUnread,
   clearBuffers,
@@ -458,8 +459,10 @@ function handleLineAdded(line: WeeChatLine): void {
   enqueueLine(line);
 
   // Notifications fire per line, synchronously — they depend only on the line
-  // and buffer metadata, not on the (deferred) store insertion.
-  if (line.highlight && settings.notifications && !isMuted(line.buffer)) {
+  // and buffer metadata, not on the (deferred) store insertion. The per-channel
+  // tier (all/mentions/mute) is decided by the pure shouldNotify table; notify()
+  // itself stays focus-guarded, so this only reaches an OS alert when blurred.
+  if (shouldNotify(getNotifyMode(line.buffer), line, settings.notifications)) {
     const bufName = entry.buffer.shortName || entry.buffer.name;
     const entryType = entry.buffer.localVars['type'];
     const title = entryType === 'private' ? `Message from ${bufName}` : `Highlight in ${bufName}`;
