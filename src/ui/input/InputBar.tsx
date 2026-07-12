@@ -449,10 +449,10 @@ export default function InputBar() {
       {/* Input row */}
       <div class="px-2 sm:px-3 pt-2 pb-1.5">
         <div
-          class="flex items-end gap-1.5 rounded-2xl sm:rounded-xl transition-all duration-200 border px-2 sm:px-3 py-1.5"
+          class="flex items-end gap-1.5 rounded-2xl sm:rounded-xl border px-2 sm:px-3 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
           classList={{
-            'bg-white/[0.04] ring-1 ring-[var(--custom-accent,#818cf8)]/20 border-[var(--custom-accent,#818cf8)]/30': focused(),
-            'bg-white/[0.02] border-white/[0.06]': !focused(),
+            'bg-white/[0.05] border-[var(--custom-accent,#818cf8)]/40 ring-1 ring-[var(--custom-accent,#818cf8)]/25 shadow-lg shadow-black/25': focused(),
+            'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.03] hover:border-white/[0.1]': !focused(),
           }}
         >
           {/* Text input */}
@@ -489,7 +489,7 @@ export default function InputBar() {
             <button
               onClick={() => fileEl?.click()}
               disabled={!activeBuffer()}
-              class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-300 active:bg-white/[0.08] transition-colors disabled:opacity-20 disabled:cursor-default"
+              class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.1] active:scale-90 transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] disabled:opacity-20 disabled:cursor-default disabled:hover:bg-transparent disabled:active:scale-100"
               title="Upload file"
               aria-label="Upload file"
             >
@@ -514,10 +514,10 @@ export default function InputBar() {
             <button
               onClick={toggleGif}
               disabled={!activeBuffer()}
-              class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg transition-colors disabled:opacity-20 disabled:cursor-default"
+              class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-90 disabled:opacity-20 disabled:cursor-default disabled:active:scale-100"
               classList={{
-                'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10': showGif(),
-                'text-gray-500 hover:text-gray-300 active:bg-white/[0.08]': !showGif(),
+                'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/15 ring-1 ring-[var(--custom-accent,#818cf8)]/25': showGif(),
+                'text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.1]': !showGif(),
               }}
               title="GIF"
               aria-label="GIF picker"
@@ -537,10 +537,10 @@ export default function InputBar() {
               <button
                 onClick={submit}
                 disabled={!hasText() || !activeBuffer()}
-                class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl sm:rounded-lg transition-all duration-150"
+                class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl sm:rounded-lg transition-[opacity,transform,box-shadow,background-color,filter] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
                 classList={{
-                  'bg-[var(--custom-accent,#818cf8)] text-white hover:opacity-85 active:scale-90 shadow-sm shadow-black/30': hasText(),
-                  'bg-transparent text-gray-700 cursor-default': !hasText(),
+                  'bg-[var(--custom-accent,#818cf8)] text-white hover:brightness-110 active:scale-90 shadow-md shadow-[var(--custom-accent,#818cf8)]/30': hasText(),
+                  'bg-white/[0.03] text-gray-600 cursor-default': !hasText(),
                 }}
                 aria-label="Send"
               >
