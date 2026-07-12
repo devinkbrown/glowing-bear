@@ -8,6 +8,7 @@ import { render, cleanup } from '@solidjs/testing-library';
 import type { WeeChatLine } from '@/types';
 import { clearBuffers, clearIrcx, markBot, resetSettings, updateSettings } from '@/state';
 import { decryptedFor } from '@/state/bridge';
+import { nickColor } from '@/lib/nickcolor';
 import MessageLine from './MessageLine';
 
 vi.mock('@/state/bridge', () => ({
@@ -222,6 +223,51 @@ describe('MessageLine', () => {
 
     expect(container.querySelector('img')).toBeNull();
     expect(container.textContent).toContain(payload);
+  });
+
+  it('tints the nick deterministically — the same nick always yields the same color', () => {
+    const first = renderLine(makeLine({ nick: 'alice' }));
+    const firstColor = (first.container.querySelector('.msg-nick') as HTMLElement).style.color;
+    expect(firstColor).not.toBe('');
+    first.unmount();
+
+    const second = renderLine(makeLine({ nick: 'alice' }));
+    const secondColor = (second.container.querySelector('.msg-nick') as HTMLElement).style.color;
+    // Same nick across independent renders resolves to the identical tint.
+    expect(secondColor).toBe(firstColor);
+  });
+
+  it('tints two different nicks with distinguishable colors', () => {
+    // alice (#56b6c2) and bob (#e6db74) map to different palette entries.
+    const aliceRun = renderLine(makeLine({ nick: 'alice' }));
+    const aliceColor = (aliceRun.container.querySelector('.msg-nick') as HTMLElement).style.color;
+    aliceRun.unmount();
+
+    const bobRun = renderLine(makeLine({ nick: 'bob' }));
+    const bobColor = (bobRun.container.querySelector('.msg-nick') as HTMLElement).style.color;
+
+    expect(aliceColor).not.toBe('');
+    expect(bobColor).not.toBe('');
+    expect(bobColor).not.toBe(aliceColor);
+  });
+
+  it('applies the nickColor helper value and keeps the nick a plain text node', () => {
+    const { container } = renderLine(makeLine({ nick: 'carol' }));
+    const nickEl = container.querySelector('.msg-nick') as HTMLElement;
+    // Color is carried only via the inline style, never by injecting markup.
+    expect(nickEl.textContent).toBe('carol');
+    expect(nickEl.querySelector('img')).toBeNull();
+    // The applied tint is exactly the helper's deterministic output.
+    const expected = document.createElement('span');
+    expected.style.color = nickColor('carol');
+    expect(nickEl.style.color).toBe(expected.style.color);
+  });
+
+  it('omits the nick tint when the colorNicks setting is off', () => {
+    updateSettings({ colorNicks: false });
+    const { container } = renderLine(makeLine({ nick: 'alice' }));
+    const nickEl = container.querySelector('.msg-nick') as HTMLElement;
+    expect(nickEl.style.color).toBe('');
   });
 
   it('renders the encrypted placeholder for TSUMUGI1 payloads when decryption yields nothing', () => {
