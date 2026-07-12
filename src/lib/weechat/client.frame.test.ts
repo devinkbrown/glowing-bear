@@ -273,7 +273,7 @@ describe('WeeRelayClient connection and authentication', () => {
 		// New auth flow is handshake-first: the plaintext password must NOT appear
 		// until/unless we fall back to legacy init (covered in client.handshake.test.ts).
 		expect(ws.sent[0]).toBe(
-			'handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
+			'(_handshake) handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
 		);
 		expect(ws.sent.join('')).not.toContain('password=hunter2');
 	});

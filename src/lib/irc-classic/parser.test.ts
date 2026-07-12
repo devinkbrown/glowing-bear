@@ -48,10 +48,36 @@ describe('parseIRC', () => {
     expect(msg.params).toEqual([]);
   });
 
+  it('fail-safes malformed IRCv3 tag prefixes without throwing or leaking partial tags', () => {
+    expect(() => parseIRC('@time=2026-07-03T20:38:05.726Z')).not.toThrow();
+
+    const msg = parseIRC('@time=2026-07-03T20:38:05.726Z');
+    expect(msg.tags.size).toBe(0);
+    expect(msg.prefix).toBeNull();
+    expect(msg.command).toBe('');
+    expect(msg.params).toEqual([]);
+  });
+
+  it('keeps unknown IRCv3 tag escape sequences literal as a fallback', () => {
+    const msg = parseIRC('@known=a\\sb;unknown=keep\\xliteral CMD');
+
+    expect(msg.tags.get('known')).toBe('a b');
+    expect(msg.tags.get('unknown')).toBe('keep\\xliteral');
+    expect(msg.command).toBe('CMD');
+  });
+
   it('returns an empty command for a prefix-only line', () => {
     const msg = parseIRC(':lonely.prefix');
     expect(msg.prefix).toBe('lonely.prefix');
     expect(msg.command).toBe('');
+  });
+
+  it('treats a blank raw line as an empty command without params', () => {
+    expect(parseIRC('')).toMatchObject({
+      prefix: null,
+      command: '',
+      params: [],
+    });
   });
 });
 
@@ -86,6 +112,11 @@ describe('formatIRC', () => {
     expect(formatIRC({ prefix: 'nick!user@host', command: 'QUIT', params: ['bye bye'] })).toBe(
       ':nick!user@host QUIT :bye bye',
     );
+  });
+
+  it('formats an empty partial message as an empty line body', () => {
+    expect(formatIRC({})).toBe('');
+    expect(formatIRC({ tags: new Map(), params: [] })).toBe('');
   });
 });
 
@@ -161,5 +192,13 @@ describe('parsePrefix', () => {
 
   it('treats a server name as the nick field (classic behavior)', () => {
     expect(parsePrefix('eshmaki.me')).toEqual({ nick: 'eshmaki.me', ident: '', host: '' });
+  });
+
+  it('falls back to nick@host parsing when ! appears after @', () => {
+    expect(parsePrefix('alice@example.net!late-ident')).toEqual({
+      nick: 'alice',
+      ident: '',
+      host: 'example.net!late-ident',
+    });
   });
 });

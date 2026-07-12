@@ -37,6 +37,7 @@ import {
 } from '@/state/buffers';
 import { setMediaSink, setRelayObserver } from '@/state/connection';
 import { ircxState } from '@/state/ircx';
+import { parseReadMarkerTimestamp, recordReadMarker } from '@/state/threads';
 import { settings } from '@/state/settings';
 import {
   _ingestEncryptedDm,
@@ -156,6 +157,32 @@ export function resolveMappedPtr(
   return null;
 }
 
+/**
+ * Resolve an inbound IRCv3 `draft/read-marker` MARKREAD to the threads-store
+ * record it should fold into, or null when there is nothing to record — the
+ * server reported no marker (null / `*`), an unparseable timestamp (fails
+ * closed rather than trusting a malformed instant), or an unmapped target.
+ *
+ * Keyed strictly by the resolved relay buffer pointer — a SINGLE key domain, so
+ * a future consumer keying by pointer never misses a value stored under a raw
+ * wire name. An unmapped target is dropped (returns null): the SEND side
+ * (`markRead`) is likewise mapped-only, and a consumer re-queries on buffer open
+ * once the mapping exists. The monotonic no-rewind guard lives in
+ * `recordReadMarker`.
+ */
+export function readMarkerRecord(
+  channelMap: ReadonlyMap<string, string>,
+  buffers: Record<string, BufferEntry>,
+  target: string,
+  timestamp: string | null,
+): { bufferKey: string; ms: number } | null {
+  if (!timestamp) return null;
+  const ms = parseReadMarkerTimestamp(timestamp);
+  if (ms === null) return null;
+  const ptr = resolveMappedPtr(channelMap, buffers, target);
+  return ptr ? { bufferKey: ptr, ms } : null;
+}
+
 /** True when (msgid, emoji, nick) is already recorded on the line's reactions. */
 export function hasReaction(
   reactions: Record<string, Reaction[]> | undefined,
@@ -273,6 +300,7 @@ function connectTo(url: string): void {
     onDisconnected: onDrop,
     onError: (err) => { _setBridgeState({ error: err }); },
     onNickChanged: (n) => { _setBridgeState({ nick: n }); },
+    onReadMarker: foldReadMarker,
   });
   c.extraMessageHandlers.add(onBridgeMessage);
   client = c;
@@ -440,6 +468,19 @@ function handleTagmsg(msg: IRCMessage): void {
   }
 }
 
+/**
+ * Fold an inbound IRCv3 `draft/read-marker` MARKREAD (via the client's
+ * onReadMarker callback, which pre-validates the timestamp) into the threads
+ * store's per-buffer read-marker position. MARKREAD is account-scoped — the
+ * server only echoes our own account's markers — so every one we receive is
+ * ours to record. Separate from `handleMarkread` below, which drives the
+ * unread-badge position; this owns the cross-device read-marker instant.
+ */
+function foldReadMarker(target: string, timestamp: string | null): void {
+  const rec = readMarkerRecord(chanToPtr, buffersState.buffers, target, timestamp);
+  if (rec) recordReadMarker(rec.bufferKey, rec.ms);
+}
+
 function handleMarkread(msg: IRCMessage): void {
   const target = msg.params[0];
   if (!target) return;
@@ -574,6 +615,63 @@ const backend: BridgeBackend = {
     void startBridge(); // on-demand connect; queue flushes on welcome
   },
 };
+
+// ---------------------------------------------------------------------------
+// Reply linkage (direct-bridge send)
+// ---------------------------------------------------------------------------
+
+/**
+ * A `+draft/reply` tag VALUE must be a single bare IRCv3 tag token — no
+ * whitespace, `;`, CR/LF, or NUL — so a crafted parent msgid can never smuggle
+ * a second tag or a second command. Fail closed (caller falls back to relay).
+ */
+const REPLY_MSGID_RE = /^[^\s;\r\n\x00]+$/;
+
+/**
+ * Build the `sendRaw` arguments for a `+draft/reply`-tagged PRIVMSG, or null
+ * when the reply cannot be framed safely: an unsafe parent msgid (anything with
+ * whitespace, `;`, CR/LF, or NUL — which could smuggle a second tag or command)
+ * or a non-channel target. Pure and exported so the injection guard, the
+ * channel-only scope, and the exact one-frame shape are unit-testable without
+ * the live client.
+ *
+ * The tag+command ride in the first `sendRaw` token; `formatIRCLine`
+ * space-joins it verbatim and strips CR/LF from every token, so the result is a
+ * single well-formed frame `@+draft/reply=<id> PRIVMSG <target> :<text>`.
+ */
+export function replyRawArgs(
+  target: string | null,
+  text: string,
+  replyMsgid: string,
+): [string, string, string] | null {
+  if (!REPLY_MSGID_RE.test(replyMsgid)) return null;
+  if (!target || !(target.startsWith('#') || target.startsWith('&'))) return null;
+  return [`@+draft/reply=${replyMsgid} PRIVMSG`, target, text];
+}
+
+/**
+ * Send `text` to the buffer's mapped orochi channel as a PRIVMSG carrying the
+ * IRCv3 `+draft/reply=<parentMsgid>` message tag, over the DIRECT bridge
+ * session. Returns true when the tagged reply was sent, false when it could not
+ * be — no live bridge, the buffer does not map to an orochi CHANNEL, or an
+ * unsafe msgid — so the caller can fall back to the plain relay path.
+ *
+ * Relay-vs-direct boundary: the WeeChat relay is the message DISPLAY source but
+ * its `input` command cannot carry IRCv3 message tags, so reply linkage rides
+ * the direct orochi session (the relay's own weechat is joined to the same
+ * channel and renders the resulting line as our echo). Scoped to channels — DM
+ * echo/E2EE interplay is out of this slice. A first-class
+ * `client.privmsg(target, text, tags)` wire helper belongs to the wire layer
+ * (darkbear-wire); until it exists this controller frames the one tagged line
+ * through `replyRawArgs` + `sendRaw`.
+ */
+export function sendReply(bufferPtr: string, text: string, replyMsgid: string): boolean {
+  if (!welcomed || !client) return false;
+  const args = replyRawArgs(backend.targetForBuffer(bufferPtr), text, replyMsgid);
+  if (!args) return false;
+  client.sendRaw(...args);
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Init

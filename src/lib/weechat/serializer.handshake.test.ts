@@ -38,13 +38,13 @@ describe('handshakeCmd', () => {
 		// only separates options. A ',' here would make the relay read
 		// "sha256" then a bogus "compression=…" algo and silently fall back.
 		expect(handshakeCmd(true)).toBe(
-			'handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=zlib:off\n',
+			'(_handshake) handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=zlib:off\n',
 		);
 	});
 
 	it('offers only off compression when compression is disabled', () => {
 		expect(handshakeCmd(false)).toBe(
-			'handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
+			'(_handshake) handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
 		);
 	});
 
@@ -62,13 +62,13 @@ describe('handshakeCmd', () => {
 	// connection (the mobile "connects then spins then fails" regression).
 	it('advertises compression=off when the browser cannot decode, even with compression ON', () => {
 		expect(handshakeCmd(true, false)).toBe(
-			'handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
+			'(_handshake) handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
 		);
 	});
 
 	it('still advertises zlib:off when the browser CAN decode and compression is ON', () => {
 		expect(handshakeCmd(true, true)).toBe(
-			'handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=zlib:off\n',
+			'(_handshake) handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=zlib:off\n',
 		);
 	});
 

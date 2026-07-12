@@ -115,13 +115,16 @@ describe('Sidebar', () => {
   it('shows an unread pip for #alpha and a hot highlight pip for #beta', () => {
     const { getAllByText } = render(() => <Sidebar />);
 
+    // Hot/mention pips now carry the --role-mention token class (was bg-red-500,
+    // retired by the P2.5 semantic-role work); unread pips use the primary tint.
+    const mentionClass = 'bg-[var(--role-mention,#f87171)]';
     const unreadPip = getAllByText('3').find((el) => el.classList.contains('min-w-[16px]'));
     expect(unreadPip).toBeInTheDocument();
-    expect(unreadPip?.classList.contains('bg-red-500')).toBe(false);
+    expect(unreadPip?.classList.contains(mentionClass)).toBe(false);
 
     const hotPip = getAllByText('2').find((el) => el.classList.contains('min-w-[16px]'));
     expect(hotPip).toBeInTheDocument();
-    expect(hotPip?.classList.contains('bg-red-500')).toBe(true);
+    expect(hotPip?.classList.contains(mentionClass)).toBe(true);
   });
 
   it('activates a channel when its row is clicked', () => {

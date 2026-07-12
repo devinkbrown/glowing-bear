@@ -178,7 +178,7 @@ export default function Sidebar(props: SidebarProps) {
           <span
             class="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-gray-950"
             classList={{
-              'bg-emerald-400': isConnected(),
+              'bg-[var(--role-online,#34d399)]': isConnected(),
               'bg-amber-400 animate-pulse': isConnecting() || isReconnecting(),
               'bg-gray-600': !isConnected() && !isConnecting() && !isReconnecting(),
             }}
@@ -205,7 +205,7 @@ export default function Sidebar(props: SidebarProps) {
         <div
           class="darkbear-connection-pill flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-semibold"
           classList={{
-            'bg-emerald-500/[0.08] text-emerald-300 border-emerald-400/15': isConnected(),
+            'bg-[var(--role-online,#34d399)]/[0.08] text-[var(--role-online,#34d399)] border-[var(--role-online,#34d399)]/25': isConnected(),
             'bg-amber-500/[0.08] text-amber-300 border-amber-400/15': isConnecting() || isReconnecting(),
             'bg-white/[0.03] text-gray-500': !isConnected() && !isConnecting(),
           }}
@@ -213,7 +213,7 @@ export default function Sidebar(props: SidebarProps) {
           <span
             class="w-[5px] h-[5px] rounded-full shrink-0"
             classList={{
-              'bg-emerald-400': isConnected(),
+              'bg-[var(--role-online,#34d399)]': isConnected(),
               'bg-amber-400 animate-pulse': isConnecting(),
               'bg-orange-400 animate-pulse': isReconnecting(),
               'bg-gray-600': !isConnected() && !isConnecting() && !isReconnecting(),
@@ -255,7 +255,7 @@ export default function Sidebar(props: SidebarProps) {
                 e.currentTarget.blur();
               }
             }}
-            class="w-full rounded-xl border border-white/[0.07] bg-white/[0.035] py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none transition-colors placeholder:text-gray-600 focus:border-[var(--custom-accent,#818cf8)]/35 focus:bg-white/[0.055] sm:py-2 sm:text-[12px]"
+            class="w-full rounded-xl border border-white/[0.07] bg-white/[0.035] py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none transition-colors placeholder:text-gray-600 focus:border-[var(--role-primary,#818cf8)]/35 focus:bg-white/[0.055] sm:py-2 sm:text-[12px]"
           />
         </label>
         <div class="grid grid-cols-4 gap-1 rounded-xl border border-white/[0.055] bg-black/20 p-1">
@@ -312,7 +312,7 @@ export default function Sidebar(props: SidebarProps) {
                         onClick={(e) => selectBuffer(serverEntry().buffer.id, e)}
                         class="flex-1 text-left text-[9px] font-black uppercase tracking-[0.18em] py-1.5 px-1 rounded transition-colors truncate"
                         classList={{
-                          'text-[var(--custom-accent,#818cf8)]': buffersState.activeBuffer === serverEntry().buffer.id,
+                          'text-[var(--role-primary,#818cf8)]': buffersState.activeBuffer === serverEntry().buffer.id,
                           'text-gray-600 hover:text-gray-300': buffersState.activeBuffer !== serverEntry().buffer.id,
                         }}
                       >
@@ -334,7 +334,7 @@ export default function Sidebar(props: SidebarProps) {
                         setShowJoinBar(grp.serverName);
                         setJoinInput('');
                       }}
-                      class="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center rounded text-gray-500 hover:text-[var(--custom-accent,#818cf8)] active:bg-white/[0.04] transition-colors"
+                      class="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center rounded text-gray-500 hover:text-[var(--role-primary,#818cf8)] active:bg-white/[0.04] transition-colors"
                       title="Join channel"
                     >
                       <svg class="w-[12px] h-[12px] sm:w-[10px] sm:h-[10px]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -359,7 +359,7 @@ export default function Sidebar(props: SidebarProps) {
                           }
                         }}
                         placeholder="#channel"
-                        class="w-full bg-[var(--custom-accent,#818cf8)]/[0.06] border border-[var(--custom-accent,#818cf8)]/20 rounded-lg text-[13px] sm:text-[12px] text-gray-200 px-3 py-2.5 sm:py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/40 placeholder-gray-600 transition-colors"
+                        class="w-full bg-[var(--role-primary,#818cf8)]/[0.06] border border-[var(--role-primary,#818cf8)]/20 rounded-lg text-[13px] sm:text-[12px] text-gray-200 px-3 py-2.5 sm:py-1.5 outline-none focus:border-[var(--role-primary,#818cf8)]/40 placeholder-gray-600 transition-colors"
                       />
                     </div>
                   </Show>
@@ -405,7 +405,7 @@ export default function Sidebar(props: SidebarProps) {
           <div class="shrink-0 px-3 py-2" style={{ 'padding-bottom': 'max(0.5rem, env(safe-area-inset-bottom))' }}>
             <button
               onClick={(e) => selectBuffer(pointer(), e)}
-              class="w-full flex items-center justify-center gap-2 py-2.5 sm:py-2 rounded-full bg-red-500/10 text-red-400 text-[12px] sm:text-[11px] font-semibold hover:bg-red-500/15 active:bg-red-500/20 transition-all"
+              class="w-full flex items-center justify-center gap-2 py-2.5 sm:py-2 rounded-full bg-[var(--role-mention,#f87171)]/10 text-[var(--role-mention,#f87171)] text-[12px] sm:text-[11px] font-semibold hover:bg-[var(--role-mention,#f87171)]/15 active:bg-[var(--role-mention,#f87171)]/20 transition-all"
             >
               <svg class="w-3.5 h-3.5 sm:w-3 sm:h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                 <path d="M8 2v8M5 7l3 3 3-3" />
@@ -460,11 +460,11 @@ function BufItem(props: {
         }
       }}
       title={props.entry.buffer.fullName}
-      class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-[transform,background-color,box-shadow,color] duration-150 ease-out text-[14px] sm:text-[13px] rounded-xl group relative active:scale-[0.985] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--custom-accent,#818cf8)]/50"
+      class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-[transform,background-color,box-shadow,color] duration-150 ease-out text-[14px] sm:text-[13px] rounded-xl group relative active:scale-[0.985] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--role-primary,#818cf8)]/50"
       classList={{
         'pl-6': props.indent,
         'pl-3': !props.indent,
-        'text-gray-100 bg-[var(--custom-accent,#818cf8)]/[0.14] ring-1 ring-inset ring-[var(--custom-accent,#818cf8)]/30 shadow-sm shadow-black/20': props.active,
+        'text-gray-100 bg-[var(--role-primary,#818cf8)]/[0.14] ring-1 ring-inset ring-[var(--role-primary,#818cf8)]/30 shadow-sm shadow-black/20': props.active,
         'text-gray-100 hover:bg-white/[0.04]': !props.active && props.entry.highlighted > 0,
         'text-gray-300 hover:bg-white/[0.03]': !props.active && props.entry.highlighted === 0 && props.entry.unread > 0,
         'text-gray-400 hover:text-gray-200 hover:bg-white/[0.025]':
@@ -475,7 +475,7 @@ function BufItem(props: {
           hidden when idle, faint on hover, solid + taller when selected.
           Animated on opacity/transform only (compositor-friendly). */}
       <span
-        class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-[var(--custom-accent,#818cf8)] origin-center transition-[opacity,transform] duration-200 ease-out"
+        class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-[var(--role-primary,#818cf8)] origin-center transition-[opacity,transform] duration-200 ease-out"
         classList={{
           'h-6 sm:h-5 scale-y-100 opacity-100': props.active,
           'h-4 scale-y-50 opacity-0 group-hover:opacity-50 group-hover:scale-y-100': !props.active,
@@ -503,7 +503,7 @@ function BufItem(props: {
         </Show>
       </span>
       <Show when={props.pinned}>
-        <span class="w-1 h-1 rounded-full bg-[var(--custom-accent,#818cf8)]/50 shrink-0" />
+        <span class="w-1 h-1 rounded-full bg-[var(--role-primary,#818cf8)]/50 shrink-0" />
       </Show>
       <Show when={props.notifyMode}>
         {(mode) => (
@@ -557,12 +557,12 @@ function NotifyButton(props: { mode: NotifyMode; onCycle: (e: MouseEvent) => voi
       title={label()}
       data-notify-mode={props.mode}
       onClick={(e) => props.onCycle(e)}
-      class="shrink-0 flex items-center justify-center w-6 h-6 -my-0.5 rounded-md transition-[opacity,color,transform] duration-150 ease-out hover:bg-white/[0.06] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--custom-accent,#818cf8)]/60"
+      class="shrink-0 flex items-center justify-center w-6 h-6 -my-0.5 rounded-md transition-[opacity,color,transform] duration-150 ease-out hover:bg-white/[0.06] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--role-primary,#818cf8)]/60"
       classList={{
         // Default tier: unobtrusive until the row is hovered or the control focused.
         'opacity-40 text-gray-600 group-hover:opacity-90 group-hover:text-gray-400 focus-visible:opacity-100':
           props.mode === 'all',
-        // Mentions-only: present and legible, the accent dot carries the meaning.
+        // Mentions-only: present and legible, the --role-mention dot carries the meaning.
         'opacity-100 text-gray-400 hover:text-gray-200': props.mode === 'mentions',
         // Muted: present but quiet, the slash carries the meaning.
         'opacity-100 text-gray-600 hover:text-gray-400': props.mode === 'mute',
@@ -578,7 +578,7 @@ function NotifyButton(props: { mode: NotifyMode; onCycle: (e: MouseEvent) => voi
         <svg class={iconCls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M8 2a1 1 0 0 0-1 1v.5C5.4 3.9 4.3 5.4 4.3 7.1c0 2.5-1 3.5-1 3.5h9.4s-1-1-1-3.5c0-1.7-1.1-3.2-2.7-3.6V3a1 1 0 0 0-1-1z" />
           <path d="M6.7 11.4a1.4 1.4 0 0 0 2.6 0" />
-          <circle cx="12" cy="4" r="2.4" fill="var(--custom-accent,#818cf8)" stroke="none" />
+          <circle cx="12" cy="4" r="2.4" fill="var(--role-mention,#f87171)" stroke="none" />
         </svg>
       </Show>
       <Show when={props.mode === 'mute'}>
@@ -597,15 +597,15 @@ function StatCell(props: { label: string; value: number; hot?: boolean; danger?:
     <div
       class="rounded-xl border border-white/[0.055] bg-white/[0.025] px-2 py-1.5 text-center"
       classList={{
-        'border-[var(--custom-accent,#818cf8)]/20 bg-[var(--custom-accent,#818cf8)]/[0.06]': props.hot && !props.danger,
-        'border-red-400/20 bg-red-500/[0.07]': props.hot && props.danger,
+        'border-[var(--role-primary,#818cf8)]/20 bg-[var(--role-primary,#818cf8)]/[0.06]': props.hot && !props.danger,
+        'border-[var(--role-mention,#f87171)]/20 bg-[var(--role-mention,#f87171)]/[0.07]': props.hot && props.danger,
       }}
     >
       <div
         class="font-mono text-[13px] font-black leading-none tabular-nums"
         classList={{
-          'text-[var(--custom-accent,#818cf8)]': props.hot && !props.danger,
-          'text-red-300': props.hot && props.danger,
+          'text-[var(--role-primary,#818cf8)]': props.hot && !props.danger,
+          'text-[var(--role-mention,#f87171)]': props.hot && props.danger,
           'text-gray-300': !props.hot,
         }}
       >
@@ -623,7 +623,7 @@ function ModeButton(props: { label: string; active: boolean; onClick: (e: MouseE
       onClick={(e) => props.onClick(e)}
       class="h-7 rounded-lg text-[10px] font-black uppercase tracking-[0.08em] transition-all"
       classList={{
-        'bg-[var(--custom-accent,#818cf8)] text-white shadow-lg shadow-black/20': props.active,
+        'bg-[var(--role-primary,#818cf8)] text-white shadow-lg shadow-black/20': props.active,
         'text-gray-500 hover:bg-white/[0.04] hover:text-gray-300': !props.active,
       }}
     >
@@ -680,10 +680,12 @@ function Pip(props: { count: number; hot?: boolean }) {
     <span
       class="shrink-0 flex items-center justify-center rounded-full min-w-[16px] h-4 text-[10px] font-bold tabular-nums leading-none"
       classList={{
-        // Mention: rose role, ringed + colored glow — the "what did I miss" focal point.
-        'px-1.5 bg-red-500 text-white ring-1 ring-red-400/50 shadow-sm shadow-red-500/40': props.hot,
-        // Unread: quieter accent tint, one tier down.
-        'px-1 bg-[var(--custom-accent,#818cf8)]/20 text-[var(--custom-accent,#818cf8)]': !props.hot,
+        // Mention: --role-mention solid, ringed + glow — the "what did I miss"
+        // focal point. Glyphs use the theme GROUND (text-gray-950: near-black on
+        // dark, white on light) so they clear AA on the badge on every theme.
+        'px-1.5 bg-[var(--role-mention,#f87171)] text-gray-950 ring-1 ring-[var(--role-mention,#f87171)]/50 shadow-sm shadow-[var(--role-mention,#f87171)]/40': props.hot,
+        // Unread: quieter primary tint, one tier down.
+        'px-1 bg-[var(--role-primary,#818cf8)]/20 text-[var(--role-primary,#818cf8)]': !props.hot,
       }}
     >
       {props.count > PIP_MAX ? `${PIP_MAX}+` : props.count}

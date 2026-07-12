@@ -14,7 +14,15 @@ import { createSignal } from 'solid-js';
 import type { WeeChatBuffer } from '@/lib/weechat/model';
 import type { WeeChatLine } from '@/types';
 import { addLine, addLines, clearBuffers, upsertBuffer, resetSettings, setSearchOpen } from '@/state';
-import MessageView, { buildRenderItems, type RenderItemInput } from './MessageView';
+import { parseSearchQuery } from '@/lib/search/grammar';
+import { matchesQuery } from '@/lib/search/matcher';
+import MessageView, {
+  buildRenderItems,
+  createGlobalCountState,
+  globalMatchTotal,
+  type CountBuffer,
+  type RenderItemInput,
+} from './MessageView';
 
 const PTR = '0xchan';
 const PTR2 = '0xchan2';
@@ -227,6 +235,145 @@ describe('buildRenderItems (incremental render-item cache)', () => {
     const first = buildRenderItems(null, baseInput(lines));
     const second = buildRenderItems(first, baseInput(lines));
     expect(second).toBe(first);
+  });
+
+  it('stays byte-for-byte identical to a full rebuild across a long append sequence', () => {
+    // Mixed nicks, a day rollover mid-stream, and same-nick runs so grouping,
+    // day separators, and the group-across-boundary path all exercise. Feeding
+    // one line at a time (the real per-message tick) must never diverge from a
+    // from-scratch build of the same accumulated array.
+    const base = new Date(2026, 0, 1, 23, 58, 0).getTime();
+    const nicks = ['alice', 'alice', 'bob', 'alice', 'carol', 'carol'];
+    const lines: WeeChatLine[] = [];
+    let incremental: ReturnType<typeof buildRenderItems> | null = null;
+
+    for (let i = 0; i < 40; i++) {
+      lines.push(
+        makeLine({
+          nick: nicks[i % nicks.length],
+          message: `m${i}`,
+          // +90s per line marches past midnight, forcing a day separator.
+          date: new Date(base + i * 90_000),
+        }),
+      );
+      // IMPORTANT: pass a fresh array snapshot each tick, mirroring how the store
+      // exposes a growing list; buildRenderItems must reuse its prefix internally.
+      incremental = buildRenderItems(incremental, baseInput([...lines]));
+      expect(shapeOf(incremental)).toEqual(shapeOf(scratch(baseInput([...lines]))));
+    }
+    expect(incremental!.items.length).toBeGreaterThan(40); // day separators added
+  });
+});
+
+describe('globalMatchTotal (bounded cross-buffer match count)', () => {
+  const q = (raw: string) => parseSearchQuery(raw, Date.now());
+
+  // Build a CountBuffer whose predicate invocations we can count, so we can
+  // assert which buffers actually got rescanned.
+  const buf = (ptr: string, channel: string, msgs: string[]): CountBuffer => ({
+    ptr,
+    channel,
+    lines: msgs.map((m, i) =>
+      makeLine({ id: `${ptr}_${i}`, nick: 'u', message: m, date: new Date(2026, 0, 1, 12, 0, i) }),
+    ),
+  });
+
+  it('sums matches across all buffers on the first pass', () => {
+    const state = createGlobalCountState();
+    const buffers = [buf('A', '#a', ['deploy', 'lunch']), buf('B', '#b', ['deploy', 'deploy'])];
+    const total = globalMatchTotal(state, q('deploy'), true, buffers, (l, ch) =>
+      matchesQuery({ nick: l.nick ?? null, channel: ch, timestamp: l.date.getTime(), text: l.message }, q('deploy')),
+    );
+    expect(total).toBe(3);
+  });
+
+  it('does NOT rescan an unchanged buffer when only another buffer grew', () => {
+    const state = createGlobalCountState();
+    const query = q('deploy');
+    const match = (l: WeeChatLine, ch: string, calls: { ptr: string }[]) => {
+      calls.push({ ptr: ch });
+      return matchesQuery(
+        { nick: l.nick ?? null, channel: ch, timestamp: l.date.getTime(), text: l.message },
+        query,
+      );
+    };
+
+    const a = buf('A', '#a', ['deploy', 'lunch', 'deploy']);
+    const b1 = buf('B', '#b', ['deploy']);
+    const firstCalls: { ptr: string }[] = [];
+    const first = globalMatchTotal(state, query, true, [a, b1], (l, ch) => match(l, ch, firstCalls));
+    expect(first).toBe(3); // 2 in A + 1 in B
+    // First pass touches every line in both buffers.
+    expect(firstCalls.filter((c) => c.ptr === '#a').length).toBe(3);
+    expect(firstCalls.filter((c) => c.ptr === '#b').length).toBe(1);
+
+    // B gains a matching line; A is byte-identical (same line objects/sig).
+    const b2: CountBuffer = { ...b1, lines: [...b1.lines, makeLine({ id: 'B_1', nick: 'u', message: 'deploy again', date: new Date(2026, 0, 1, 12, 5, 0) })] };
+    const secondCalls: { ptr: string }[] = [];
+    const second = globalMatchTotal(state, query, true, [a, b2], (l, ch) => match(l, ch, secondCalls));
+    expect(second).toBe(4); // A's cached 2 + B's rescanned 2
+    // The unrelated buffer A was NOT rescanned; only B's two lines were.
+    expect(secondCalls.filter((c) => c.ptr === '#a').length).toBe(0);
+    expect(secondCalls.filter((c) => c.ptr === '#b').length).toBe(2);
+  });
+
+  it('invalidates every cached buffer when the query changes', () => {
+    const state = createGlobalCountState();
+    const a = buf('A', '#a', ['deploy', 'lunch']);
+    const q1 = q('deploy');
+    const first = globalMatchTotal(state, q1, true, [a], (l, ch) =>
+      matchesQuery({ nick: l.nick ?? null, channel: ch, timestamp: l.date.getTime(), text: l.message }, q1),
+    );
+    expect(first).toBe(1);
+
+    const q2 = q('lunch');
+    const calls: string[] = [];
+    const second = globalMatchTotal(state, q2, true, [a], (l, ch) => {
+      calls.push(l.message);
+      return matchesQuery({ nick: l.nick ?? null, channel: ch, timestamp: l.date.getTime(), text: l.message }, q2);
+    });
+    expect(second).toBe(1);
+    // New query => A fully rescanned despite an unchanged signature.
+    expect(calls.length).toBe(2);
+  });
+
+  it('re-scans a buffer whose front was trimmed even at equal length', () => {
+    const state = createGlobalCountState();
+    const query = q('deploy');
+    const doCount = (buffers: CountBuffer[], calls: string[]) =>
+      globalMatchTotal(state, query, true, buffers, (l, ch) => {
+        calls.push(l.id);
+        return matchesQuery(
+          { nick: l.nick ?? null, channel: ch, timestamp: l.date.getTime(), text: l.message },
+          query,
+        );
+      });
+
+    const a = buf('A', '#a', ['deploy', 'lunch', 'deploy']); // ids A_0,A_1,A_2
+    doCount([a], []);
+    // Trim front + append tail: length stays 3 but first/last ids move.
+    const trimmed: CountBuffer = {
+      ...a,
+      lines: [...a.lines.slice(1), makeLine({ id: 'A_9', nick: 'u', message: 'deploy tail', date: new Date(2026, 0, 1, 12, 9, 0) })],
+    };
+    const calls: string[] = [];
+    const total = doCount([trimmed], calls);
+    expect(total).toBe(2); // lunch, deploy, deploy tail => 2 matches
+    expect(calls.length).toBe(3); // rescanned, not served stale from cache
+  });
+
+  it('evicts cache entries for closed buffers', () => {
+    const state = createGlobalCountState();
+    const query = q('deploy');
+    const run = (buffers: CountBuffer[]) =>
+      globalMatchTotal(state, query, true, buffers, (l, ch) =>
+        matchesQuery({ nick: l.nick ?? null, channel: ch, timestamp: l.date.getTime(), text: l.message }, query),
+      );
+    run([buf('A', '#a', ['deploy']), buf('B', '#b', ['deploy'])]);
+    expect(state.perBuffer.has('B')).toBe(true);
+    run([buf('A', '#a', ['deploy'])]); // B closed
+    expect(state.perBuffer.has('B')).toBe(false);
+    expect(state.perBuffer.has('A')).toBe(true);
   });
 });
 

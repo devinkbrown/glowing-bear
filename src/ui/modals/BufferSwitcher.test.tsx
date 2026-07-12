@@ -190,11 +190,67 @@ describe('BufferSwitcher command palette', () => {
   it('closes when the backdrop is clicked', () => {
     const { getByPlaceholderText, container } = renderPalette();
 
-    const backdrop = container.querySelector('.bg-black\\/50');
+    // The palette now renders inside the shared Modal shell, whose dimming
+    // backdrop is bg-black/60 and closes via the shell's onClose.
+    const backdrop = container.querySelector('.bg-black\\/60');
     expect(backdrop).not.toBeNull();
     fireEvent.click(backdrop!);
 
     expect(uiState.activeModal).toBeNull();
     expect(() => getByPlaceholderText(PLACEHOLDER)).toThrow();
+  });
+
+  it('renders inside the Modal shell as a dialog with the combobox+listbox inside', () => {
+    const { container, getByPlaceholderText } = renderPalette();
+
+    const dialog = container.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    expect(dialog!.getAttribute('aria-modal')).toBe('true');
+    // The combobox input and the listbox live inside the dialog panel.
+    expect(dialog!.contains(getByPlaceholderText(PLACEHOLDER))).toBe(true);
+    expect(dialog!.querySelector('[role="listbox"]')).not.toBeNull();
+  });
+
+  it('moves initial focus onto the search input via the shell', () => {
+    const { getByPlaceholderText } = renderPalette();
+    expect(document.activeElement).toBe(getByPlaceholderText(PLACEHOLDER));
+  });
+
+  it('traps Tab within the dialog — focus cannot escape the palette', () => {
+    const { getByPlaceholderText, container } = renderPalette();
+    const input = getByPlaceholderText(PLACEHOLDER);
+    const dialog = container.querySelector('[role="dialog"]');
+    expect(document.activeElement).toBe(input);
+
+    // The listbox rows are role=option divs, not tab stops, so the input is the
+    // only focusable node — the shell wraps Tab/Shift+Tab back onto it.
+    fireEvent.keyDown(input, { key: 'Tab' });
+    expect(dialog!.contains(document.activeElement)).toBe(true);
+
+    fireEvent.keyDown(input, { key: 'Tab', shiftKey: true });
+    expect(dialog!.contains(document.activeElement)).toBe(true);
+  });
+
+  it('Escape closes the palette and restores focus to the opener', () => {
+    // An opener with focus before the palette mounts — the shell records it and
+    // must hand focus back on close.
+    const opener = document.createElement('button');
+    opener.textContent = 'open palette';
+    document.body.appendChild(opener);
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+
+    try {
+      const { getByPlaceholderText } = renderPalette();
+      const input = getByPlaceholderText(PLACEHOLDER);
+      expect(document.activeElement).toBe(input);
+
+      fireEvent.keyDown(input, { key: 'Escape' });
+
+      expect(uiState.activeModal).toBeNull();
+      expect(document.activeElement).toBe(opener);
+    } finally {
+      opener.remove();
+    }
   });
 });

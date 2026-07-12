@@ -20,6 +20,8 @@ import {
 } from '@/state';
 import type { BridgeSettings, BufferEntry } from '@/state';
 import { sendTyping, canE2ee, sendE2eeDm } from '@/state/bridge';
+import { pendingReplyFor, clearPendingReply } from '@/state/threads';
+import { sendReply } from '@/core/bridge';
 import { bufferKind } from '@/lib/bufferKind';
 import { uploadFile, UploadError } from '@/lib/upload/upload';
 // GifPicker is only mounted when the user opens the picker (Show gate below), so
@@ -86,6 +88,18 @@ export default function InputBar() {
     return ptr ? buffersState.buffers[ptr] : undefined;
   };
   const hasText = () => text().trim().length > 0;
+
+  /** The active buffer's pending reply target (reactive store read), if any. */
+  const replyTarget = () => {
+    const ptr = activeBuffer();
+    return ptr ? pendingReplyFor(ptr) : undefined;
+  };
+
+  const cancelReply = () => {
+    const ptr = activeBuffer();
+    if (ptr) clearPendingReply(ptr);
+    inputEl?.focus();
+  };
 
   /**
    * Stable per-buffer draft key. Drafts persist by buffer NAME (not the WeeChat
@@ -231,7 +245,16 @@ export default function InputBar() {
     const now = Date.now();
     if (now - lastSubmitTime < SUBMIT_DEBOUNCE_MS) return;
     lastSubmitTime = now;
-    void deliver(trimmed, ptr);
+    // A pending reply threads the message via the direct bridge with a
+    // +draft/reply tag; if that path is unavailable (no bridge / non-channel /
+    // slash command) fall back to the plain relay send, which cannot carry it.
+    const isCommand = trimmed.startsWith('/');
+    const reply = pendingReplyFor(ptr);
+    const linked = reply !== undefined && !isCommand && sendReply(ptr, trimmed, reply.msgid);
+    if (!linked) void deliver(trimmed, ptr);
+    // Clear the reply only when a content message was sent; a slash command
+    // leaves the chip up so the pending reply survives an interleaved command.
+    if (reply && !isCommand) clearPendingReply(ptr);
     pushHistory(trimmed);
     setHistoryIdx(-1);
     setText('');
@@ -453,6 +476,31 @@ export default function InputBar() {
 
       {/* Input row */}
       <div class="px-2 sm:px-3 pt-2 pb-1.5">
+        {/* Reply chip — shown while a pending reply target is set for this buffer */}
+        <Show when={replyTarget()}>
+          {(reply) => (
+            <div class="flex items-center gap-2 mb-1.5 pl-2.5 pr-1.5 py-1.5 rounded-lg bg-white/[0.03] border-l-2 border-[var(--custom-accent,#818cf8)]">
+              <svg class="w-3.5 h-3.5 shrink-0 text-[var(--custom-accent,#818cf8)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 4 2 8l4 4M2 8h7a5 5 0 0 1 5 5v0" />
+              </svg>
+              <div class="flex-1 min-w-0 leading-tight">
+                <span class="text-[11px] font-medium text-[var(--custom-accent,#818cf8)]">
+                  Replying to {reply().nick || 'message'}
+                </span>
+                <span class="block text-[12px] text-gray-400 truncate">{reply().preview}</span>
+              </div>
+              <button
+                onClick={cancelReply}
+                aria-label="Cancel reply"
+                class="w-7 h-7 shrink-0 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:scale-90 transition-[color,background-color,transform] duration-150"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </Show>
         <div
           class="flex items-end gap-1.5 rounded-2xl sm:rounded-xl border px-2 sm:px-3 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
           classList={{
