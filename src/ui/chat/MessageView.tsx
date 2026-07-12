@@ -21,6 +21,8 @@ import { buffersState, setReadMarker, requestHistory, settings, uiState, setSear
 import type { Reaction, WeeChatLine } from '@/types';
 import { bufferKind, type BufferKind } from '@/lib/bufferKind';
 import { extractEmbeds, stripFormatting, type MediaEmbed } from '@/lib/irc-classic/formatter';
+import { parseSearchQuery } from '@/lib/search/grammar';
+import { matchesQuery, type SearchRecord } from '@/lib/search/matcher';
 import { createMediaQuery } from '@/primitives/mediaQuery';
 import MessageLine from './MessageLine';
 import MessageEmbed from './MessageEmbed';
@@ -168,6 +170,16 @@ function announceText(line: WeeChatLine): string {
   return `${line.nick}: ${body}`;
 }
 
+// Adapt a WeeChat line into the wire-free record the search matcher consumes.
+function lineToRecord(line: WeeChatLine, channel: string): SearchRecord {
+  return {
+    nick: line.nick ?? null,
+    channel,
+    timestamp: line.date.getTime(),
+    text: line.message,
+  };
+}
+
 // ── extractEmbeds LRU (rows remount on scroll; avoid re-scanning URLs) ──────
 const EMBED_CACHE_MAX = 400;
 const embedCache = new Map<string, { text: string; embeds: MediaEmbed[] }>();
@@ -270,18 +282,55 @@ export default function MessageView(props: MessageViewProps) {
     return lines.filter((l) => !l.isJoin && !l.isPart && !l.isQuit);
   });
 
+  // Parsed filter-grammar predicate (from:/in:/before:/after: + free text). A
+  // bare term parses to a single plain substring, so the classic search is
+  // unchanged. Date.now() is read at parse time; only searchOpen/searchQuery
+  // are tracked, which is exactly when the query should re-parse.
+  const parsedQuery = createMemo(() =>
+    parseSearchQuery(uiState.searchOpen ? searchQuery() : '', Date.now()),
+  );
+
+  const channelName = (e: ReturnType<typeof entry>): string =>
+    e ? e.buffer.shortName || e.buffer.name : '';
+
+  // Matches within the CURRENT buffer — drives per-line dimming + the count.
   const searchMatches = createMemo<{ ids: Record<string, true>; count: number } | null>(() => {
-    const query = (uiState.searchOpen ? searchQuery() : '').trim().toLowerCase();
-    if (!query) return null;
+    const query = parsedQuery();
+    if (query.isEmpty) return null;
+    const channel = channelName(entry());
     const ids: Record<string, true> = {};
     let count = 0;
     for (const line of filteredLines()) {
-      if (line.message.toLowerCase().includes(query) || (line.nick && line.nick.toLowerCase().includes(query))) {
+      if (matchesQuery(lineToRecord(line, channel), query)) {
         ids[line.id] = true;
         count++;
       }
     }
     return { ids, count };
+  });
+
+  // Cross-buffer match total over all LOADED lines (bounded by MAX_LINES per
+  // buffer). This is what makes `in:#other` meaningful — the list still only
+  // dims the current buffer, but the count reflects the whole loaded corpus.
+  // Boundary: this searches only lines already fetched into the store, not full
+  // server-side history; a persistent index would be needed to search further
+  // back than what has been loaded.
+  const globalMatchCount = createMemo<number | null>(() => {
+    const query = parsedQuery();
+    if (query.isEmpty) return null;
+    const skipMeta = !settings.joinPartMsgs;
+    let count = 0;
+    const bufs = buffersState.buffers;
+    for (const ptr in bufs) {
+      const e = bufs[ptr];
+      if (!e) continue;
+      const channel = e.buffer.shortName || e.buffer.name;
+      for (const line of e.lines) {
+        if (skipMeta && (line.isJoin || line.isPart || line.isQuit)) continue;
+        if (matchesQuery(lineToRecord(line, channel), query)) count++;
+      }
+    }
+    return count;
   });
 
   // Incremental render-item cache. buildRenderItems reuses the previously built
@@ -519,7 +568,11 @@ export default function MessageView(props: MessageViewProps) {
             />
             <Show when={searchMatches()}>
               {(matches) => (
-                <span class="text-[10px] text-gray-500 tabular-nums shrink-0">{matches().count} found</span>
+                <span class="text-[10px] text-gray-500 tabular-nums shrink-0">
+                  <Show when={(globalMatchCount() ?? matches().count) !== matches().count} fallback={<>{matches().count} found</>}>
+                    {matches().count} here · {globalMatchCount()} across buffers
+                  </Show>
+                </span>
               )}
             </Show>
             <button

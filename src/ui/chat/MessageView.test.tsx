@@ -9,11 +9,11 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { render, cleanup, waitFor } from '@solidjs/testing-library';
+import { render, cleanup, waitFor, fireEvent } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
 import type { WeeChatBuffer } from '@/lib/weechat/model';
 import type { WeeChatLine } from '@/types';
-import { addLine, addLines, clearBuffers, upsertBuffer, resetSettings } from '@/state';
+import { addLine, addLines, clearBuffers, upsertBuffer, resetSettings, setSearchOpen } from '@/state';
 import MessageView, { buildRenderItems, type RenderItemInput } from './MessageView';
 
 const PTR = '0xchan';
@@ -79,6 +79,7 @@ beforeEach(() => {
   globalThis.localStorage?.clear();
   resetSettings();
   clearBuffers();
+  setSearchOpen(false);
   seq = 0;
 });
 
@@ -340,5 +341,85 @@ describe('MessageView live region', () => {
       expect(liveRegion(container).textContent).toContain('beta fresh after switch'),
     );
     expect(liveRegion(container).textContent).not.toContain('beta backlog line');
+  });
+});
+
+describe('MessageView filter-grammar search', () => {
+  // Open the Ctrl+F search bar AFTER the mount's buffer-switch effect (which
+  // clears searchOpen inside a rAF) has settled, then return the input node.
+  async function openSearch(container: HTMLElement): Promise<HTMLInputElement> {
+    await new Promise((r) => setTimeout(r, 30));
+    setSearchOpen(true);
+    let input: HTMLInputElement | null = null;
+    await waitFor(() => {
+      input = container.querySelector<HTMLInputElement>('input[placeholder="Search messages..."]');
+      expect(input).not.toBeNull();
+    });
+    return input!;
+  }
+
+  // The match-count element in the search bar (distinct tabular-nums span).
+  function countText(container: HTMLElement): string {
+    const bar = container.querySelector('input[placeholder="Search messages..."]')?.parentElement;
+    return bar?.textContent ?? '';
+  }
+
+  it('a bare term keeps the classic message-OR-nick substring behavior', async () => {
+    upsertBuffer(channelBuffer());
+    addLine(PTR, makeLine({ nick: 'alice', message: 'deploy shipped' }), []);
+    addLine(PTR, makeLine({ nick: 'bob', message: 'lunch time' }), []);
+    addLine(PTR, makeLine({ nick: 'carol', message: 'another deploy' }), []);
+    const { container } = render(() => <MessageView bufferPtr={PTR} />);
+
+    const input = await openSearch(container);
+    fireEvent.input(input, { target: { value: 'deploy' } });
+
+    await waitFor(() => expect(countText(container)).toContain('2 found'));
+  });
+
+  it('from: filters the current buffer to a single nick', async () => {
+    upsertBuffer(channelBuffer());
+    addLine(PTR, makeLine({ nick: 'alice', message: 'one' }), []);
+    addLine(PTR, makeLine({ nick: 'alice', message: 'two' }), []);
+    addLine(PTR, makeLine({ nick: 'bob', message: 'three' }), []);
+    const { container } = render(() => <MessageView bufferPtr={PTR} />);
+
+    const input = await openSearch(container);
+    fireEvent.input(input, { target: { value: 'from:alice' } });
+
+    await waitFor(() => expect(countText(container)).toContain('2 found'));
+  });
+
+  it('after: bounds the current buffer by timestamp', async () => {
+    upsertBuffer(channelBuffer());
+    const old = new Date(Date.now() - 4 * 3_600_000); // 4h ago
+    addLine(PTR, makeLine({ nick: 'alice', message: 'ancient', date: old }), []);
+    addLine(PTR, makeLine({ nick: 'bob', message: 'recent one' }), []);
+    addLine(PTR, makeLine({ nick: 'carol', message: 'recent two' }), []);
+    const { container } = render(() => <MessageView bufferPtr={PTR} />);
+
+    const input = await openSearch(container);
+    fireEvent.input(input, { target: { value: 'after:1h' } });
+
+    // Only the two "now" lines fall within the last hour.
+    await waitFor(() => expect(countText(container)).toContain('2 found'));
+  });
+
+  it('in:#other surfaces cross-buffer matches while the current buffer shows 0', async () => {
+    upsertBuffer(channelBuffer(PTR, 'alpha'));
+    upsertBuffer(channelBuffer(PTR2, 'beta'));
+    addLine(PTR, makeLine({ nick: 'alice', message: 'alpha talk', buffer: PTR }), []);
+    addLine(PTR2, makeLine({ nick: 'zoe', message: 'beta one', buffer: PTR2 }), []);
+    addLine(PTR2, makeLine({ nick: 'zoe', message: 'beta two', buffer: PTR2 }), []);
+    const { container } = render(() => <MessageView bufferPtr={PTR} />);
+
+    const input = await openSearch(container);
+    fireEvent.input(input, { target: { value: 'in:#beta' } });
+
+    await waitFor(() => {
+      const t = countText(container);
+      expect(t).toContain('0 here');
+      expect(t).toContain('2 across buffers');
+    });
   });
 });
