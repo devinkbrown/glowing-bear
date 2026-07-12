@@ -3,10 +3,25 @@
 import { describe, expect, it } from 'vitest';
 import {
   UploadError,
+  buildUploadEndpoint,
   parseUploadResponse,
   resolveUploadUrl,
   uploadFile,
 } from './upload';
+
+describe('buildUploadEndpoint', () => {
+  it('normalizes configured media URLs to a single /upload endpoint', () => {
+    expect(buildUploadEndpoint(' https://media.example.test/api/ ')).toBe('https://media.example.test/api/upload');
+    expect(buildUploadEndpoint('https://media.example.test/api/upload///')).toBe(
+      'https://media.example.test/api/upload',
+    );
+  });
+
+  it('fails closed when the media URL is missing or blank', () => {
+    expect(() => buildUploadEndpoint(undefined)).toThrow(UploadError);
+    expect(() => buildUploadEndpoint('   ')).toThrow(UploadError);
+  });
+});
 
 describe('resolveUploadUrl', () => {
   it('resolves rooted and upload-relative response paths against the media origin', () => {
@@ -60,6 +75,24 @@ describe('parseUploadResponse', () => {
 
     // Assert
     expect(result).toEqual({ url: 'https://media.example.test/uploads/note.txt' });
+  });
+
+  it('uses the first non-empty JSON URL candidate and ignores malformed fallback fields', async () => {
+    // Arrange
+    const mediaUrl = 'https://media.example.test/upload';
+    const body = JSON.stringify({
+      url: ' ',
+      href: 123,
+      path: null,
+      file: { url: ' uploads/photo.png ' },
+      filename: 'ignored.txt',
+    });
+
+    // Act
+    const result = await parseUploadResponse(mediaUrl, body, 'Application/JSON');
+
+    // Assert
+    expect(result).toEqual({ url: 'https://media.example.test/uploads/photo.png' });
   });
 
   it('treats non-JSON responses as a text URL', async () => {
