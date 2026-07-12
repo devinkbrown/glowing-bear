@@ -8,7 +8,7 @@
 //   lon/ptr/tim = u8 length + ASCII payload
 import { describe, it, expect } from 'vitest';
 import { deflateSync } from 'node:zlib';
-import { WeeRelayParser } from './parser';
+import { canDecodeRelayCompression, WeeRelayParser } from './parser';
 import type { HdataResult, WeeChatMessage } from './types';
 
 const NULL_STRING = 0xffffffff;
@@ -656,6 +656,44 @@ describe('WeeRelayParser compressed frames', () => {
 			);
 		} finally {
 			globalThis.DecompressionStream = realDecompressionStream;
+		}
+	});
+});
+
+// The NEGOTIATION-time capability probe the client uses to decide whether it may
+// advertise/request zlib. It must be true only when the frame decode path could
+// actually succeed — otherwise a capable relay compresses to a client that would
+// throw on the first compressed frame after auth (the mobile connect regression).
+describe('canDecodeRelayCompression', () => {
+	it('is true when DecompressionStream is present and constructs a deflate stream', () => {
+		// jsdom/node test env implements DecompressionStream — the desktop case.
+		expect(canDecodeRelayCompression()).toBe(true);
+	});
+
+	it('is false when DecompressionStream is absent (older iOS Safari / WebViews)', () => {
+		const real = globalThis.DecompressionStream;
+		// @ts-expect-error deliberately remove the API to simulate an old browser.
+		delete globalThis.DecompressionStream;
+		try {
+			expect(canDecodeRelayCompression()).toBe(false);
+		} finally {
+			globalThis.DecompressionStream = real;
+		}
+	});
+
+	it('is false when the deflate stream cannot be constructed (unsupported algo)', () => {
+		const real = globalThis.DecompressionStream;
+		class ThrowingDecompressionStream {
+			constructor() {
+				throw new TypeError('unsupported format');
+			}
+		}
+		globalThis.DecompressionStream =
+			ThrowingDecompressionStream as unknown as typeof DecompressionStream;
+		try {
+			expect(canDecodeRelayCompression()).toBe(false);
+		} finally {
+			globalThis.DecompressionStream = real;
 		}
 	});
 });

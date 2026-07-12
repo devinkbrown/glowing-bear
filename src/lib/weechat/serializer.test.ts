@@ -62,6 +62,28 @@ describe('initCmd', () => {
 	it('strips a lone CR from the password', () => {
 		expect(initCmd('pa\rss', false)).toBe('init password=pass,compression=off\n');
 	});
+
+	// The legacy init path must not request a compression the browser cannot
+	// decode: an incapable client that asks for zlib gets compressed frames it
+	// throws on, dropping the connection right after auth (mobile regression).
+	it('forces compression off when the browser cannot decode, even with compression ON', () => {
+		expect(initCmd('hunter2', true, false)).toBe('init password=hunter2,compression=off\n');
+	});
+
+	it('still requests zlib when the browser CAN decode and compression is ON', () => {
+		expect(initCmd('hunter2', true, true)).toBe('init password=hunter2,compression=zlib\n');
+	});
+
+	it('consults the live DecompressionStream capability by default (API absent → off)', () => {
+		const real = globalThis.DecompressionStream;
+		// @ts-expect-error simulate an old browser lacking the decode API.
+		delete globalThis.DecompressionStream;
+		try {
+			expect(initCmd('hunter2', true)).toBe('init password=hunter2,compression=off\n');
+		} finally {
+			globalThis.DecompressionStream = real;
+		}
+	});
 });
 
 describe('hdataCmd', () => {

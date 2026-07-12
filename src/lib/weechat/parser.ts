@@ -96,6 +96,27 @@ class Reader {
 	}
 }
 
+// Whether this browser can DECODE a zlib-deflate relay frame. True only when the
+// `DecompressionStream` API exists AND a 'deflate' stream can actually be
+// constructed — older iOS Safari / WebViews (<16.4) lack the API entirely, and a
+// merely-present constructor is not proof the algorithm is supported.
+//
+// This is the NEGOTIATION-time capability check: the client uses it to refuse to
+// ADVERTISE/REQUEST a compression it cannot read, so a capable relay never sends
+// a compressed frame to an incapable client in the first place. The decode-time
+// guard in `decompress()` below remains the belt-and-suspenders backstop.
+export function canDecodeRelayCompression(): boolean {
+	if (typeof DecompressionStream === 'undefined') return false;
+	try {
+		// Constructing the stream proves 'deflate' is a supported algorithm, not
+		// just that the constructor symbol exists.
+		new DecompressionStream('deflate');
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 // Decompress a zlib-wrapped deflate payload using DecompressionStream.
 //
 // DecompressionStream is absent on older Safari/WebViews. Guard before use so a

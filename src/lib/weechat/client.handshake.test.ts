@@ -283,23 +283,193 @@ describe('handshake-unsupported stickiness', () => {
 		expect(ws3.sent.some((s) => s.startsWith('handshake'))).toBe(false);
 	});
 
-	it('resets strikes after a successful handshake reply', async () => {
+	it('resets strikes only after SUCCESSFUL authentication, not on a mere _handshake reply', async () => {
+		// A `_handshake` reply is NOT success — the relay can still reject the init
+		// that follows. Only a fully authenticated session clears the strikes.
 		const ws1 = connectOpen();
 		ws1.error();
 		ws1.close(1006, ''); // strike 1
 
 		const ws2 = connectOpen();
 		ws2.message(
-			handshakeFrame({ password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: '100000', nonce: 'aa'.repeat(16) }),
+			handshakeFrame({ password_hash_algo: 'pbkdf2+sha256', password_hash_iterations: '100000', nonce: '85b1ee00695a5b254e14f4885538df0d' }),
 		);
 		await waitFor(() => ws2.sent.some((s) => s.startsWith('init password_hash=')));
-		// A good reply proves handshake support and clears the strike; a later
-		// single blip must not immediately downgrade.
+		// Complete authentication — THIS is what clears the strike.
+		ws2.message(versionFrame('4.4.0'));
+		await flushAsync();
+		expect(client.state).toBe(ConnectionState.CONNECTED);
+
+		// A later blip must not immediately downgrade (strikes were cleared, and once
+		// authenticated the strike machinery is disabled entirely).
 		ws2.close(1006, '');
 		const ws3 = connectOpen();
 		ws3.error();
-		ws3.close(1006, ''); // fresh strike 1, not strike 2
+		ws3.close(1006, '');
 		const ws4 = connectOpen();
 		expect(ws4.sent[0]).toContain('handshake ');
+	});
+});
+
+// ── the infinite reconnect loop: relay replies _handshake then rejects the init ──
+//
+// The regression: a relay that speaks `handshake` but REJECTS the hashed
+// `init password_hash` (closing the socket) never downgraded, because the strike
+// counter was gated on the pre-reply window AND reset on every reply. Result:
+// handshake → reply → reject → reconnect, forever, never trying legacy `init`.
+describe('post-reply auth rejection downgrades and never loops', () => {
+	function replyThenReject(ws: FakeWebSocket): Promise<void> {
+		ws.message(
+			handshakeFrame({
+				password_hash_algo: 'pbkdf2+sha256',
+				password_hash_iterations: '100000',
+				nonce: '85b1ee00695a5b254e14f4885538df0d',
+			}),
+		);
+		return waitFor(() => ws.sent.some((s) => s.startsWith('init password_hash='))).then(() => {
+			// Relay rejects the hashed init by closing the socket pre-auth.
+			ws.error();
+			ws.close(1006, '');
+		});
+	}
+
+	it('downgrades to legacy init after HANDSHAKE_CLOSE_STRIKES post-reply rejections', async () => {
+		const ws1 = connectOpen();
+		await replyThenReject(ws1); // strike 1 (post-reply)
+
+		const ws2 = connectOpen();
+		expect(ws2.sent[0]).toContain('handshake '); // still trying after 1 strike
+		await replyThenReject(ws2); // strike 2 → handshakeUnsupported
+
+		// Third attempt must go straight to legacy init — the loop is broken.
+		const ws3 = connectOpen();
+		expect(ws3.sent[0]).toBe('init password=hunter2,compression=off\n');
+		expect(ws3.sent.some((s) => s.startsWith('handshake'))).toBe(false);
+	});
+
+	it('authenticates via legacy init when the relay accepts it after rejecting the hash', async () => {
+		const ws1 = connectOpen();
+		await replyThenReject(ws1);
+		const ws2 = connectOpen();
+		await replyThenReject(ws2); // now downgraded
+
+		const ws3 = connectOpen();
+		expect(ws3.sent[0]).toBe('init password=hunter2,compression=off\n');
+		// The relay accepts legacy auth → _version → CONNECTED. No loop, no error.
+		ws3.message(versionFrame('4.4.0'));
+		await flushAsync();
+		expect(client.state).toBe(ConnectionState.CONNECTED);
+	});
+
+	it('stops the loop with a clear error when legacy init is ALSO rejected', async () => {
+		const errors: string[] = [];
+		client.addEventListener('error', (e) => errors.push((e as CustomEvent<{ message: string }>).detail.message));
+
+		const ws1 = connectOpen();
+		await replyThenReject(ws1);
+		const ws2 = connectOpen();
+		await replyThenReject(ws2); // downgraded to legacy
+
+		const ws3 = connectOpen();
+		expect(ws3.sent[0]).toBe('init password=hunter2,compression=off\n');
+		// Legacy init is ALSO rejected → both paths exhausted.
+		ws3.error();
+		ws3.close(1006, '');
+		await flushAsync();
+
+		// Clear, actionable error and a terminal ERROR state — not a silent loop.
+		expect(errors.some((m) => /rejected the password/i.test(m))).toBe(true);
+		expect(client.state).toBe(ConnectionState.ERROR);
+		// No new socket was opened after the terminal failure.
+		const socketsAtStop = FakeWebSocket.instances.length;
+		await flushAsync();
+		expect(FakeWebSocket.instances.length).toBe(socketsAtStop);
+	});
+});
+
+// ── compression capability: never negotiate zlib to a client that cannot decode ─
+//
+// This is the mobile "connects then spins then fails" regression: with the user's
+// compression setting ON but DecompressionStream ABSENT (older iOS Safari/WebViews),
+// the client must negotiate UNCOMPRESSED and complete the connect — not advertise
+// zlib, get compressed frames, and throw on the first one after auth.
+describe('compression negotiation honours decode capability', () => {
+	// Compression ON in settings — the resolved capability, not the setting, must
+	// decide what actually goes on the wire.
+	const COMPRESSION_ON: RelaySettings = { ...SETTINGS, compression: true };
+	let realDecompressionStream: typeof DecompressionStream;
+
+	function withDecompressionStreamAbsent(): void {
+		realDecompressionStream = globalThis.DecompressionStream;
+		// @ts-expect-error simulate an old browser lacking the decode API.
+		delete globalThis.DecompressionStream;
+	}
+
+	afterEach(() => {
+		if (realDecompressionStream) globalThis.DecompressionStream = realDecompressionStream;
+	});
+
+	it('handshake path: advertises compression=off and reaches CONNECTED without failing', async () => {
+		withDecompressionStreamAbsent();
+		// The client probes the (now absent) capability in its constructor.
+		const c = new WeeRelayClient(COMPRESSION_ON);
+		try {
+			c.connect();
+			const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+			ws.open();
+
+			// The handshake command must NOT advertise zlib.
+			expect(ws.sent[0]).toContain('handshake ');
+			expect(ws.sent[0]).toContain('compression=off');
+			expect(ws.sent[0]).not.toContain('zlib');
+
+			// Full connect proceeds: hashed init then version → CONNECTED.
+			ws.message(
+				handshakeFrame({
+					password_hash_algo: 'pbkdf2+sha256',
+					password_hash_iterations: '100000',
+					nonce: '85b1ee00695a5b254e14f4885538df0d',
+					compression: 'off',
+				}),
+			);
+			await waitFor(() => ws.sent.some((s) => s.startsWith('init password_hash=')));
+			ws.message(versionFrame('4.4.0'));
+			await flushAsync();
+
+			expect(c.state).toBe(ConnectionState.CONNECTED);
+		} finally {
+			c.disconnect();
+		}
+	});
+
+	it('legacy path: requests compression=off after the handshake timeout', () => {
+		withDecompressionStreamAbsent();
+		vi.useFakeTimers();
+		const c = new WeeRelayClient(COMPRESSION_ON);
+		try {
+			c.connect();
+			const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+			ws.open();
+			vi.advanceTimersByTime(3000); // HANDSHAKE_TIMEOUT → legacy init
+
+			expect(ws.sent).toContain('init password=hunter2,compression=off\n');
+			expect(ws.sent.join('')).not.toContain('compression=zlib');
+		} finally {
+			c.disconnect();
+			vi.useRealTimers();
+		}
+	});
+
+	it('desktop unchanged: with DecompressionStream present, zlib is still advertised', () => {
+		// No deletion — the real (present) capability must keep desktop on zlib.
+		const c = new WeeRelayClient(COMPRESSION_ON);
+		try {
+			c.connect();
+			const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+			ws.open();
+			expect(ws.sent[0]).toContain('compression=zlib:off');
+		} finally {
+			c.disconnect();
+		}
 	});
 });

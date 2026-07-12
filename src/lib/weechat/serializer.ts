@@ -7,6 +7,8 @@
  * The id is optional; when omitted the server will not correlate the response.
  */
 
+import { canDecodeRelayCompression } from './parser';
+
 /**
  * Strip CR and LF from a relay command token. The relay protocol frames each
  * command on a bare `\n`, so any embedded newline in a token would split one
@@ -41,7 +43,11 @@ export function cmd(id: string, command: string, ...args: string[]): string {
  * the clear (protected only by TLS). Prefer the `handshake` + `password_hash`
  * flow below; this remains the fallback for relays too old to speak `handshake`.
  */
-export function initCmd(password: string, compression: boolean): string {
+export function initCmd(
+	password: string,
+	compression: boolean,
+	canDecode: boolean = canDecodeRelayCompression(),
+): string {
 	// WeeChat relay expects comma-separated options for init. This line is built
 	// directly (not via cmd()), so it must strip CR/LF itself: a raw newline in
 	// the password would split `init` into a second attacker-chosen relay command
@@ -50,7 +56,12 @@ export function initCmd(password: string, compression: boolean): string {
 	// commas must then be escaped as "\," per the relay protocol, or the password
 	// is truncated and the remainder parsed as a bogus option.
 	const escaped = stripNewlines(password).replace(/,/g, '\\,');
-	const opts = [`password=${escaped}`, `compression=${compression ? 'zlib' : 'off'}`].join(',');
+	// Only request zlib when the user enabled it AND this browser can DECODE it.
+	// Requesting compression we cannot inflate (older iOS Safari/WebViews lacking
+	// DecompressionStream) makes the relay send frames the decode path throws on,
+	// dropping the connection right after auth. Fail closed to uncompressed.
+	const effective = compression && canDecode;
+	const opts = [`password=${escaped}`, `compression=${effective ? 'zlib' : 'off'}`].join(',');
 	return `init ${opts}\n`;
 }
 
@@ -107,13 +118,25 @@ export const MAX_PBKDF2_ITERATIONS = 1_000_000;
 
 /**
  * Build the `handshake` command. Advertises the hash algorithms we support and
- * the compression modes we can decode. `compression` mirrors the user's
- * preference: when enabled we still offer `off` as a fallback the server may
- * choose; when disabled we offer only `off`.
+ * the compression modes we can decode.
+ *
+ * @param compression the user's compression preference.
+ * @param canDecode   whether this browser can actually DECODE a zlib frame.
+ *   Defaults to the live capability probe; injectable for tests.
+ *
+ * We advertise `zlib:off` ONLY when the user enabled compression AND the browser
+ * can decode it — otherwise `off`. Advertising `zlib` to a relay when we cannot
+ * inflate its frames makes it compress to an incapable client, and the first
+ * compressed frame after auth throws in the decode path and drops the connection
+ * (the mobile "connects then spins then fails" regression). Fail closed to `off`.
  */
-export function handshakeCmd(compression: boolean): string {
+export function handshakeCmd(
+	compression: boolean,
+	canDecode: boolean = canDecodeRelayCompression(),
+): string {
 	const algos = SUPPORTED_HASH_ALGOS.join(':');
-	const comp = compression ? SUPPORTED_COMPRESSION.join(':') : 'off';
+	const effective = compression && canDecode;
+	const comp = effective ? SUPPORTED_COMPRESSION.join(':') : 'off';
 	const opts = `password_hash_algo=${algos},compression=${comp}`;
 	return cmd('', 'handshake', opts);
 }

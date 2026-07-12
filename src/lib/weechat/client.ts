@@ -9,7 +9,7 @@ import {
 } from './types';
 import { parseIrcv3Tags } from '@/lib/irc-classic/tags';
 import { stripColors } from './strip-colors';
-import { WeeRelayParser } from './parser';
+import { canDecodeRelayCompression, WeeRelayParser } from './parser';
 import {
 	handshakeCmd,
 	hdataCmd,
@@ -254,21 +254,43 @@ export class WeeRelayClient extends EventTarget {
 	private parser = new WeeRelayParser();
 	private cleanDisconnect = false;
 
+	// Whether THIS browser can decode a zlib-compressed relay frame. Probed once:
+	// it is a static capability of the runtime (DecompressionStream support) and
+	// never changes across a session. We only ever advertise/request `zlib` to the
+	// relay when this is true, so a capable relay never compresses to a client
+	// that would throw on the first compressed frame (the mobile connect regression
+	// on older iOS Safari/WebViews lacking DecompressionStream).
+	private readonly canDecodeCompression = canDecodeRelayCompression();
+
 	// --- handshake / password_hash auth state ---
 	// Timer that fires the legacy fallback if no `_handshake` reply arrives.
 	private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
 	// True once an `init` (either hashed or legacy) has been sent this session —
 	// makes auth idempotent so a late reply and the timeout can never both fire.
 	private authStarted = false;
-	// Consecutive closes that happened mid-handshake (socket dropped after we
-	// sent `handshake` but before any reply/timeout). A single one is almost
-	// always a transient blip and must NOT downgrade a modern relay to plaintext;
-	// only a relay that *persistently* closes on the unknown command trips the
-	// fallback, after HANDSHAKE_CLOSE_STRIKES. A successful handshake reply resets
-	// this to 0. This avoids both a permanent-downgrade vector and an infinite
-	// handshake→close→reconnect loop.
+	// Consecutive PRE-AUTHENTICATION closes during a `handshake` attempt. A close
+	// counts whether it happened in the pre-reply wait OR after the relay replied
+	// and then REJECTED our hashed `init password_hash` — both mean the handshake
+	// path did not lead to a working session. A single one is almost always a
+	// transient blip and must NOT downgrade a modern relay; only a relay that
+	// *persistently* fails the handshake path trips the fallback, after
+	// HANDSHAKE_CLOSE_STRIKES. Reset ONLY on genuine authentication success (a mere
+	// `_handshake` reply is NOT success — the relay can still reject the init that
+	// follows, which is exactly the infinite-loop bug this guards). This avoids
+	// both a permanent-downgrade vector and an infinite handshake→reject→reconnect
+	// loop.
 	private handshakeCloseStrikes = 0;
 	private handshakeUnsupported = false;
+	// Whether THIS connect attempt used the `handshake` path (false when we went
+	// straight to legacy `init` because handshakeUnsupported was already set). Reset
+	// per connect(). Drives whether a pre-auth close counts as a handshake strike.
+	private handshakeAttempted = false;
+	// Set when BOTH auth paths have failed pre-authentication: we downgraded to
+	// legacy `init` and it ALSO closed before authenticating, i.e. the relay
+	// rejected the password itself. Terminates the reconnect loop with a clear
+	// error instead of cycling silently forever. Reset per connect() so a manual
+	// reconnect (e.g. after fixing the password) retries.
+	private authFailed = false;
 	// Bumped on every connect() so an async hash that resolves after a reconnect
 	// can detect it belongs to a stale connection and drop its send.
 	private connectEpoch = 0;
@@ -304,6 +326,8 @@ export class WeeRelayClient extends EventTarget {
 
 		this.cleanDisconnect = false;
 		this.authStarted = false;
+		this.handshakeAttempted = false;
+		this.authFailed = false;
 		this.connectEpoch += 1;
 		this.cancelHandshakeTimer();
 		this.setState(ConnectionState.CONNECTING);
@@ -346,15 +370,27 @@ export class WeeRelayClient extends EventTarget {
 			console.debug('[relay] WebSocket close', { code: ev.code, reason: ev.reason, wasClean: ev.wasClean });
 			const hadError = this._wsHadError;
 			this._wsHadError = false;
-			// If the socket closed while a handshake was still outstanding (we sent
-			// it but never authenticated), the relay likely rejected the unknown
-			// `handshake` command by closing. Remember that so the next connect
-			// skips straight to legacy `init` and we never loop-lock the user out.
-			if (this.handshakeTimer !== null && !this.authStarted) {
-				this.handshakeCloseStrikes += 1;
-				if (this.handshakeCloseStrikes >= HANDSHAKE_CLOSE_STRIKES) {
-					this.handshakeUnsupported = true;
-					console.debug('[relay] repeated close during handshake — legacy init on reconnect');
+			// A close BEFORE we ever authenticated, on a non-clean disconnect, tells us
+			// which auth path just failed:
+			//  • If this attempt used `handshake` (pre-reply wait OR post-reply, after
+			//    the relay rejected our hashed `init password_hash`), count a strike.
+			//    Enough strikes ⇒ the handshake path does not work here, so the next
+			//    connect downgrades to legacy `init`. This is the fix for the infinite
+			//    handshake→reject→reconnect loop: the strike is no longer gated on the
+			//    pre-reply window (handshakeTimer!=null), so a POST-reply rejection now
+			//    downgrades too.
+			//  • If we already downgraded (handshakeUnsupported) and legacy `init` ALSO
+			//    closed before authenticating, the relay rejected the password itself —
+			//    both paths are exhausted, so stop the loop with a clear error.
+			if (!this._wasAuthenticated && !this.cleanDisconnect) {
+				if (this.handshakeAttempted) {
+					this.handshakeCloseStrikes += 1;
+					if (this.handshakeCloseStrikes >= HANDSHAKE_CLOSE_STRIKES) {
+						this.handshakeUnsupported = true;
+						console.debug('[relay] repeated pre-auth close on handshake path — legacy init on reconnect');
+					}
+				} else if (this.handshakeUnsupported && this.authStarted) {
+					this.authFailed = true;
 				}
 			}
 			this.cancelHandshakeTimer();
@@ -362,6 +398,18 @@ export class WeeRelayClient extends EventTarget {
 			this.resetAccumulator();
 			if (this.cleanDisconnect) {
 				this.setState(ConnectionState.DISCONNECTED);
+				return;
+			}
+			if (this.authFailed) {
+				// Both auth paths failed pre-authentication: the relay rejected the
+				// password. Stop reconnecting (cancel any pending timer) and surface a
+				// clear, actionable error instead of cycling silently forever. A manual
+				// connect() resets authFailed and retries.
+				this.cancelReconnect();
+				this.emitError(
+					'Authentication failed — the relay rejected the password (check your relay password)'
+				);
+				this.setState(ConnectionState.ERROR);
 				return;
 			}
 			if (ev.code === 1000 && !hadError) {
@@ -458,6 +506,9 @@ export class WeeRelayClient extends EventTarget {
 	private onAuthenticated(version: string): void {
 		this._wasAuthenticated = true;
 		this.reconnectAttempts = 0;
+		// A genuinely working session is the ONLY thing that clears the handshake
+		// close-strike counter — not a mere `_handshake` reply (see onHandshakeReply).
+		this.handshakeCloseStrikes = 0;
 		this.setState(ConnectionState.CONNECTED);
 		this.dispatch('authenticated', { version } satisfies AuthenticatedEvent);
 
@@ -511,7 +562,8 @@ export class WeeRelayClient extends EventTarget {
 			this.startLegacyAuth();
 			return;
 		}
-		this.send(handshakeCmd(this.settings.compression));
+		this.handshakeAttempted = true;
+		this.send(handshakeCmd(this.settings.compression, this.canDecodeCompression));
 		this.cancelHandshakeTimer();
 		this.handshakeTimer = setTimeout(() => {
 			this.handshakeTimer = null;
@@ -555,9 +607,13 @@ export class WeeRelayClient extends EventTarget {
 			return;
 		}
 
-		// A working handshake reply proves the relay speaks `handshake`; clear any
-		// prior mid-handshake close strikes so a later transient blip starts fresh.
-		this.handshakeCloseStrikes = 0;
+		// NOTE: a `_handshake` reply is NOT authentication success — the relay can
+		// still REJECT the `init password_hash` we are about to send and close the
+		// socket. Resetting the close-strike counter here (as this code once did)
+		// made the downgrade unreachable: every reconnect re-replied, re-zeroed the
+		// strikes, got rejected again, and looped forever. Strikes now reset ONLY in
+		// onAuthenticated(), on a genuinely working session.
+		//
 		// Claim auth synchronously before the async hash so the (already cancelled)
 		// timer path can never also fire.
 		this.authStarted = true;
@@ -573,7 +629,7 @@ export class WeeRelayClient extends EventTarget {
 			// so force the legacy send directly rather than routing through the guard.
 			this.emitError(`Relay password hashing failed (${String(err)}); using legacy auth`);
 			if (epoch !== this.connectEpoch) return; // stale connection
-			this.send(initCmd(this.settings.password, this.settings.compression));
+			this.send(initCmd(this.settings.password, this.settings.compression, this.canDecodeCompression));
 			this.send(infoCmd(ID_VERSION, 'version'));
 			return;
 		}
@@ -590,7 +646,7 @@ export class WeeRelayClient extends EventTarget {
 	private startLegacyAuth(): void {
 		if (this.authStarted) return;
 		this.authStarted = true;
-		this.send(initCmd(this.settings.password, this.settings.compression));
+		this.send(initCmd(this.settings.password, this.settings.compression, this.canDecodeCompression));
 		this.send(infoCmd(ID_VERSION, 'version'));
 	}
 

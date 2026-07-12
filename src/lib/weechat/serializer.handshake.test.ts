@@ -56,6 +56,38 @@ describe('handshakeCmd', () => {
 		expect(handshakeCmd(true)).not.toContain('plain');
 		expect(SUPPORTED_HASH_ALGOS).not.toContain('plain');
 	});
+
+	// A relay must never be told we can decode zlib when the browser cannot — a
+	// compressed frame after auth would then throw in the decode path and drop the
+	// connection (the mobile "connects then spins then fails" regression).
+	it('advertises compression=off when the browser cannot decode, even with compression ON', () => {
+		expect(handshakeCmd(true, false)).toBe(
+			'handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
+		);
+	});
+
+	it('still advertises zlib:off when the browser CAN decode and compression is ON', () => {
+		expect(handshakeCmd(true, true)).toBe(
+			'handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=zlib:off\n',
+		);
+	});
+
+	it('advertises off when compression is OFF regardless of decode capability', () => {
+		expect(handshakeCmd(false, true)).toContain(',compression=off\n');
+		expect(handshakeCmd(false, false)).toContain(',compression=off\n');
+	});
+
+	it('consults the live DecompressionStream capability by default (API absent → off)', () => {
+		const real = globalThis.DecompressionStream;
+		// @ts-expect-error simulate an old browser lacking the decode API.
+		delete globalThis.DecompressionStream;
+		try {
+			expect(handshakeCmd(true)).toContain(',compression=off\n');
+			expect(handshakeCmd(true)).not.toContain('zlib');
+		} finally {
+			globalThis.DecompressionStream = real;
+		}
+	});
 });
 
 describe('parseHandshakeReply', () => {
