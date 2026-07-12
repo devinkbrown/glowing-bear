@@ -17,7 +17,7 @@ import {
   openChannelInfo,
   openModal,
   openServicesPanel,
-  setSplitMode,
+  toggleSplit,
   settings,
   toggleSearch,
   toggleUserList,
@@ -290,13 +290,13 @@ export default function Header() {
         {/* Split pane toggle (desktop) */}
         <Show when={!isMobile()}>
           <button
-            onClick={() => setSplitMode(uiState.splitMode === 'none' ? 'vertical' : 'none')}
+            onClick={() => toggleSplit(buffersState.activeBuffer)}
             class="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-full transition-all"
             classList={{
               'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10': uiState.splitMode !== 'none',
               'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.06]': uiState.splitMode === 'none',
             }}
-            title="Split view (Ctrl+\)"
+            title="Split view (Ctrl+\) — Alt-click a channel to open it in the split"
             aria-label="Toggle split view"
           >
             <svg class="w-[14px] h-[14px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">

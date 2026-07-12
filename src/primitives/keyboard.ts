@@ -27,7 +27,7 @@ import {
   openChannelInfo,
   openModal,
   setActive,
-  setSplitMode,
+  toggleSplit,
   toggleSearch,
   toggleSidebar,
   toggleUserList,
@@ -108,7 +108,7 @@ function handleCtrlShortcuts(e: KeyboardEvent): boolean {
   }
   if (e.key === '\\') {
     e.preventDefault();
-    setSplitMode(uiState.splitMode === 'none' ? 'vertical' : 'none');
+    toggleSplit(buffersState.activeBuffer);
     return true;
   }
   // Ctrl+L: clear current buffer's visible messages

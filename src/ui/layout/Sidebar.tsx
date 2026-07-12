@@ -18,6 +18,7 @@ import {
   requestNicklist,
   sendInput,
   setActive,
+  openSplitWith,
   setSidebarOpen,
   settings,
 } from '@/state';
@@ -58,8 +59,17 @@ export default function Sidebar(props: SidebarProps) {
     connectionState() === ConnectionState.AUTHENTICATING;
   const isReconnecting = () => connectionState() === ConnectionState.RECONNECTING;
 
-  const selectBuffer = (pointer: string): void => {
-    setActive(pointer);
+  const selectBuffer = (pointer: string, e?: MouseEvent): void => {
+    // Alt-click or middle-click sends the buffer to the SPLIT pane (opening it
+    // if needed) instead of switching the main pane — the way to put a second,
+    // different buffer side-by-side.
+    const toSplit = !!e && (e.altKey || e.button === 1);
+    if (toSplit) {
+      e!.preventDefault();
+      openSplitWith(pointer);
+    } else {
+      setActive(pointer);
+    }
     const entry = buffersState.buffers[pointer];
     if (entry && entry.lines.length === 0 && !entry.loading) {
       requestHistory(100, pointer);
@@ -67,8 +77,8 @@ export default function Sidebar(props: SidebarProps) {
     if (entry && (entry.buffer.localVars['type'] ?? '') === 'channel') {
       requestNicklist(pointer);
     }
-    if (isMobile()) setSidebarOpen(false);
-    props.onSelect?.();
+    if (!toSplit && isMobile()) setSidebarOpen(false);
+    if (!toSplit) props.onSelect?.();
   };
 
   const grouped = createMemo(() => {
@@ -262,7 +272,7 @@ export default function Sidebar(props: SidebarProps) {
             <BufItem
               entry={entry}
               active={buffersState.activeBuffer === entry.buffer.id}
-              onClick={() => selectBuffer(entry.buffer.id)}
+              onClick={(e) => selectBuffer(entry.buffer.id, e)}
             />
           )}
         </For>
@@ -298,7 +308,7 @@ export default function Sidebar(props: SidebarProps) {
                   >
                     {(serverEntry) => (
                       <button
-                        onClick={() => selectBuffer(serverEntry().buffer.id)}
+                        onClick={(e) => selectBuffer(serverEntry().buffer.id, e)}
                         class="flex-1 text-left text-[9px] font-black uppercase tracking-[0.18em] py-1.5 px-1 rounded transition-colors truncate"
                         classList={{
                           'text-[var(--custom-accent,#818cf8)]': buffersState.activeBuffer === serverEntry().buffer.id,
@@ -358,7 +368,7 @@ export default function Sidebar(props: SidebarProps) {
                       <BufItem
                         entry={entry}
                         active={buffersState.activeBuffer === entry.buffer.id}
-                        onClick={() => selectBuffer(entry.buffer.id)}
+                        onClick={(e) => selectBuffer(entry.buffer.id, e)}
                         indent
                         pinned={isPinned(entry.buffer.id)}
                         muted={isMuted(entry.buffer.id)}
@@ -375,7 +385,7 @@ export default function Sidebar(props: SidebarProps) {
                         <BufItem
                           entry={entry}
                           active={buffersState.activeBuffer === entry.buffer.id}
-                          onClick={() => selectBuffer(entry.buffer.id)}
+                          onClick={(e) => selectBuffer(entry.buffer.id, e)}
                           indent
                         />
                       )}
@@ -393,7 +403,7 @@ export default function Sidebar(props: SidebarProps) {
         {(pointer) => (
           <div class="shrink-0 px-3 py-2" style={{ 'padding-bottom': 'max(0.5rem, env(safe-area-inset-bottom))' }}>
             <button
-              onClick={() => selectBuffer(pointer())}
+              onClick={(e) => selectBuffer(pointer(), e)}
               class="w-full flex items-center justify-center gap-2 py-2.5 sm:py-2 rounded-full bg-red-500/10 text-red-400 text-[12px] sm:text-[11px] font-semibold hover:bg-red-500/15 active:bg-red-500/20 transition-all"
             >
               <svg class="w-3.5 h-3.5 sm:w-3 sm:h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -411,7 +421,7 @@ export default function Sidebar(props: SidebarProps) {
 function BufItem(props: {
   entry: BufferEntry;
   active: boolean;
-  onClick: () => void;
+  onClick: (e: MouseEvent) => void;
   indent?: boolean;
   pinned?: boolean;
   muted?: boolean;
@@ -436,7 +446,7 @@ function BufItem(props: {
 
   return (
     <button
-      onClick={() => props.onClick()}
+      onClick={(e) => props.onClick(e)}
       title={props.entry.buffer.fullName}
       class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-all text-[14px] sm:text-[13px] rounded-xl group relative active:bg-white/[0.04]"
       classList={{

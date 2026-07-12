@@ -13,6 +13,8 @@ import {
   setOperConsoleOpen,
   setSplitMode,
   setSplitBuffer,
+  toggleSplit,
+  openSplitWith,
   toggleSearch,
   setSearchOpen,
 } from './ui';
@@ -71,6 +73,29 @@ describe('ui store', () => {
 
       setSplitBuffer(null);
       expect(uiState.splitBuffer).toBeNull();
+    });
+
+    it('toggleSplit opens pinned to the active buffer, then closes and clears the pin', () => {
+      // open: pins the current active buffer so the panes can diverge
+      toggleSplit('0xactive');
+      expect(uiState.splitMode).toBe('vertical');
+      expect(uiState.splitBuffer).toBe('0xactive');
+
+      // close: clears mode and pin
+      toggleSplit('0xactive');
+      expect(uiState.splitMode).toBe('none');
+      expect(uiState.splitBuffer).toBeNull();
+    });
+
+    it('openSplitWith pins a buffer and opens the split if closed', () => {
+      expect(uiState.splitMode).toBe('none');
+      openSplitWith('0xother');
+      expect(uiState.splitMode).toBe('vertical');
+      expect(uiState.splitBuffer).toBe('0xother');
+      // re-assigning while open keeps it open, swaps the pin
+      openSplitWith('0xthird');
+      expect(uiState.splitBuffer).toBe('0xthird');
+      expect(uiState.splitMode).toBe('vertical');
     });
   });
 
