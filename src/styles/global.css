@@ -110,6 +110,15 @@ body {
   --irc-magenta: #ff00ff;
   --irc-gray:    #7f7f7f;
   --irc-silver:  #d2d2d2;
+  /* mIRC message-colour legibility rail (task 2). The .irc-fg-0..98 classes
+     resolve their sender-chosen absolute hex through an OKLCH lightness clamp
+     keyed off these bounds — hue + chroma (c h) are preserved, only L is
+     clamped, exactly like the dark-adjusted nick colours. These are the DARK
+     default: lift any near-black code to L>=0.72 so it never vanishes on a dark
+     ground (verified >=4.5:1 on the lightest dark ground, nord). The light
+     theme overrides them to a ceiling (pull near-white codes down). */
+  --irc-l-floor: 0.72;
+  --irc-l-ceil:  1;
 }
 
 body { font-family: var(--app-font); }
@@ -325,23 +334,31 @@ body { font-family: var(--app-font); }
   background: rgba(255,255,255,0.2);
 }
 
-/* ── IRC colors (0-98) ────────────────────────────────────────────────── */
-.irc-fg-0  { color: #ffffff; }
-.irc-fg-1  { color: #000000; }
-.irc-fg-2  { color: #00007f; }
-.irc-fg-3  { color: #009300; }
-.irc-fg-4  { color: #ff4444; }
-.irc-fg-5  { color: #7f0000; }
-.irc-fg-6  { color: #9c009c; }
-.irc-fg-7  { color: #fc7f00; }
-.irc-fg-8  { color: #ffff00; }
-.irc-fg-9  { color: #00fc00; }
-.irc-fg-10 { color: #009393; }
-.irc-fg-11 { color: #00ffff; }
-.irc-fg-12 { color: #4444ff; }
-.irc-fg-13 { color: #ff00ff; }
-.irc-fg-14 { color: #7f7f7f; }
-.irc-fg-15 { color: #d2d2d2; }
+/* ── IRC colors (0-98) ─────────────────────────────────────────────────────
+   Sender-chosen mIRC colours are absolute hex, so near-black codes vanish on
+   dark themes and near-white codes on the light theme. Each .irc-fg-N keeps its
+   canonical hex as a fallback, then re-resolves it through an OKLCH lightness
+   clamp (--irc-l-floor..--irc-l-ceil, set per-theme) that preserves hue+chroma
+   (`c h`) and only clamps L toward the theme's text rail — the same stay-in-
+   family idea as the .fg-irc-* nick colours. Legible by construction on every
+   theme ground (proven by luminance in irc-color.test.ts). Browsers without
+   relative-colour syntax simply keep the canonical hex (no regression). */
+.irc-fg-0  { color: #ffffff; color: oklch(from #ffffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-1  { color: #000000; color: oklch(from #000000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-2  { color: #00007f; color: oklch(from #00007f clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-3  { color: #009300; color: oklch(from #009300 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-4  { color: #ff4444; color: oklch(from #ff4444 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-5  { color: #7f0000; color: oklch(from #7f0000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-6  { color: #9c009c; color: oklch(from #9c009c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-7  { color: #fc7f00; color: oklch(from #fc7f00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-8  { color: #ffff00; color: oklch(from #ffff00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-9  { color: #00fc00; color: oklch(from #00fc00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-10 { color: #009393; color: oklch(from #009393 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-11 { color: #00ffff; color: oklch(from #00ffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-12 { color: #4444ff; color: oklch(from #4444ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-13 { color: #ff00ff; color: oklch(from #ff00ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-14 { color: #7f7f7f; color: oklch(from #7f7f7f clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-15 { color: #d2d2d2; color: oklch(from #d2d2d2 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
 
 .irc-bg-0  { background-color: #ffffff; color: #000; }
 .irc-bg-1  { background-color: #1a1a1a; }
@@ -387,27 +404,27 @@ body { font-family: var(--app-font); }
 .fg-irc-silver  { color: #cbd5e1; }
 
 /* Extended palette (16-98) */
-.irc-fg-16 { color: #470000; } .irc-fg-17 { color: #472100; } .irc-fg-18 { color: #474700; } .irc-fg-19 { color: #324700; }
-.irc-fg-20 { color: #004700; } .irc-fg-21 { color: #00472c; } .irc-fg-22 { color: #004747; } .irc-fg-23 { color: #002747; }
-.irc-fg-24 { color: #000047; } .irc-fg-25 { color: #2e0047; } .irc-fg-26 { color: #470047; } .irc-fg-27 { color: #47002a; }
-.irc-fg-28 { color: #740000; } .irc-fg-29 { color: #743a00; } .irc-fg-30 { color: #747400; } .irc-fg-31 { color: #517400; }
-.irc-fg-32 { color: #007400; } .irc-fg-33 { color: #007449; } .irc-fg-34 { color: #007474; } .irc-fg-35 { color: #004074; }
-.irc-fg-36 { color: #000074; } .irc-fg-37 { color: #4b0074; } .irc-fg-38 { color: #740074; } .irc-fg-39 { color: #740045; }
-.irc-fg-40 { color: #b50000; } .irc-fg-41 { color: #b56300; } .irc-fg-42 { color: #b5b500; } .irc-fg-43 { color: #7db500; }
-.irc-fg-44 { color: #00b500; } .irc-fg-45 { color: #00b571; } .irc-fg-46 { color: #00b5b5; } .irc-fg-47 { color: #0063b5; }
-.irc-fg-48 { color: #0000b5; } .irc-fg-49 { color: #7500b5; } .irc-fg-50 { color: #b500b5; } .irc-fg-51 { color: #b5006b; }
-.irc-fg-52 { color: #ff0000; } .irc-fg-53 { color: #ff8c00; } .irc-fg-54 { color: #ffff00; } .irc-fg-55 { color: #b2ff00; }
-.irc-fg-56 { color: #00ff00; } .irc-fg-57 { color: #00ffa0; } .irc-fg-58 { color: #00ffff; } .irc-fg-59 { color: #008cff; }
-.irc-fg-60 { color: #0000ff; } .irc-fg-61 { color: #a500ff; } .irc-fg-62 { color: #ff00ff; } .irc-fg-63 { color: #ff0098; }
-.irc-fg-64 { color: #ff5959; } .irc-fg-65 { color: #ffb459; } .irc-fg-66 { color: #ffff71; } .irc-fg-67 { color: #cfff60; }
-.irc-fg-68 { color: #6fff6f; } .irc-fg-69 { color: #65ffc9; } .irc-fg-70 { color: #6dffff; } .irc-fg-71 { color: #59b4ff; }
-.irc-fg-72 { color: #5959ff; } .irc-fg-73 { color: #c459ff; } .irc-fg-74 { color: #ff66ff; } .irc-fg-75 { color: #ff59bc; }
-.irc-fg-76 { color: #ff9c9c; } .irc-fg-77 { color: #ffd39c; } .irc-fg-78 { color: #ffff9c; } .irc-fg-79 { color: #e2ff9c; }
-.irc-fg-80 { color: #9cff9c; } .irc-fg-81 { color: #9cffdb; } .irc-fg-82 { color: #9cffff; } .irc-fg-83 { color: #9cd3ff; }
-.irc-fg-84 { color: #9c9cff; } .irc-fg-85 { color: #dc9cff; } .irc-fg-86 { color: #ff9cff; } .irc-fg-87 { color: #ff94d3; }
-.irc-fg-88 { color: #000000; } .irc-fg-89 { color: #131313; } .irc-fg-90 { color: #282828; } .irc-fg-91 { color: #363636; }
-.irc-fg-92 { color: #4d4d4d; } .irc-fg-93 { color: #656565; } .irc-fg-94 { color: #818181; } .irc-fg-95 { color: #9f9f9f; }
-.irc-fg-96 { color: #bcbcbc; } .irc-fg-97 { color: #e2e2e2; } .irc-fg-98 { color: #ffffff; }
+.irc-fg-16 { color: #470000; color: oklch(from #470000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-17 { color: #472100; color: oklch(from #472100 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-18 { color: #474700; color: oklch(from #474700 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-19 { color: #324700; color: oklch(from #324700 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-20 { color: #004700; color: oklch(from #004700 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-21 { color: #00472c; color: oklch(from #00472c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-22 { color: #004747; color: oklch(from #004747 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-23 { color: #002747; color: oklch(from #002747 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-24 { color: #000047; color: oklch(from #000047 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-25 { color: #2e0047; color: oklch(from #2e0047 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-26 { color: #470047; color: oklch(from #470047 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-27 { color: #47002a; color: oklch(from #47002a clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-28 { color: #740000; color: oklch(from #740000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-29 { color: #743a00; color: oklch(from #743a00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-30 { color: #747400; color: oklch(from #747400 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-31 { color: #517400; color: oklch(from #517400 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-32 { color: #007400; color: oklch(from #007400 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-33 { color: #007449; color: oklch(from #007449 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-34 { color: #007474; color: oklch(from #007474 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-35 { color: #004074; color: oklch(from #004074 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-36 { color: #000074; color: oklch(from #000074 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-37 { color: #4b0074; color: oklch(from #4b0074 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-38 { color: #740074; color: oklch(from #740074 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-39 { color: #740045; color: oklch(from #740045 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-40 { color: #b50000; color: oklch(from #b50000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-41 { color: #b56300; color: oklch(from #b56300 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-42 { color: #b5b500; color: oklch(from #b5b500 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-43 { color: #7db500; color: oklch(from #7db500 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-44 { color: #00b500; color: oklch(from #00b500 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-45 { color: #00b571; color: oklch(from #00b571 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-46 { color: #00b5b5; color: oklch(from #00b5b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-47 { color: #0063b5; color: oklch(from #0063b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-48 { color: #0000b5; color: oklch(from #0000b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-49 { color: #7500b5; color: oklch(from #7500b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-50 { color: #b500b5; color: oklch(from #b500b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-51 { color: #b5006b; color: oklch(from #b5006b clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-52 { color: #ff0000; color: oklch(from #ff0000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-53 { color: #ff8c00; color: oklch(from #ff8c00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-54 { color: #ffff00; color: oklch(from #ffff00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-55 { color: #b2ff00; color: oklch(from #b2ff00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-56 { color: #00ff00; color: oklch(from #00ff00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-57 { color: #00ffa0; color: oklch(from #00ffa0 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-58 { color: #00ffff; color: oklch(from #00ffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-59 { color: #008cff; color: oklch(from #008cff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-60 { color: #0000ff; color: oklch(from #0000ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-61 { color: #a500ff; color: oklch(from #a500ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-62 { color: #ff00ff; color: oklch(from #ff00ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-63 { color: #ff0098; color: oklch(from #ff0098 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-64 { color: #ff5959; color: oklch(from #ff5959 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-65 { color: #ffb459; color: oklch(from #ffb459 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-66 { color: #ffff71; color: oklch(from #ffff71 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-67 { color: #cfff60; color: oklch(from #cfff60 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-68 { color: #6fff6f; color: oklch(from #6fff6f clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-69 { color: #65ffc9; color: oklch(from #65ffc9 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-70 { color: #6dffff; color: oklch(from #6dffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-71 { color: #59b4ff; color: oklch(from #59b4ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-72 { color: #5959ff; color: oklch(from #5959ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-73 { color: #c459ff; color: oklch(from #c459ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-74 { color: #ff66ff; color: oklch(from #ff66ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-75 { color: #ff59bc; color: oklch(from #ff59bc clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-76 { color: #ff9c9c; color: oklch(from #ff9c9c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-77 { color: #ffd39c; color: oklch(from #ffd39c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-78 { color: #ffff9c; color: oklch(from #ffff9c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-79 { color: #e2ff9c; color: oklch(from #e2ff9c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-80 { color: #9cff9c; color: oklch(from #9cff9c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-81 { color: #9cffdb; color: oklch(from #9cffdb clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-82 { color: #9cffff; color: oklch(from #9cffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-83 { color: #9cd3ff; color: oklch(from #9cd3ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-84 { color: #9c9cff; color: oklch(from #9c9cff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-85 { color: #dc9cff; color: oklch(from #dc9cff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-86 { color: #ff9cff; color: oklch(from #ff9cff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-87 { color: #ff94d3; color: oklch(from #ff94d3 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-88 { color: #000000; color: oklch(from #000000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-89 { color: #131313; color: oklch(from #131313 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-90 { color: #282828; color: oklch(from #282828 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-91 { color: #363636; color: oklch(from #363636 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-92 { color: #4d4d4d; color: oklch(from #4d4d4d clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-93 { color: #656565; color: oklch(from #656565 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-94 { color: #818181; color: oklch(from #818181 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-95 { color: #9f9f9f; color: oklch(from #9f9f9f clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-96 { color: #bcbcbc; color: oklch(from #bcbcbc clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-97 { color: #e2e2e2; color: oklch(from #e2e2e2 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-98 { color: #ffffff; color: oklch(from #ffffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
 
 .irc-bg-16 { background-color: #470000; } .irc-bg-17 { background-color: #472100; } .irc-bg-18 { background-color: #474700; }
 .irc-bg-19 { background-color: #324700; } .irc-bg-20 { background-color: #004700; } .irc-bg-21 { background-color: #00472c; }
@@ -844,6 +861,7 @@ select:focus-visible {
   --color-gray-950: #000005;
   --custom-accent:  #818cf8;
   --color-timestamp: #747b9b;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 74%, transparent);
 }
 
 /* True AMOLED dark — pure black bg, max contrast */
@@ -861,6 +879,7 @@ select:focus-visible {
   --color-gray-950: #000000;
   --custom-accent:  #8b9cf8;
   --color-timestamp: #7c7c7c;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 72%, transparent);
 }
 
 [data-theme="obsidian"] {
@@ -877,6 +896,7 @@ select:focus-visible {
   --color-gray-950: #070707;
   --custom-accent:  #a78bfa;
   --color-timestamp: #7f7f7f;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 77%, transparent);
 }
 
 [data-theme="nord"] {
@@ -893,6 +913,7 @@ select:focus-visible {
   --color-gray-950: #1e232b;
   --custom-accent:  #88c0d0;
   --color-timestamp: #8192ae;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 84%, transparent);
 }
 
 [data-theme="gruvbox"] {
@@ -909,6 +930,7 @@ select:focus-visible {
   --color-gray-950: #111314;
   --custom-accent:  #d79921;
   --color-timestamp: #8f8376;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 83%, transparent);
 }
 
 [data-theme="rose-pine"] {
@@ -925,6 +947,7 @@ select:focus-visible {
   --color-gray-950: #15131e;
   --custom-accent:  #eb6f92;
   --color-timestamp: #8682a5;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 80%, transparent);
 }
 
 [data-theme="abyss"] {
@@ -941,6 +964,7 @@ select:focus-visible {
   --color-gray-950: #03080a;
   --custom-accent:  #2dd4bf;
   --color-timestamp: #4c8989;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 75%, transparent);
 }
 
 [data-theme="ember"] {
@@ -957,6 +981,8 @@ select:focus-visible {
   --color-gray-950: #080402;
   --custom-accent:  #f97316;
   --color-timestamp: #9b7750;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 79%, transparent);
+  --surface-blur: 18px;
 }
 
 [data-theme="aurora"] {
@@ -973,6 +999,8 @@ select:focus-visible {
   --color-gray-950: #07030c;
   --custom-accent:  #a78bfa;
   --color-timestamp: #8971bc;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 79%, transparent);
+  --surface-blur: 18px;
 }
 
 [data-theme="catppuccin"] {
@@ -989,6 +1017,7 @@ select:focus-visible {
   --color-gray-950: #0e0e17;
   --custom-accent:  #cba6f7;
   --color-timestamp: #8890a8;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 77%, transparent);
 }
 
 [data-theme="tokyo-night"] {
@@ -1005,6 +1034,7 @@ select:focus-visible {
   --color-gray-950: #101119;
   --custom-accent:  #7aa2f7;
   --color-timestamp: #7883ab;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 82%, transparent);
 }
 
 [data-theme="dracula"] {
@@ -1021,6 +1051,7 @@ select:focus-visible {
   --color-gray-950: #191a23;
   --custom-accent:  #bd93f9;
   --color-timestamp: #7e89af;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 78%, transparent);
 }
 
 [data-theme="solarized"] {
@@ -1037,6 +1068,7 @@ select:focus-visible {
   --color-gray-950: #002430;
   --custom-accent:  #268bd2;
   --color-timestamp: #7b939a;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 88%, transparent);
 }
 
 [data-theme="lightning"] {
@@ -1053,6 +1085,8 @@ select:focus-visible {
   --color-gray-950: #030408;
   --custom-accent:  #60a5fa;
   --color-timestamp: #637fa9;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 82%, transparent);
+  --surface-blur: 18px;
 }
 
 /* Deep space starfield — cosmic void with nebula accent */
@@ -1070,6 +1104,8 @@ select:focus-visible {
   --color-gray-950: #030408;
   --custom-accent:  #818cf8;
   --color-timestamp: #747ca2;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 79%, transparent);
+  --surface-blur: 18px;
   --starfield-nebula-1: #818cf8;
   --starfield-nebula-2: #c084fc;
   --starfield-nebula-3: #2dd4bf;
@@ -1090,6 +1126,8 @@ select:focus-visible {
   --color-gray-950: #0a0503;
   --custom-accent:  #f59e0b;
   --color-timestamp: #a27642;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 75%, transparent);
+  --surface-blur: 18px;
 }
 
 /* Retro arcade — deep CRT blacks with neon phosphor glow */
@@ -1107,6 +1145,8 @@ select:focus-visible {
   --color-gray-950: #040609;
   --custom-accent:  #ff00ff;
   --color-timestamp: #538b53;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 83%, transparent);
+  --surface-blur: 18px;
 }
 
 /* ── Mobile optimizations ──────────────────────────────────────────────── */
@@ -1249,4 +1289,10 @@ nav, aside, header, .video-controls {
   --color-gray-950: #ffffff;
   --custom-accent:  #4f46e5;
   --color-timestamp: #696f7d;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 80%, transparent);
+  /* Light theme inverts the vanishing problem: near-WHITE mIRC codes disappear
+     on the pale ground. Drop the floor and cap the ceiling so the OKLCH clamp
+     pulls bright codes DOWN to L<=0.50 (verified >=4.5:1 on #f9fafb), hue kept. */
+  --irc-l-floor: 0;
+  --irc-l-ceil:  0.5;
 }

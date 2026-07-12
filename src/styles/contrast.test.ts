@@ -70,3 +70,71 @@ describe('timestamp token contrast (WCAG relative luminance)', () => {
     expect(contrast(g950!, g600!)).toBeLessThan(3);
   });
 });
+
+// ── Frosted reading-surface veil (task 1) ──────────────────────────────────
+// The reading surface fills with --surface-veil (color-mix of gray-900 at P%)
+// over the animated ThemeBg scene, backdrop-blurred. To guarantee body text
+// stays AA over ANY scene, we composite the veil over the worst-case scene
+// EXTREME — pure white for dark themes (brightest possible backdrop lowers
+// light-text contrast the most), pure black for the light theme — and require
+// primary body text (gray-200, the reading-surface default) to clear 4.5:1.
+// Secondary body text (gray-300) must clear AA-large 3:1 on that same extreme.
+
+type RGB = [number, number, number];
+function parseHex(hex: string): RGB {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+// sRGB alpha-composite of `veil` (gray-900 at alpha P/100) over opaque backdrop.
+function composite(g900: string, backdrop: string, pct: number): string {
+  const a = pct / 100;
+  const [r9, g9, b9] = parseHex(g900);
+  const [rb, gb, bb] = parseHex(backdrop);
+  const mix: RGB = [
+    Math.round(a * r9 + (1 - a) * rb),
+    Math.round(a * g9 + (1 - a) * gb),
+    Math.round(a * b9 + (1 - a) * bb),
+  ];
+  return '#' + mix.map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+
+type Veil = { name: string; g900: string; g200: string; g300: string; pct: number };
+
+function parseVeils(): Veil[] {
+  const blocks = css.match(/(:root[^{]*|\[data-theme="[^"]+"\])\s*\{[^}]*\}/g) ?? [];
+  const out: Veil[] = [];
+  for (const block of blocks) {
+    const pctRaw = block.match(/--surface-veil:\s*color-mix\(in srgb,\s*var\(--color-gray-900[^)]*\)\s*(\d+)%/)?.[1];
+    const g900 = block.match(/--color-gray-900:\s*(#[0-9a-fA-F]{6});/)?.[1];
+    const g200 = block.match(/--color-gray-200:\s*(#[0-9a-fA-F]{6});/)?.[1];
+    const g300 = block.match(/--color-gray-300:\s*(#[0-9a-fA-F]{6});/)?.[1];
+    if (!pctRaw || !g900 || !g200 || !g300) continue;
+    const name = block.match(/data-theme="([^"]+)"/)?.[1] ?? 'darkbear';
+    if (out.some((v) => v.name === name)) continue;
+    out.push({ name, g900, g200, g300, pct: parseInt(pctRaw, 10) });
+  }
+  return out;
+}
+
+describe('reading-surface veil contrast (WCAG relative luminance)', () => {
+  const veils = parseVeils();
+
+  it('defines a per-theme --surface-veil density for every theme', () => {
+    expect(veils.length).toBeGreaterThanOrEqual(18);
+  });
+
+  for (const v of veils) {
+    const isLight = luminance(v.g900) > luminance(v.g200);
+    const extreme = isLight ? '#000000' : '#ffffff';
+    const surface = composite(v.g900, extreme, v.pct);
+
+    it(`${v.name}: primary body text (gray-200) clears 4.5:1 over veil on worst-case scene`, () => {
+      expect(contrast(surface, v.g200)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`${v.name}: secondary body text (gray-300) clears 3:1 over veil on worst-case scene`, () => {
+      expect(contrast(surface, v.g300)).toBeGreaterThanOrEqual(3);
+    });
+  }
+});
