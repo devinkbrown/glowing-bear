@@ -31,15 +31,37 @@ function AnimTransform(props: ComponentProps<'animateTransform'>) {
   );
 }
 
-export default function AstronautBear(props: { size?: number; class?: string; accent?: string; theme?: ThemeName }) {
+export default function AstronautBear(props: {
+  size?: number;
+  class?: string;
+  accent?: string;
+  theme?: ThemeName;
+  /**
+   * Accessible name. Omit (the default) at every current call site — the mascot
+   * sits beside a visible "DarkBear" heading, so it is decorative and must stay
+   * out of the a11y tree (`aria-hidden`) to avoid a redundant announcement (WCAG
+   * 1.1.1). Pass a label only for a standalone use where the bear itself carries
+   * meaning; it then becomes a named `role="img"` and is exposed to AT.
+   */
+  label?: string;
+}) {
   const p = mergeProps({ size: 120, class: '', accent: '#818cf8', theme: 'darkbear' as ThemeName }, props);
   const reduced = createMediaQuery('(prefers-reduced-motion: reduce)');
   // Motion runs only when neither the OS pref NOR the in-app control asks to stop it.
   // Both reads are tracked, so a change to either flips the gated SMIL wrappers.
   const motionOn = (): boolean => !reduced() && settings.sceneMotion !== 'reduced';
+  const labelled = (): boolean => (p.label ?? '').length > 0;
   return (
     <MotionContext.Provider value={motionOn}>
-    <svg width={p.size} height={p.size} viewBox="0 0 200 200" class={p.class} aria-hidden="true">
+    <svg
+      width={p.size}
+      height={p.size}
+      viewBox="0 0 200 200"
+      class={p.class}
+      role={labelled() ? 'img' : undefined}
+      aria-label={labelled() ? p.label : undefined}
+      aria-hidden={labelled() ? undefined : true}
+    >
       <defs>
         <radialGradient id="ab-fur" cx="45%" cy="35%" r="60%">
           <stop offset="0%" stop-color="#8d6555" />

@@ -88,3 +88,29 @@ describe('AstronautBear reduced-motion SMIL gate', () => {
     }
   });
 });
+
+describe('AstronautBear accessible-name treatment', () => {
+  it('is decorative by default: aria-hidden and no accessible name (WCAG 1.1.1)', () => {
+    stubMatchMedia(false);
+    const { container } = render(() => <AstronautBear />);
+    const svg = container.querySelector('svg');
+
+    expect(svg).toBeTruthy();
+    // Hidden from AT — the adjacent visible "DarkBear" heading carries the name,
+    // so the mascot must not add a redundant announcement.
+    expect(svg?.getAttribute('aria-hidden')).toBe('true');
+    expect(svg?.hasAttribute('role')).toBe(false);
+    expect(svg?.hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('exposes role="img" with the label as accessible name when label is provided', () => {
+    stubMatchMedia(false);
+    const { container } = render(() => <AstronautBear label="DarkBear astronaut mascot" />);
+    const svg = container.querySelector('svg');
+
+    expect(svg?.getAttribute('role')).toBe('img');
+    expect(svg?.getAttribute('aria-label')).toBe('DarkBear astronaut mascot');
+    // A named image must NOT also be hidden — that would suppress the name.
+    expect(svg?.hasAttribute('aria-hidden')).toBe(false);
+  });
+});
