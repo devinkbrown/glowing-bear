@@ -564,14 +564,51 @@ describe('WeeRelayParser compressed frames', () => {
 	});
 
 	it('rejects a decompressed message that exceeds the 64MB limit', async () => {
-		// 64MB + 1 of zeros deflates to a few KB; the limit check runs on the
-		// decompressed size before any object parsing.
-		const oversized = deflateSync(new Uint8Array(67108865 - 4)); // -4: id field counts too
-		const w = new BinWriter();
-		w.u32(4 + 1 + oversized.length).u8(1).raw(new Uint8Array(oversized));
+		// The cap is checked on the DECOMPRESSED size (parser.ts:319-321), before
+		// any object parsing. Driving that with a genuine 64MB+ zlib stream means
+		// deflateSync(64MB) + a full async re-inflate on every run: CPU-heavy and
+		// timeout-flaky under parallel load, and under memory pressure it can even
+		// reject with an out-of-memory RangeError instead of the size-cap error,
+		// silently voiding this security assertion. Instead we stub
+		// DecompressionStream so `decompress()` yields — with zero deflate/inflate
+		// work — a payload exactly ONE byte past the checked boundary, so the real
+		// `total > 67108864` reject path is deterministically what fails the promise.
+		const LIMIT = 67108864;
+		// Smallest decompressed size for which 5 (header) + size exceeds the cap.
+		const oversized = new Uint8Array(LIMIT - 5 + 1);
 
-		await expect(parser.parse(w.build().buffer as ArrayBuffer)).rejects.toThrow(
-			/exceeds 64MB limit/
-		);
+		class FakeDecompressionStream {
+			readonly writable = {
+				getWriter: () => ({ write: async () => {}, close: async () => {} }),
+			};
+			readonly readable = {
+				getReader: () => {
+					let sent = false;
+					return {
+						read: async () => {
+							if (sent) return { done: true, value: undefined };
+							sent = true;
+							return { done: false, value: oversized };
+						},
+					};
+				},
+			};
+		}
+
+		const realDecompressionStream = globalThis.DecompressionStream;
+		globalThis.DecompressionStream =
+			FakeDecompressionStream as unknown as typeof DecompressionStream;
+		try {
+			// A minimal compressed frame (compression byte = 1). The deflated bytes
+			// are never actually inflated because DecompressionStream is stubbed.
+			const w = new BinWriter();
+			w.u32(7).u8(1).raw([0x78, 0x9c]);
+
+			await expect(parser.parse(w.build().buffer as ArrayBuffer)).rejects.toThrow(
+				/exceeds 64MB limit/
+			);
+		} finally {
+			globalThis.DecompressionStream = realDecompressionStream;
+		}
 	});
 });
