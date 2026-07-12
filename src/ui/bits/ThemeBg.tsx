@@ -1,4 +1,5 @@
-import type { JSX } from 'solid-js';
+import { createContext, Show, useContext, type Accessor, type ComponentProps, type JSX } from 'solid-js';
+import { createMediaQuery } from '@/primitives/mediaQuery';
 
 export type ThemeName =
   | 'darkbear' | 'midnight' | 'obsidian' | 'nord' | 'gruvbox' | 'rose-pine'
@@ -21,9 +22,44 @@ function seededRand(seed: number) {
   return () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; };
 }
 
+// Whether decorative SMIL motion may run. Under prefers-reduced-motion: reduce the
+// provider flips this to false and the gated <Anim>/<AnimMotion> wrappers render
+// nothing, so the scene SVGs hold no SMIL nodes at all. CSS `animation:none` (the
+// .theme-bg-shell reduced-motion rule) cannot reach SMIL (<animate>/<animateMotion>),
+// so this JS gate is the only mechanism that stops the data-stream dots, pulse/sonar
+// rings, jellyfish tentacles, flying bats, lightning strikes and phoenix-eye pulse
+// (WCAG 2.2.2 Pause, Stop, Hide).
+const MotionContext = createContext<Accessor<boolean>>(() => true);
+
+/** Motion-gated <animate>. Absent from the DOM when reduced motion is active. */
+function Anim(props: ComponentProps<'animate'>) {
+  const motionOn = useContext(MotionContext);
+  return (
+    <Show when={motionOn()}>
+      <animate {...props} />
+    </Show>
+  );
+}
+
+/** Motion-gated <animateMotion> (carries its <mpath> child). Absent under reduced motion. */
+function AnimMotion(props: ComponentProps<'animateMotion'>) {
+  const motionOn = useContext(MotionContext);
+  return (
+    <Show when={motionOn()}>
+      <animateMotion {...props} />
+    </Show>
+  );
+}
+
 export default function ThemeBg(props: Props) {
+  const reduced = createMediaQuery('(prefers-reduced-motion: reduce)');
+  const motionOn = (): boolean => !reduced();
   // Evaluated inside JSX so theme switches stay reactive in Solid.
-  return <>{themeBackground(props.theme)}</>;
+  return (
+    <MotionContext.Provider value={motionOn}>
+      {themeBackground(props.theme)}
+    </MotionContext.Provider>
+  );
 }
 
 function themeBackground(theme: ThemeName): JSX.Element {
@@ -53,7 +89,7 @@ function themeBackground(theme: ThemeName): JSX.Element {
 
 const Shell = (props: { children: JSX.Element }) => (
   <div class="theme-bg-shell absolute inset-0 pointer-events-none overflow-hidden opacity-75" aria-hidden="true"
-    style={{ contain: 'layout style', 'will-change': 'transform' }}>
+    style={{ contain: 'layout style' }}>
     <style>{`@media (prefers-reduced-motion: reduce) { .theme-bg-shell * { animation: none !important; } }`}</style>
     {props.children}
   </div>
@@ -151,9 +187,9 @@ function DarkBearBg() {
               <path id={id} d={`M${e.x1 * 10} ${e.y1 * 10} L${e.x2 * 10} ${e.y2 * 10}`}
                 fill="none" stroke="none" />
               <circle r="1.5" fill="rgba(129,140,248,0.6)" style={{ filter: 'drop-shadow(0 0 3px rgba(129,140,248,0.4))' }}>
-                <animateMotion dur={`${3 + i * 0.7}s`} repeatCount="indefinite" begin={`${i * 1.2}s`}>
+                <AnimMotion dur={`${3 + i * 0.7}s`} repeatCount="indefinite" begin={`${i * 1.2}s`}>
                   <mpath {...smilHref(`#${id}`)} />
-                </animateMotion>
+                </AnimMotion>
               </circle>
             </g>
           );
@@ -163,8 +199,8 @@ function DarkBearBg() {
         {nodes.filter(n => n.hub).map((n, i) => (
           <circle cx={`${n.x}%`} cy={`${n.y}%`} r="0"
             fill="none" stroke="rgba(129,140,248,0.15)" stroke-width="0.5">
-            <animate attributeName="r" from="0" to="60" dur={`${6 + i * 2}s`} begin={`${i * 3}s`} repeatCount="indefinite" />
-            <animate attributeName="opacity" from="0.2" to="0" dur={`${6 + i * 2}s`} begin={`${i * 3}s`} repeatCount="indefinite" />
+            <Anim attributeName="r" from="0" to="60" dur={`${6 + i * 2}s`} begin={`${i * 3}s`} repeatCount="indefinite" />
+            <Anim attributeName="opacity" from="0.2" to="0" dur={`${6 + i * 2}s`} begin={`${i * 3}s`} repeatCount="indefinite" />
           </circle>
         ))}
       </svg>
@@ -1113,16 +1149,16 @@ function AbyssBg() {
             <ellipse cx="30" cy="26" rx="16" ry="12" fill="rgba(45,212,191,0.3)" />
             {/* Tentacles */}
             <path d="M18,46 Q14,56 17,66 Q19,72 16,78" fill="none" stroke="rgba(45,212,191,0.6)" stroke-width="1.5">
-              <animate attributeName="d" values="M18,46 Q14,56 17,66 Q19,72 16,78;M18,46 Q22,56 19,66 Q17,72 20,78;M18,46 Q14,56 17,66 Q19,72 16,78" dur="3s" repeatCount="indefinite" />
+              <Anim attributeName="d" values="M18,46 Q14,56 17,66 Q19,72 16,78;M18,46 Q22,56 19,66 Q17,72 20,78;M18,46 Q14,56 17,66 Q19,72 16,78" dur="3s" repeatCount="indefinite" />
             </path>
             <path d="M24,47 Q22,57 25,67 Q27,73 24,78" fill="none" stroke="rgba(45,212,191,0.5)" stroke-width="1.5">
-              <animate attributeName="d" values="M24,47 Q22,57 25,67 Q27,73 24,78;M24,47 Q26,57 23,67 Q21,73 26,78;M24,47 Q22,57 25,67 Q27,73 24,78" dur="3.5s" repeatCount="indefinite" />
+              <Anim attributeName="d" values="M24,47 Q22,57 25,67 Q27,73 24,78;M24,47 Q26,57 23,67 Q21,73 26,78;M24,47 Q22,57 25,67 Q27,73 24,78" dur="3.5s" repeatCount="indefinite" />
             </path>
             <path d="M36,47 Q38,57 35,67 Q33,73 36,78" fill="none" stroke="rgba(45,212,191,0.5)" stroke-width="1.5">
-              <animate attributeName="d" values="M36,47 Q38,57 35,67 Q33,73 36,78;M36,47 Q34,57 37,67 Q39,73 34,78;M36,47 Q38,57 35,67 Q33,73 36,78" dur="2.8s" repeatCount="indefinite" />
+              <Anim attributeName="d" values="M36,47 Q38,57 35,67 Q33,73 36,78;M36,47 Q34,57 37,67 Q39,73 34,78;M36,47 Q38,57 35,67 Q33,73 36,78" dur="2.8s" repeatCount="indefinite" />
             </path>
             <path d="M42,46 Q46,56 43,66 Q41,72 44,78" fill="none" stroke="rgba(45,212,191,0.6)" stroke-width="1.5">
-              <animate attributeName="d" values="M42,46 Q46,56 43,66 Q41,72 44,78;M42,46 Q38,56 41,66 Q43,72 40,78;M42,46 Q46,56 43,66 Q41,72 44,78" dur="3.2s" repeatCount="indefinite" />
+              <Anim attributeName="d" values="M42,46 Q46,56 43,66 Q41,72 44,78;M42,46 Q38,56 41,66 Q43,72 40,78;M42,46 Q46,56 43,66 Q41,72 44,78" dur="3.2s" repeatCount="indefinite" />
             </path>
           </svg>
         </div>
@@ -1141,13 +1177,13 @@ function AbyssBg() {
           <g>
             <circle cx={`${s.x}%`} cy={`${s.y}%`} r="0"
               fill="none" stroke="rgba(45,212,191,0.5)" stroke-width="2">
-              <animate attributeName="r" from="0" to="80" dur={`${s.dur}s`} begin={`${s.delay}s`} repeatCount="indefinite" />
-              <animate attributeName="opacity" from="0.8" to="0" dur={`${s.dur}s`} begin={`${s.delay}s`} repeatCount="indefinite" />
+              <Anim attributeName="r" from="0" to="80" dur={`${s.dur}s`} begin={`${s.delay}s`} repeatCount="indefinite" />
+              <Anim attributeName="opacity" from="0.8" to="0" dur={`${s.dur}s`} begin={`${s.delay}s`} repeatCount="indefinite" />
             </circle>
             <circle cx={`${s.x}%`} cy={`${s.y}%`} r="0"
               fill="none" stroke="rgba(34,211,238,0.4)" stroke-width="1.5">
-              <animate attributeName="r" from="0" to="80" dur={`${s.dur}s`} begin={`${s.delay + s.dur * 0.33}s`} repeatCount="indefinite" />
-              <animate attributeName="opacity" from="0.6" to="0" dur={`${s.dur}s`} begin={`${s.delay + s.dur * 0.33}s`} repeatCount="indefinite" />
+              <Anim attributeName="r" from="0" to="80" dur={`${s.dur}s`} begin={`${s.delay + s.dur * 0.33}s`} repeatCount="indefinite" />
+              <Anim attributeName="opacity" from="0.6" to="0" dur={`${s.dur}s`} begin={`${s.delay + s.dur * 0.33}s`} repeatCount="indefinite" />
             </circle>
           </g>
         ))}
@@ -1906,7 +1942,7 @@ function DraculaBg() {
             ['--wa' as string]: `${bat.waveAmp}px` }}>
           <path d="M15,6 Q10,0 5,3 Q2,1 0,4 Q3,5 5,5 Q8,8 12,7 L15,6 Q17,8 20,7 Q22,8 25,5 Q27,5 30,4 Q28,1 25,3 Q20,0 15,6Z"
             fill="rgba(189,147,249,0.8)" stroke="rgba(139,92,246,0.6)" stroke-width="0.5">
-            <animate attributeName="d"
+            <Anim attributeName="d"
               values="M15,6 Q10,0 5,3 Q2,1 0,4 Q3,5 5,5 Q8,8 12,7 L15,6 Q17,8 20,7 Q22,8 25,5 Q27,5 30,4 Q28,1 25,3 Q20,0 15,6Z;M15,6 Q10,3 5,5 Q2,4 0,6 Q3,6 5,6 Q8,7 12,6.5 L15,6 Q17,7 20,6.5 Q22,6 25,6 Q27,6 30,6 Q28,4 25,5 Q20,3 15,6Z;M15,6 Q10,0 5,3 Q2,1 0,4 Q3,5 5,5 Q8,8 12,7 L15,6 Q17,8 20,7 Q22,8 25,5 Q27,5 30,4 Q28,1 25,3 Q20,0 15,6Z"
               dur="0.4s" repeatCount="indefinite" />
           </path>
@@ -2268,26 +2304,26 @@ function LightningBg() {
               {/* Ultra-wide atmospheric scatter */}
               <path d={mainD} fill="none" stroke={`rgba(70,120,220,${0.3 * bolt.intensity})`} stroke-width="6"
                 stroke-linecap="round" stroke-linejoin="round"                opacity="0" {...NON_SCALING_STROKE}>
-                <animate attributeName="opacity" values={vals} keyTimes={times}
+                <Anim attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
               {/* Wide outer glow */}
               <path d={mainD} fill="none" stroke={`rgba(100,160,250,${0.5 * bolt.intensity})`} stroke-width="3.5"
                 stroke-linecap="round" stroke-linejoin="round"                opacity="0" {...NON_SCALING_STROKE}>
-                <animate attributeName="opacity" values={vals} keyTimes={times}
+                <Anim attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
               {/* Main channel */}
               <path d={mainD} fill="none" stroke={`rgba(190,215,255,${0.95 * bolt.intensity})`} stroke-width="1.6"
                 stroke-linecap="round" stroke-linejoin="round"                opacity="0" {...NON_SCALING_STROKE}>
-                <animate attributeName="opacity" values={vals} keyTimes={times}
+                <Anim attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
               {/* Hot white core */}
               <path d={mainD} fill="none" stroke="rgba(245,248,255,0.98)" stroke-width="0.6"
                 stroke-linecap="round" stroke-linejoin="round"
                 opacity="0" {...NON_SCALING_STROKE}>
-                <animate attributeName="opacity" values={vals} keyTimes={times}
+                <Anim attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </path>
               {/* Branches */}
@@ -2298,18 +2334,18 @@ function LightningBg() {
                   <g>
                     <path d={brD} fill="none" stroke={`rgba(120,170,250,${0.55 * bolt.intensity})`} stroke-width="2"
                       stroke-linecap="round" stroke-linejoin="round"                      opacity="0" {...NON_SCALING_STROKE}>
-                      <animate attributeName="opacity" values={vals} keyTimes={times}
+                      <Anim attributeName="opacity" values={vals} keyTimes={times}
                         dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
                     </path>
                     <path d={brD} fill="none" stroke={`rgba(180,210,255,${0.75 * bolt.intensity})`} stroke-width="1"
                       stroke-linecap="round" stroke-linejoin="round"                      opacity="0" {...NON_SCALING_STROKE}>
-                      <animate attributeName="opacity" values={vals} keyTimes={times}
+                      <Anim attributeName="opacity" values={vals} keyTimes={times}
                         dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
                     </path>
                     <path d={brD} fill="none" stroke="rgba(230,240,255,0.85)" stroke-width="0.4"
                       stroke-linecap="round" stroke-linejoin="round"
                       opacity="0" {...NON_SCALING_STROKE}>
-                      <animate attributeName="opacity" values={vals} keyTimes={times}
+                      <Anim attributeName="opacity" values={vals} keyTimes={times}
                         dur={`${c}s`} begin={`${branchDelay}s`} repeatCount="indefinite" />
                     </path>
                   </g>
@@ -2318,7 +2354,7 @@ function LightningBg() {
               {/* Ground strike illumination — wide spread */}
               <ellipse cx={endPt.x} cy={endPt.y + 3}
                 rx="14" ry="5" fill={`rgba(100,160,250,${0.5 * bolt.intensity})`} opacity="0">
-                <animate attributeName="opacity" values={vals} keyTimes={times}
+                <Anim attributeName="opacity" values={vals} keyTimes={times}
                   dur={`${c}s`} begin={`${bolt.delay}s`} repeatCount="indefinite" />
               </ellipse>
             </g>
@@ -2635,10 +2671,10 @@ function PhoenixBg() {
 
           {/* Eyes — twin points of white-hot light */}
           <circle cx="492" cy="342" r="2.5" fill="rgba(255,255,230,0.5)">
-            <animate attributeName="opacity" values="0.5;0.9;0.5" dur="3s" repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.5;0.9;0.5" dur="3s" repeatCount="indefinite" />
           </circle>
           <circle cx="508" cy="342" r="2.5" fill="rgba(255,255,230,0.5)">
-            <animate attributeName="opacity" values="0.5;0.9;0.5" dur="3s" begin="0.3s" repeatCount="indefinite" />
+            <Anim attributeName="opacity" values="0.5;0.9;0.5" dur="3s" begin="0.3s" repeatCount="indefinite" />
           </circle>
 
           {/* Beak */}
