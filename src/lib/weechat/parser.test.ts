@@ -563,6 +563,53 @@ describe('WeeRelayParser compressed frames', () => {
 		expect(compressed.objects).toEqual(plain.objects);
 	});
 
+	it('throws a clear, actionable error when DecompressionStream is unavailable', async () => {
+		// Older Safari/WebViews do not implement DecompressionStream. A compressed
+		// relay frame (compression byte = 1) must then fail with an actionable hint
+		// — not a cryptic generic decode failure.
+		const realDecompressionStream = globalThis.DecompressionStream;
+		// @ts-expect-error deliberately remove the API to simulate an old browser.
+		delete globalThis.DecompressionStream;
+		try {
+			const w = new BinWriter();
+			w.u32(7).u8(1).raw([0x78, 0x9c]);
+
+			await expect(parser.parse(w.build().buffer as ArrayBuffer)).rejects.toThrow(
+				/lacks DecompressionStream/
+			);
+			await expect(parser.parse(w.build().buffer as ArrayBuffer)).rejects.toThrow(
+				/Disable relay compression/
+			);
+		} finally {
+			globalThis.DecompressionStream = realDecompressionStream;
+		}
+	});
+
+	it('does not consult DecompressionStream for an uncompressed frame even when it is absent', async () => {
+		// The guard must not regress the compression=0 fast path: an uncompressed
+		// frame decodes normally regardless of DecompressionStream availability.
+		const realDecompressionStream = globalThis.DecompressionStream;
+		// @ts-expect-error deliberately remove the API to simulate an old browser.
+		delete globalThis.DecompressionStream;
+		try {
+			const msg = await parseFrame('_version', new BinWriter().typ('str').str('plain'));
+			expect(msg.id).toBe('_version');
+			expect(msg.objects[0]!.value).toBe('plain');
+		} finally {
+			globalThis.DecompressionStream = realDecompressionStream;
+		}
+	});
+
+	it('decodes a genuine compressed frame unchanged when DecompressionStream is present', async () => {
+		// Behavior with the API present must be identical to before the guard.
+		const body = new BinWriter().typ('str').str('still works 🐻');
+
+		const msg = await parser.parse(compressedFrame('_version', body));
+
+		expect(msg.id).toBe('_version');
+		expect(msg.objects[0]!.value).toBe('still works 🐻');
+	});
+
 	it('rejects a decompressed message that exceeds the 64MB limit', async () => {
 		// The cap is checked on the DECOMPRESSED size (parser.ts:319-321), before
 		// any object parsing. Driving that with a genuine 64MB+ zlib stream means

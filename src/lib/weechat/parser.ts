@@ -96,8 +96,19 @@ class Reader {
 	}
 }
 
-// Decompress a zlib-wrapped deflate payload using DecompressionStream
+// Decompress a zlib-wrapped deflate payload using DecompressionStream.
+//
+// DecompressionStream is absent on older Safari/WebViews. Guard before use so a
+// compressed relay frame surfaces a clear, actionable error the connect path can
+// display — instead of a cryptic "DecompressionStream is not defined" that the
+// per-frame catch would otherwise report as a generic "Relay parse error".
 async function decompress(data: Uint8Array): Promise<ArrayBuffer> {
+	if (typeof DecompressionStream === 'undefined') {
+		throw new Error(
+			'This browser lacks DecompressionStream, required to decode a compressed relay frame. ' +
+				'Disable relay compression in the connection settings, or use a newer browser.'
+		);
+	}
 	const stream = new DecompressionStream('deflate');
 	const writer = stream.writable.getWriter();
 	const reader = stream.readable.getReader();
