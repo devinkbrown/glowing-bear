@@ -26,6 +26,12 @@ self.addEventListener('fetch', () => {
   return;
 });
 
+// E2EE DM envelope prefix (see src/lib/e2ee/dmCipher.ts ENVELOPE_PREFIX). The
+// server never holds DM plaintext, so a pushed DM `text` is the ciphertext
+// envelope; the SW cannot decrypt it. Keep this in lockstep with dmCipher.ts.
+const E2EE_ENVELOPE_PREFIX = 'TSUMUGI1 ';
+const ENCRYPTED_BODY = 'New encrypted message';
+
 // ── Push notifications ─────────────────────────────────────────────────────────
 self.addEventListener('push', (event) => {
   let data = {};
@@ -37,9 +43,14 @@ self.addEventListener('push', (event) => {
   // Orochi's webpushNotify sends {type:'dm', from, text} (RFC 8291-encrypted
   // end to end); map it onto the generic {title, body, url} shape.
   if (data.type === 'dm' && data.from) {
+    const text = typeof data.text === 'string' ? data.text : '';
+    // Fail closed: an E2EE-DM envelope is ciphertext the SW can't open — never
+    // surface it (or any raw blob) to an OS alert that may render on a lock
+    // screen. Show a neutral body instead.
+    const body = text.startsWith(E2EE_ENVELOPE_PREFIX) ? ENCRYPTED_BODY : text;
     data = {
       title: `Message from ${data.from}`,
-      body: data.text ?? '',
+      body,
       tag: `darkbear-dm-${data.from}`,
       url: '/darkbear/',
     };

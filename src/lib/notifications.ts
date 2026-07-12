@@ -1,6 +1,29 @@
+import { ENVELOPE_PREFIX, LOCKED_PLACEHOLDER } from './e2ee/dmCipher';
+
 const ICON = '/darkbear/favicon.svg';
 const NOTIFY_TIMEOUT = 5000;
 const TITLE_BASE = 'DarkBear';
+
+/**
+ * Neutral body shown for a DM that reaches the alert path unreadable — an
+ * unopened TSUMUGI1 ciphertext envelope or the locked placeholder. OS
+ * notifications can render on a lock screen, so ciphertext (or a decrypt-failed
+ * sentinel) must never surface there. Decrypt happens upstream; if it didn't,
+ * we fail CLOSED to this string.
+ */
+export const ENCRYPTED_BODY = 'New encrypted message';
+
+/**
+ * Fail closed for E2EE DMs. Returns a neutral string when `body` is an
+ * unreadable encrypted DM; otherwise returns the plaintext untouched. Pure and
+ * DOM-free so the decision is exhaustively testable.
+ */
+export function safeNotificationBody(body: string): string {
+	if (body.startsWith(ENVELOPE_PREFIX) || body === LOCKED_PLACEHOLDER) {
+		return ENCRYPTED_BODY;
+	}
+	return body;
+}
 
 // iOS requires AudioContext to be created/resumed inside a user gesture.
 // We unlock it on first touch/click so subsequent playSound() calls work.
@@ -42,7 +65,7 @@ export function notify(title: string, body: string, icon?: string, bufferId?: st
 
 	try {
 		const n = new Notification(title, {
-			body,
+			body: safeNotificationBody(body),
 			icon: icon ?? ICON,
 			tag: title
 		});

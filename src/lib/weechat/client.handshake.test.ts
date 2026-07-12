@@ -106,12 +106,20 @@ function flushAsync(): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-/** Poll until `pred()` holds — PBKDF2 derivation resolves on a threadpool tick. */
-async function waitFor(pred: () => boolean, attempts = 100): Promise<void> {
-	for (let i = 0; i < attempts; i++) {
+/**
+ * Poll until `pred()` holds. PBKDF2 (100k+ iterations) resolves on a Web-Crypto
+ * threadpool tick whose wall-clock time varies with CPU load — a fixed count of
+ * zero-delay ticks can exhaust before it resolves (flaky under full-suite load).
+ * Use a real-time DEADLINE with a small delay so we wait long enough regardless
+ * of load, and throw on genuine timeout rather than silently passing through.
+ */
+async function waitFor(pred: () => boolean, timeoutMs = 5000): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
 		if (pred()) return;
-		await flushAsync();
+		await new Promise((r) => setTimeout(r, 5));
 	}
+	if (!pred()) throw new Error(`waitFor: predicate did not hold within ${timeoutMs}ms`);
 }
 
 let client: WeeRelayClient;
