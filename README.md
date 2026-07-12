@@ -12,7 +12,7 @@ Browser ──direct WS (orochi bridge)──▶ orochi                         
 ```
 
 - **Chat backbone**: the WeeChat relay protocol. WeeChat runs on your server as the bouncer; DarkBear speaks its binary relay protocol over WebSocket. Buffers, history, nicklists, hotlist — all relay-driven.
-- **Orochi bridge** (optional, Settings → Connection → Bridge): a persistent direct WebSocket session to the IRCXNet orochi server, auto-activated when the relay's network is detected as orochi/ophion. It carries:
+- **Orochi bridge** (optional, Settings → Connection → Bridge): a persistent direct WebSocket session to the IRCXNet orochi server, auto-activated when the relay's network is detected as Orochi. It carries:
   - **Voice/video/screenshare** — KaguraVox/KaguraVis WASM codecs over binary WS frames with per-stream HMAC, MEDIA control plane, EVENT MEDIA presence
   - **Typing notifications & emoji reactions** (TAGMSG) sent and received
   - **Read-marker sync** across devices (MARKREAD)

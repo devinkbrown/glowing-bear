@@ -13,12 +13,14 @@
    HTML-escapes the raw IRC text before injecting its own markup. */
 
 import { createMemo, createSignal, onCleanup, For, Match, Show, Switch } from 'solid-js';
+import type { JSX } from 'solid-js';
 import type { WeeChatLine } from '@/types';
 import type { BufferKind } from '@/lib/bufferKind';
 import { nickColor } from '@/lib/nickcolor';
 import { formatTimestamp } from '@/lib/timestamps';
 import { formatText, stripFormatting } from '@/lib/irc-classic/formatter';
 import { stripColors } from '@/lib/weechat/strip-colors';
+import { parseEventFeedText, type ParsedEventFeed } from '@/lib/ircx/parser';
 import { settings, sendInput, isBot } from '@/state';
 import { sendReactionTag, decryptedFor } from '@/state/bridge';
 
@@ -200,6 +202,66 @@ function SpecialLine(props: { line: WeeChatLine; kind: BufferKind }) {
   );
 }
 
+function eventTone(event: ParsedEventFeed): string {
+  const key = `${event.category} ${event.verb ?? ''}`;
+  if (/(CONNECT|JOIN|ROSTER)/.test(key)) return 'border-emerald-500/20 bg-emerald-500/[0.055] text-emerald-200';
+  if (/(DISCONNECT|LEAVE|QUIT|KILL|ERROR)/.test(key)) return 'border-rose-500/20 bg-rose-500/[0.055] text-rose-200';
+  if (/(MEDIA|SERVICE)/.test(key)) return 'border-sky-500/20 bg-sky-500/[0.055] text-sky-200';
+  if (/(OPER|SECURITY|POLICY)/.test(key)) return 'border-amber-500/20 bg-amber-500/[0.055] text-amber-200';
+  return 'border-[var(--custom-accent,#818cf8)]/20 bg-[var(--custom-accent,#818cf8)]/[0.055] text-gray-200';
+}
+
+function EventFeedLine(props: { event: ParsedEventFeed; timestamp: string; rowHandlers: JSX.HTMLAttributes<HTMLDivElement> }) {
+  const attrs = () => Object.entries(props.event.attrs);
+  const targetText = () => {
+    const pieces = [
+      props.event.channel,
+      props.event.subject,
+      props.event.sender,
+    ].filter(Boolean);
+    return pieces.join(' ');
+  };
+  const metaText = () => [props.event.source, props.event.target].filter(Boolean).join(' -> ');
+
+  return (
+    <div
+      class={`msg-row py-1.5 sm:py-1 ${eventTone(props.event)}`}
+      {...props.rowHandlers}
+    >
+      <Show when={props.timestamp}>
+        <span class="msg-ts">{props.timestamp}</span>
+      </Show>
+      <span class="msg-nick-spacer" />
+      <div class="msg-body min-w-0">
+        <div class="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-current/10 px-2 py-1 text-[12px] leading-snug">
+          <span class="rounded bg-current/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.14em]">
+            {props.event.category}
+          </span>
+          <Show when={props.event.verb}>
+            <span class="font-bold uppercase tracking-[0.08em]">{props.event.verb}</span>
+          </Show>
+          <Show when={targetText()}>
+            <span class="min-w-0 break-all text-gray-100/90">{targetText()}</span>
+          </Show>
+          <Show when={props.event.detail}>
+            <span class="min-w-0 break-words text-gray-300/75">- {props.event.detail}</span>
+          </Show>
+          <For each={attrs()}>
+            {([key, value]) => (
+              <span class="rounded border border-white/[0.08] bg-black/20 px-1.5 py-0.5 font-mono text-[10px] text-gray-300/80">
+                {key}={value}
+              </span>
+            )}
+          </For>
+          <Show when={metaText()}>
+            <span class="font-mono text-[10px] text-gray-500">{metaText()}</span>
+          </Show>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function MessageLine(props: MessageLineProps) {
@@ -228,6 +290,7 @@ export default function MessageLine(props: MessageLineProps) {
   const html = createMemo(() => cachedFormatText(props.line.id, displayText(), settings.inlineImages));
   const plainText = createMemo(() => stripFormatting(displayText()));
   const urls = createMemo(() => displayText().match(URL_RE) ?? []);
+  const eventFeed = createMemo(() => (props.bufferKind === 'raw' ? null : parseEventFeedText(displayText())));
 
   const timestamp = createMemo(() =>
     settings.timestampFormat === 'off' ? '' : formatTimestamp(props.line.date, settings.timestampFormat),
@@ -342,6 +405,10 @@ export default function MessageLine(props: MessageLineProps) {
       >
         <Match when={isSpecial()}>
           <SpecialLine line={props.line} kind={props.bufferKind} />
+        </Match>
+
+        <Match when={eventFeed()}>
+          {(event) => <EventFeedLine event={event()} timestamp={timestamp()} rowHandlers={rowHandlers} />}
         </Match>
 
         <Match when={isSystem()}>

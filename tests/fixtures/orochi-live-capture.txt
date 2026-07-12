@@ -127,11 +127,11 @@
 <<<A :eshmaki.me 730 dbtA3950 :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet
 >>>A MEDIA JOIN #dbtest19036 voice
 <<<A @orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA JOIN #dbtest19036 dbtA3950 voice
-<<<A :eshmaki.me NOTE MEDIA #dbtest19036 MACKEY CkJLQ8My54lDA9r5kcDReJH1pUxkDi2rL0DLhJeBmzc=
+<<<A :eshmaki.me EVENT dbtA3950 MEDIA MACKEY #dbtest19036 CkJLQ8My54lDA9r5kcDReJH1pUxkDi2rL0DLhJeBmzc=
 >>>A MEDIA ROSTER #dbtest19036
-<<<A :eshmaki.me NOTE MEDIA #dbtest19036 ROSTER dbtA3950 voice main 0 0 -
+<<<A :eshmaki.me EVENT dbtA3950 MEDIA ROSTER #dbtest19036 dbtA3950 voice main 0 0 -
 >>>A MEDIA LEAVE #dbtest19036
-<<<A :eshmaki.me NOTE MEDIA #dbtest19036 :End of roster (1)
+<<<A :eshmaki.me EVENT dbtA3950 MEDIA ROSTER-END #dbtest19036 count=1
 <<<A @orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA LEAVE #dbtest19036 dbtA3950
 >>>A LISTX
 <<<A :eshmaki.me 811 dbtA3950 Channel Members CreatedMs TopicMs :Topic

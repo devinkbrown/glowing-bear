@@ -23,6 +23,13 @@ export interface SuimyakuRoomStats {
   audio_kbps:     number;
 }
 
+export interface SuimyakuTranscriptEntry {
+  channel: string;
+  nick:    string;
+  text:    string;
+  time:    number;
+}
+
 /** 0 = excellent  1 = good  2 = fair  3 = poor */
 export type NetworkQualityTier = 0 | 1 | 2 | 3;
 
@@ -47,6 +54,8 @@ export interface SuimyakuMediaCallbacks {
   onPresence?:       (nick: string, available: boolean) => void;
   onNetworkQuality?: (tier: NetworkQualityTier, suggestedBps: number) => void;
   onReaction?:       (nick: string, emoji: string) => void;
+  onHand?:           (nick: string, raised: boolean) => void;
+  onCaption?:        (entry: SuimyakuTranscriptEntry, live: boolean) => void;
   onRecordingAlert?: (nick: string, started: boolean) => void;
   onRoomNearFull?:   () => void;
   onRecordConsent?:  (nick: string) => void;

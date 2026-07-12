@@ -85,6 +85,8 @@ vi.mock('@/lib/credentials', () => ({
 }));
 
 vi.mock('@/lib/irc/nodes', () => ({
+  NODES: [{ id: 'mock', host: 'auto.invalid', wss: 'wss://auto.invalid' }],
+  nodeFromWssGateway: vi.fn((wss: string, id = 'detected') => ({ id, host: 'detected.invalid', wss })),
   selectBestNode: vi.fn(() => Promise.resolve({ wss: 'wss://auto.invalid' })),
 }));
 
@@ -398,12 +400,12 @@ describe('NOTE routing', () => {
     expect(vi.mocked(credentials.storeSessionToken)).toHaveBeenCalledWith('tok-abc123');
   });
 
-  it('passes NOTE MEDIA / EVENT MEDIA lines through untouched', async () => {
+  it('passes EVENT MEDIA lines through untouched', async () => {
     const { deliver, credentials } = await setup();
     expect(() => {
-      deliver(serverLine('NOTE MEDIA #dbtest19036 MACKEY'));
-      deliver(serverLine('ROSTER dbtA3950 voice main'));
-      deliver(serverLine('EVENT dbtA3950 MEDIA JOIN'));
+      deliver(serverLine('EVENT dbtA3950 MEDIA MACKEY #dbtest19036'));
+      deliver(serverLine('EVENT dbtA3950 MEDIA ROSTER #dbtest19036 dbtA3950 voice main'));
+      deliver(serverLine('EVENT dbtA3950 MEDIA JOIN #dbtest19036 dbtA3950 voice'));
     }).not.toThrow();
     expect(vi.mocked(credentials.storeSessionToken)).not.toHaveBeenCalled();
   });

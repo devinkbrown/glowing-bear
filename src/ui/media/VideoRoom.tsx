@@ -162,19 +162,38 @@ function FullOverlay(props: PillProps) {
   let burstTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(burstTimer));
 
-  const fireReaction = (emoji: string) => {
-    sendRoomReaction(emoji);
-    setReactionsOpen(false);
+  const showReactionBurst = (emoji: string) => {
     setBurst(emoji);
     clearTimeout(burstTimer);
     burstTimer = setTimeout(() => setBurst(null), REACTION_BURST_MS);
   };
+
+  const fireReaction = (emoji: string) => {
+    sendRoomReaction(emoji);
+    setReactionsOpen(false);
+    showReactionBurst(emoji);
+  };
+
+  createEffect(() => {
+    const onReaction = (event: Event) => {
+      const emoji = (event as CustomEvent<{ emoji?: string }>).detail?.emoji;
+      if (emoji) showReactionBurst(emoji);
+    };
+    window.addEventListener('darkbear:voice-reaction', onReaction);
+    onCleanup(() => window.removeEventListener('darkbear:voice-reaction', onReaction));
+  });
 
   const selfNick = createMemo(() => bridgeState.nick ?? 'you');
   const peerNicks = createMemo(() =>
     Object.keys(mediaState.peers).sort((a, b) => a.localeCompare(b)),
   );
   const participantCount = createMemo(() => peerNicks().length + 1);
+  const latestCaption = createMemo(() => {
+    const ch = mediaState.channel?.toLowerCase();
+    if (!ch) return mediaState.liveCaption;
+    const entries = mediaState.transcripts[ch] ?? [];
+    return entries[entries.length - 1] ?? null;
+  });
 
   // Spotlight target, when valid: our own nick or a live peer.
   const spotNick = createMemo<string | null>(() => {
@@ -288,6 +307,15 @@ function FullOverlay(props: PillProps) {
                   )}
                 </For>
               </div>
+            </div>
+          )}
+        </Show>
+
+        <Show when={latestCaption()}>
+          {(caption) => (
+            <div class="mt-4 mx-auto max-w-3xl w-full rounded-xl border border-white/[0.08] bg-black/55 backdrop-blur-md px-4 py-2 text-center shadow-xl shadow-black/20">
+              <span class="mr-2 text-[11px] font-semibold text-emerald-200">{caption().nick}</span>
+              <span class="text-[13px] sm:text-[14px] leading-snug text-gray-100 break-words">{caption().text}</span>
             </div>
           )}
         </Show>
@@ -410,6 +438,7 @@ function Tile(props: TileProps) {
     () => !props.isSelf && ((peer()?.speaking ?? false) || mediaState.speakingNick === props.nick),
   );
   const muted = createMemo(() => (props.isSelf ? mediaState.selfMuted : peer()?.muted ?? false));
+  const handRaised = createMemo(() => !props.isSelf && !!mediaState.raisedHands[props.nick]);
   const level = createMemo(() => Math.min(1, Math.max(0, peer()?.audioLevel ?? 0)));
   const mirror = createMemo(() => props.isSelf && mediaState.cameraOn && !mediaState.screenSharing);
   const color = createMemo(() => nickColor(props.nick));
@@ -461,7 +490,7 @@ function Tile(props: TileProps) {
       onClick={() => props.onSpotlight(props.nick)}
       class={frameClass()}
       title={props.spotlit ? 'Exit spotlight' : `Spotlight ${props.nick}`}
-      aria-label={`${props.nick}${props.isSelf ? ' (you)' : ''}${speaking() ? ', speaking' : ''}${muted() ? ', muted' : ''}`}
+      aria-label={`${props.nick}${props.isSelf ? ' (you)' : ''}${speaking() ? ', speaking' : ''}${muted() ? ', muted' : ''}${handRaised() ? ', hand raised' : ''}`}
       aria-pressed={props.spotlit}
     >
       <video
@@ -499,6 +528,9 @@ function Tile(props: TileProps) {
           </Show>
           <Show when={props.isSelf && mediaState.selfDeafened}>
             <span class="text-red-300 shrink-0" title="Deafened"><IconDeafen slashed size={11} /></span>
+          </Show>
+          <Show when={handRaised()}>
+            <span class="text-amber-200 shrink-0" title="Hand raised">✋</span>
           </Show>
         </span>
         <Show when={speaking()}>

@@ -44,6 +44,10 @@ import {
   clearAccessRequest,
   addAccess,
   removeAccess,
+  requestChannelList,
+  addChannelListRow,
+  finishChannelList,
+  clearChannelList,
   markBot,
   unmarkBot,
   isBot,
@@ -132,9 +136,10 @@ describe('ircx store', () => {
     it('markOrochi flags a server and isOrochiServer looks it up', () => {
       expect(isOrochiServer('esh')).toBe(false);
 
-      markOrochi('esh');
+      markOrochi('esh', 'wss://eshmaki.me:8080');
 
       expect(isOrochiServer('esh')).toBe(true);
+      expect(ircxState.orochiGateways['esh']).toBe('wss://eshmaki.me:8080');
       expect(isOrochiServer('other')).toBe(false);
       expect(isOrochiServer(undefined)).toBe(false);
       expect(isOrochiServer('')).toBe(false);
@@ -310,6 +315,54 @@ describe('ircx store', () => {
     });
   });
 
+  describe('channel list flow', () => {
+    it('requestChannelList sends LIST to the active server and marks loading', () => {
+      requestChannelList({ pattern: '#d*', minUsers: '1', maxUsers: '25' });
+
+      expect(ircxState.channelList.status).toBe('loading');
+      expect(ircxState.channelList.rows).toEqual([]);
+      expect(ircxState.channelList.query).toBe('#d* >1,<25');
+      expect(sendToMock).toHaveBeenCalledWith(SRV, '/quote LIST #d* >1,<25');
+    });
+
+    it('requestChannelList can use Orochi LISTX', () => {
+      requestChannelList({ extended: true });
+
+      expect(ircxState.channelList.extended).toBe(true);
+      expect(sendToMock).toHaveBeenCalledWith(SRV, '/quote LISTX');
+    });
+
+    it('dedupes rows by channel and finishChannelList marks the result ready', () => {
+      addChannelListRow({ channel: '#root', users: 1, topic: 'old' });
+      addChannelListRow({ channel: '#root', users: 3, topic: 'new' });
+      addChannelListRow({ channel: '#chat', users: 2, topic: '' });
+
+      finishChannelList();
+
+      expect(ircxState.channelList.status).toBe('ready');
+      expect(ircxState.channelList.rows).toEqual([
+        { channel: '#root', users: 3, topic: 'new' },
+        { channel: '#chat', users: 2, topic: '' },
+      ]);
+      expect(ircxState.channelList.updatedAt).not.toBeNull();
+    });
+
+    it('clearChannelList resets the browser state', () => {
+      addChannelListRow({ channel: '#root', users: 1, topic: '' });
+      finishChannelList();
+
+      clearChannelList();
+
+      expect(ircxState.channelList).toEqual({
+        status: 'idle',
+        rows: [],
+        query: '',
+        extended: false,
+        updatedAt: null,
+      });
+    });
+  });
+
   describe('bot and account tags', () => {
     it('markBot / isBot are case-insensitive; unmarkBot removes', () => {
       markBot('HelperBot');
@@ -440,6 +493,7 @@ describe('ircx store', () => {
       clearIrcx();
 
       expect(ircxState.orochiServers).toEqual({});
+      expect(ircxState.orochiGateways).toEqual({});
       expect(ircxState.channelProps).toEqual({});
       expect(ircxState.userProfiles).toEqual({});
       expect(ircxState.accessLists).toEqual({});

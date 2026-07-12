@@ -1,7 +1,7 @@
 {
   "name": "DarkBear",
   "short_name": "DarkBear",
-  "description": "DarkBear IRC client with Ophion LADON media controls",
+  "description": "DarkBear IRC client with Orochi media controls",
   "start_url": "/darkbear/",
   "display": "standalone",
   "background_color": "#0a0b10",

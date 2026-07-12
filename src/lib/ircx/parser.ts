@@ -1,5 +1,6 @@
 import type { PropEntry, AccessEntry, AccessLevel } from './types';
 import type { WeeChatLine } from '@/lib/weechat/model';
+import { parseIRCMessage } from '@/lib/irc/parser';
 
  
 const STRIP_RE = /\x19[^\x1c]?|\x1a.|\x1c|\x02|\x0f|\x11|\x16|\x1d|\x1e|\x1f|\x03(\d{1,2}(,\d{1,2})?)?/g;
@@ -63,6 +64,33 @@ export interface ParsedError {
   message: string;
 }
 
+export interface ParsedChannelListRow {
+  type: 'channel_list_row';
+  channel: string;
+  users: number;
+  topic: string;
+  modes?: string;
+}
+
+export interface ParsedChannelListEnd {
+  type: 'channel_list_end';
+}
+
+export interface ParsedEventFeed {
+  type: 'event_feed';
+  kind: 'event' | 'note' | 'observe' | 'media';
+  raw: string;
+  source?: string;
+  target?: string;
+  category: string;
+  verb?: string;
+  channel?: string;
+  subject?: string;
+  sender?: string;
+  detail?: string;
+  attrs: Record<string, string>;
+}
+
 export type IrcxParsed =
   | ParsedProp
   | ParsedPropEnd
@@ -70,6 +98,8 @@ export type IrcxParsed =
   | ParsedAccessStart
   | ParsedAccessEnd
   | ParsedEvent
+  | ParsedChannelListRow
+  | ParsedChannelListEnd
   | ParsedError;
 
 export function parseIrcxLine(line: WeeChatLine): IrcxParsed | null {
@@ -94,7 +124,11 @@ export function parseIrcxLine(line: WeeChatLine): IrcxParsed | null {
     case '808': return { type: 'event_start' };
     case '809': return parseEventAck('event_list', plain);
     case '810': return { type: 'event_end' };
-    case '825': return { type: 'event_change' };
+    case '825': return parseEventChange(plain);
+    case '322': return parseChannelListRow(plain);
+    case '323': return { type: 'channel_list_end' };
+    case '812': return parseListxRow(plain);
+    case '817': return { type: 'channel_list_end' };
     case '913':
     case '915':
     case '916':
@@ -105,6 +139,11 @@ export function parseIrcxLine(line: WeeChatLine): IrcxParsed | null {
     default:
       return null;
   }
+}
+
+export function isChannelListNumeric(tags: string[]): boolean {
+  const num = findIrcNumeric(tags);
+  return num === '321' || num === '322' || num === '323' || num === '812' || num === '817';
 }
 
 // 818: "<target> <key> :<value>"
@@ -173,11 +212,178 @@ function parseAccessEntry(plain: string, type: 'access_entry' | 'access_add' | '
 }
 
 // 806/807/809: "<category> <mask> :<text>"  (category/mask absent on some acks)
+const EVENT_TYPES = new Set([
+  'CHANNEL', 'MEMBER', 'USER', 'MEDIA',
+  'CONNECT', 'DISCONNECT', 'SERVER_LINK', 'FLOOD', 'ERROR', 'ANNOUNCE',
+  'OPER_ACTION', 'KILL', 'SPAM', 'DEBUG', 'POLICY', 'SERVICE', 'SECURITY',
+]);
+
 function parseEventAck(type: 'event_add' | 'event_delete' | 'event_list', plain: string): ParsedEvent {
   const colonIdx = plain.indexOf(' :');
   const before = colonIdx !== -1 ? plain.slice(0, colonIdx) : plain;
-  const parts = before.split(/\s+/).filter(Boolean);
+  let parts = before.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2 && !EVENT_TYPES.has(parts[0]!.toUpperCase()) && EVENT_TYPES.has(parts[1]!.toUpperCase())) {
+    parts = parts.slice(1);
+  }
   return { type, eventType: parts[0], mask: parts[1] };
+}
+
+function parseEventChange(plain: string): ParsedEvent {
+  const parsed = parseEventAck('event_list', plain);
+  return { type: 'event_change', eventType: parsed.eventType, mask: parsed.mask };
+}
+
+function tokenizeIrcish(text: string): string[] {
+  const out: string[] = [];
+  let rest = text.trim();
+  while (rest) {
+    if (rest[0] === ':') {
+      out.push(rest.slice(1));
+      break;
+    }
+    const idx = rest.indexOf(' ');
+    if (idx === -1) {
+      out.push(rest);
+      break;
+    }
+    out.push(rest.slice(0, idx));
+    rest = rest.slice(idx + 1).trimStart();
+  }
+  return out.filter(Boolean);
+}
+
+function attrsFrom(parts: string[]): { attrs: Record<string, string>; rest: string[] } {
+  const attrs: Record<string, string> = {};
+  const rest: string[] = [];
+  for (const part of parts) {
+    const eq = part.indexOf('=');
+    if (eq > 0) attrs[part.slice(0, eq)] = part.slice(eq + 1);
+    else rest.push(part);
+  }
+  return { attrs, rest };
+}
+
+function parseEventParams(params: string[], raw: string, source?: string): ParsedEventFeed | null {
+  if (params.length < 2) return null;
+  const target = params[0];
+  const category = params[1]?.toUpperCase();
+  if (!category) return null;
+
+  if (category === 'OBSERVE') {
+    const action = params[2];
+    const subject = params[3];
+    const { attrs, rest } = attrsFrom(params.slice(4));
+    return {
+      type: 'event_feed',
+      kind: 'observe',
+      raw,
+      source,
+      target,
+      category,
+      verb: action?.toUpperCase(),
+      subject,
+      detail: rest.join(' ') || undefined,
+      attrs,
+    };
+  }
+
+  if (category === 'MEDIA') {
+    const verb = params[2]?.toUpperCase();
+    const channel = params[3]?.match(/^[#&]/) ? params[3] : undefined;
+    const subject = channel ? params[4] : params[3];
+    const { attrs, rest } = attrsFrom(params.slice(channel ? 5 : 4));
+    return {
+      type: 'event_feed',
+      kind: 'media',
+      raw,
+      source,
+      target,
+      category,
+      verb,
+      channel,
+      subject,
+      detail: rest.join(' ') || undefined,
+      attrs,
+    };
+  }
+
+  const verb = params[2]?.toUpperCase();
+  const subject = params[3];
+  const { attrs, rest } = attrsFrom(params.slice(subject ? 4 : 3));
+  return {
+    type: 'event_feed',
+    kind: 'event',
+    raw,
+    source,
+    target,
+    category,
+    verb,
+    subject,
+    detail: rest.join(' ') || undefined,
+    attrs,
+  };
+}
+
+function parseNoteEventParams(params: string[], raw: string, source?: string): ParsedEventFeed | null {
+  if ((params[0] ?? '').toUpperCase() !== 'EVENT') return null;
+  const category = params[1]?.toUpperCase();
+  if (!category) return null;
+  const body = params.slice(2).join(' ').trim();
+  const senderSplit = body.match(/^([^:]+):\s*(.*)$/);
+  return {
+    type: 'event_feed',
+    kind: 'note',
+    raw,
+    source,
+    category,
+    sender: senderSplit?.[1]?.trim() || undefined,
+    detail: senderSplit ? senderSplit[2]?.trim() || undefined : body || undefined,
+    attrs: {},
+  };
+}
+
+/** Parse live Event Spine feed lines, including raw IRC and WeeChat-rendered text. */
+export function parseEventFeedText(text: string): ParsedEventFeed | null {
+  let plain = strip(text);
+  if (!plain.includes('EVENT')) return null;
+  plain = unwrapWeechatUnknownEventLine(plain);
+  plain = normalizeBareEventTags(plain);
+
+  if (plain[0] === '@' || plain[0] === ':') {
+    const msg = parseIRCMessage(plain);
+    if (msg.command === 'EVENT') return parseEventParams(msg.params, plain, msg.prefix ?? undefined);
+    if (msg.command === 'NOTE') return parseNoteEventParams(msg.params, plain, msg.prefix ?? undefined);
+  }
+
+  const parts = tokenizeIrcish(plain);
+  if (parts.length === 0) return null;
+  const upper = parts.map((p) => p.toUpperCase());
+
+  if (upper[0] === 'NOTE') return parseNoteEventParams(parts.slice(1), plain);
+  if (upper[0] === 'EVENT') return parseEventParams(parts.slice(1), plain);
+
+  const eventIdx = upper.indexOf('EVENT');
+  if (eventIdx === -1) return null;
+  const source = eventIdx > 0 ? parts[eventIdx - 1] : undefined;
+
+  if (eventIdx > 0 && upper[eventIdx - 1] === 'NOTE') {
+    return parseNoteEventParams(parts.slice(eventIdx), plain, eventIdx > 1 ? parts[eventIdx - 2] : undefined);
+  }
+  return parseEventParams(parts.slice(eventIdx + 1), plain, source);
+}
+
+function unwrapWeechatUnknownEventLine(plain: string): string {
+  const match = plain.match(/command\s+"EVENT"\s+not found:\s+(.+)$/i);
+  if (!match) return plain;
+  return match[1]!.trim().replace(/^"|"$/g, '');
+}
+
+function normalizeBareEventTags(plain: string): string {
+  if (plain[0] === '@' || plain[0] === ':') return plain;
+  if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+=/.test(plain) && plain.includes(' :')) {
+    return `@${plain}`;
+  }
+  return plain;
 }
 
 // 803: "<channel> :Start of access entries"
@@ -198,6 +404,48 @@ function parseError(numeric: string, plain: string): ParsedError {
   const colonIdx = plain.indexOf(' :');
   const message = colonIdx !== -1 ? plain.slice(colonIdx + 2) : parts.slice(1).join(' ');
   return { type: 'ircx_error', numeric, target, message };
+}
+
+function dropRequester(parts: string[]): string[] {
+  if (parts.length >= 2 && !/^[#&]/.test(parts[0]!) && /^[#&]/.test(parts[1]!)) {
+    return parts.slice(1);
+  }
+  return parts;
+}
+
+// 322: "[<me>] <#channel> <users> :<topic>"
+function parseChannelListRow(plain: string): ParsedChannelListRow | null {
+  const colonIdx = plain.indexOf(' :');
+  const before = colonIdx !== -1 ? plain.slice(0, colonIdx) : plain;
+  const topic = colonIdx !== -1 ? plain.slice(colonIdx + 2) : '';
+  const parts = dropRequester(before.split(/\s+/).filter(Boolean));
+  const channel = parts[0] ?? '';
+  if (!/^[#&]/.test(channel)) return null;
+  const users = parseInt(parts[1] ?? '0', 10);
+  return {
+    type: 'channel_list_row',
+    channel,
+    users: Number.isFinite(users) ? users : 0,
+    topic: topic || parts.slice(2).join(' '),
+  };
+}
+
+// Orochi LISTX live shape: "[<me>] <#channel> <users> <modes> <created> :<topic>"
+function parseListxRow(plain: string): ParsedChannelListRow | null {
+  const colonIdx = plain.indexOf(' :');
+  const before = colonIdx !== -1 ? plain.slice(0, colonIdx) : plain;
+  const topic = colonIdx !== -1 ? plain.slice(colonIdx + 2) : '';
+  const parts = dropRequester(before.split(/\s+/).filter(Boolean));
+  const channel = parts[0] ?? '';
+  if (!/^[#&]/.test(channel)) return null;
+  const users = parseInt(parts[1] ?? '0', 10);
+  return {
+    type: 'channel_list_row',
+    channel,
+    users: Number.isFinite(users) ? users : 0,
+    modes: parts.slice(2).join(' '),
+    topic,
+  };
 }
 
 export function buildPropEntry(parsed: ParsedProp): PropEntry {

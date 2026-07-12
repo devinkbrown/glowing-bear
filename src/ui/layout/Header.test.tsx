@@ -18,6 +18,7 @@ import {
   disconnect,
   resetSettings,
   setActiveBuffer,
+  uiState,
   upsertBuffer,
 } from '@/state';
 import { joinRoom, startCall } from '@/state/media';
@@ -217,5 +218,16 @@ describe('Header', () => {
     const { queryByLabelText } = render(() => <Header />);
     expect(queryByLabelText('Join voice')).toBeNull();
     expect(queryByLabelText('Join video')).toBeNull();
+  });
+
+  it('opens the channel browser from the top bar while connected', () => {
+    goOnline();
+    upsertBuffer(CHANNEL);
+    setActiveBuffer('0xc');
+
+    const { getByLabelText } = render(() => <Header />);
+
+    fireEvent.click(getByLabelText('Browse channels'));
+    expect(uiState.activeModal).toBe('channelList');
   });
 });

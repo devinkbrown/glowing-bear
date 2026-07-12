@@ -27,8 +27,10 @@ import {
   type RelayErrorEvent,
   type StateChangedEvent,
 } from '@/lib/weechat/client';
+import { stripColors } from '@/lib/weechat/strip-colors';
 import { notify, playSound, updateTitle } from '@/lib/notifications';
-import { isIrcxNumeric, parseIrcxLine, buildPropEntry } from '@/lib/ircx/parser';
+import { isChannelListNumeric, isIrcxNumeric, parseIrcxLine, buildPropEntry } from '@/lib/ircx/parser';
+import { NODES, wssUrlForOrochiHost } from '@/lib/irc/nodes';
 import type { BufferEntry } from '@/types';
 import { settings } from './settings';
 import {
@@ -62,6 +64,8 @@ import {
   finishPropList,
   addAccessEntry,
   finishAccessList,
+  addChannelListRow,
+  finishChannelList,
   markBot,
   setAccount,
   requestProps,
@@ -79,8 +83,9 @@ import {
 
 const PING_INTERVAL_MS = 15_000;
 const QUERY_PENDING_TIMEOUT_MS = 10_000;
-const OROCHI_RE = /\b(ophion|orochi)\b/i;
+const OROCHI_RE = /\borochi\b/i;
 const BRIDGE_REQUIRED_MSG = 'voice/video requires the orochi bridge (enable in Settings → Bridge)';
+const OROCHI_HOSTS = new Set(NODES.map((node) => node.host.toLowerCase()));
 
 // ---------------------------------------------------------------------------
 // Bridge seams
@@ -106,7 +111,7 @@ export type RelayObserver = {
    * replayed for pre-existing channels the moment a server is detected). */
   onChannelBufferOpened?(serverName: string, channel: string): void;
   /** A server identified as orochi via 004 (live or from history replay). */
-  onOrochiDetected?(serverName: string): void;
+  onOrochiDetected?(serverName: string, wssGateway?: string): void;
 };
 
 let relayObserver: RelayObserver | null = null;
@@ -162,12 +167,8 @@ function on<T>(target: EventTarget, name: string, handler: (detail: T) => void):
   return () => target.removeEventListener(name, listener);
 }
 
-// Strip WeeChat/IRC color and formatting codes
- 
-const STRIP_CODES_RE = /\x19[^\x1c]?|\x1a.|\x1c|\x02|\x0f|\x11|\x16|\x1d|\x1e|\x1f|\x03(\d{1,2}(,\d{1,2})?)?/g;
-
 function stripCodes(s: string): string {
-  return s.replace(STRIP_CODES_RE, '').trim();
+  return stripColors(s);
 }
 
 function sendPing(): void {
@@ -284,11 +285,26 @@ function detectOperFromLine(line: WeeChatLine, entry: BufferEntry): void {
 // Orochi detection
 // ---------------------------------------------------------------------------
 
-function detectOrochiForEntry(entry: BufferEntry): void {
+function orochiGatewayFromMyinfo(message: string): string | undefined {
+  const parts = stripCodes(message).split(/\s+/).filter(Boolean);
+  const host = parts[1] ?? '';
+  return wssUrlForOrochiHost(host) ?? undefined;
+}
+
+function isOrochiMyinfo(message: string): boolean {
+  const plain = stripCodes(message);
+  if (OROCHI_RE.test(plain)) return true;
+  const parts = plain.split(/\s+/).filter(Boolean);
+  const host = parts[1]?.toLowerCase() ?? '';
+  return OROCHI_HOSTS.has(host);
+}
+
+function detectOrochiForEntry(entry: BufferEntry, line?: WeeChatLine): void {
   const sn = entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
   if (!sn || isOrochiServer(sn)) return;
-  markOrochi(sn);
-  relayObserver?.onOrochiDetected?.(sn);
+  const gateway = line ? orochiGatewayFromMyinfo(line.message) : undefined;
+  markOrochi(sn, gateway);
+  relayObserver?.onOrochiDetected?.(sn, gateway);
   // Replay channel-opened notifications for channels that existed before
   // detection so the bridge sees the full channel set.
   for (const e of Object.values(buffersState.buffers)) {
@@ -323,7 +339,7 @@ function handleLineAdded(line: WeeChatLine): void {
   }
 
   // IRCX numeric interception
-  if (isIrcxNumeric(line.tags)) {
+  if (isIrcxNumeric(line.tags) || isChannelListNumeric(line.tags)) {
     const parsed = parseIrcxLine(line);
     if (parsed) {
       switch (parsed.type) {
@@ -343,6 +359,17 @@ function handleLineAdded(line: WeeChatLine): void {
         case 'access_end':
           finishAccessList(parsed.channel);
           break;
+        case 'channel_list_row':
+          addChannelListRow({
+            channel: parsed.channel,
+            users: parsed.users,
+            topic: parsed.topic,
+            modes: parsed.modes,
+          });
+          break;
+        case 'channel_list_end':
+          finishChannelList();
+          break;
       }
     }
   }
@@ -358,9 +385,9 @@ function handleLineAdded(line: WeeChatLine): void {
   }
 
   // Orochi server detection via RPL_MYINFO (004)
-  if (line.tags.includes('irc_004') && OROCHI_RE.test(stripCodes(line.message))) {
+  if (line.tags.includes('irc_004') && isOrochiMyinfo(line.message)) {
     const bufEntry = buffersState.buffers[line.buffer];
-    if (bufEntry) detectOrochiForEntry(bufEntry);
+    if (bufEntry) detectOrochiForEntry(bufEntry, line);
   }
 
   const entry = buffersState.buffers[line.buffer];
@@ -520,8 +547,8 @@ export function connect(): void {
         const sn = entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
         if (sn && !isOrochiServer(sn)) {
           for (const line of lines) {
-            if (line.tags.includes('irc_004') && OROCHI_RE.test(stripCodes(line.message))) {
-              detectOrochiForEntry(entry);
+            if (line.tags.includes('irc_004') && isOrochiMyinfo(line.message)) {
+              detectOrochiForEntry(entry, line);
               break;
             }
           }

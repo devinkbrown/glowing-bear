@@ -18,7 +18,7 @@ import { createEffect, createRoot, createSignal } from 'solid-js';
 import { IRCClient } from '@/lib/irc/client';
 import type { IRCMessage } from '@/lib/irc/types';
 import { parseSessionMeshTokenNote, parseSessionTokenNote } from '@/lib/irc/parser';
-import { selectBestNode } from '@/lib/irc/nodes';
+import { NODES, nodeFromWssGateway, selectBestNode, type IrcNode } from '@/lib/irc/nodes';
 import {
   loadCredentials,
   saveCredentials,
@@ -189,6 +189,7 @@ let currentUrl = '';
 
 /** Detected orochi server names (lowercased), latched for the app session. */
 const orochiServers = new Set<string>();
+const orochiGateways = new Set<string>();
 const [orochiDetected, setOrochiDetected] = createSignal(false);
 
 /** channelLower → relay buffer pointer (inbound mapping). */
@@ -221,8 +222,9 @@ function trackChannel(channel: string, ptr: string): void {
   if (!known && welcomed && client) client.join(channel);
 }
 
-function noteOrochiServer(serverName: string): void {
+function noteOrochiServer(serverName: string, wssGateway?: string): void {
   orochiServers.add(serverName.toLowerCase());
+  if (wssGateway) orochiGateways.add(wssGateway);
   setOrochiDetected(true);
   for (const { channel, ptr } of sweepChannelBuffers(buffersState.buffers, orochiServers)) {
     trackChannel(channel, ptr);
@@ -275,7 +277,7 @@ function connectTo(url: string): void {
   c.extraMessageHandlers.add(onBridgeMessage);
   client = c;
   _setBridgeState({ status: 'connecting', nick });
-  // The media engine registers its own NOTE MEDIA / EVENT MEDIA + binary
+  // The media engine registers its own EVENT MEDIA + binary
   // handlers on this client — it consumes the media planes itself.
   _attachBridgeClient(c);
   c.connect();
@@ -295,7 +297,10 @@ async function startBridge(): Promise<void> {
   let url = pinned;
   if (!url) {
     try {
-      url = (await selectBestNode()).wss;
+      const detected = [...orochiGateways]
+        .map((wss, i) => nodeFromWssGateway(wss, `detected-${i}`))
+        .filter((node): node is IrcNode => node !== null);
+      url = (await selectBestNode([...detected, ...NODES])).wss;
     } catch {
       url = '';
     }
@@ -585,8 +590,8 @@ export function initBridge(): void {
   initialized = true;
 
   setRelayObserver({
-    onOrochiDetected(serverName) {
-      noteOrochiServer(serverName);
+    onOrochiDetected(serverName, wssGateway) {
+      noteOrochiServer(serverName, wssGateway);
     },
     onChannelBufferOpened(serverName, channel) {
       noteChannelBuffer(serverName, channel);
@@ -609,7 +614,7 @@ export function initBridge(): void {
 
   // Initial sweep: the relay may have detected orochi servers (and opened
   // channel buffers) before initBridge ran.
-  for (const sn of Object.keys(ircxState.orochiServers)) noteOrochiServer(sn);
+  for (const sn of Object.keys(ircxState.orochiServers)) noteOrochiServer(sn, ircxState.orochiGateways[sn]);
 
   // Settings are a Solid store — reactive tracking needs an owner scope.
   createRoot(() => {

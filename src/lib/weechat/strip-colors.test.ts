@@ -149,6 +149,10 @@ describe('stripColors IRC formatting', () => {
 	it('keeps a comma that is not followed by background digits', () => {
 		expect(stripColors('\x033,hi')).toBe(',hi');
 	});
+
+	it('strips IRC hex colors', () => {
+		expect(stripColors('\x04ff6600,001122hex')).toBe('hex');
+	});
 });
 
 describe('stripColors output hygiene', () => {

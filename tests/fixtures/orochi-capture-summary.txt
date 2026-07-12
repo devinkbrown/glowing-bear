@@ -24,9 +24,9 @@ METADATA SET reply: :eshmaki.me 761 dbtA3950 * ocean.display-name * :Capture A
 METADATA GET reply: :eshmaki.me 761 dbtB351 dbtA3950 ocean.display-name * :Capture A
 MONITOR online 730: :eshmaki.me 730 dbtA3950 :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet
 MEDIA JOIN reply: @orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA JOIN #dbtest19036 dbtA3950 voice
-MACKEY note: :eshmaki.me NOTE MEDIA #dbtest19036 MACKEY <redacted>
+MACKEY event: :eshmaki.me EVENT dbtA3950 MEDIA MACKEY #dbtest19036 <redacted>
 B sees MEDIA presence: NOT SEEN (B has no EVENT sub)
-MEDIA ROSTER reply: :eshmaki.me NOTE MEDIA #dbtest19036 ROSTER dbtA3950 voice main 0 0 -
+MEDIA ROSTER reply: :eshmaki.me EVENT dbtA3950 MEDIA ROSTER #dbtest19036 dbtA3950 voice main 0 0 -
 LISTX entry 812: :eshmaki.me 812 dbtA3950 #test 1 0 0 :
 LISTX end 817: :eshmaki.me 817 dbtA3950 :End of LISTX
 SESSION TOKEN note: not issued (guest)

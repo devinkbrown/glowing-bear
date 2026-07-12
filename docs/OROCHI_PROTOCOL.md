@@ -1,7 +1,7 @@
 # Orochi Protocol — Client Integration Reference (for Ocean)
 
 Everything a client needs to talk to **Orochi**, the pure-Zig clean-room
-sovereign-mesh IRC daemon (modern-only successor to C "Ophion"). This is the
+sovereign-mesh IRC daemon. This is the
 authoritative surface for refactoring Ocean's IRC layer (`lib/irc/`).
 
 Orochi is **modern-only**: there is **no STARTTLS**, **no WEBIRC**, **no identd /
@@ -358,7 +358,7 @@ operator/admin view.)
 
 `MEDIA <subcommand> <#channel> [args]` (feature-gated; control plane only — **media
 bytes never flow over the IRC socket**). You must be a channel member. All replies
-are `NOTE MEDIA …` lines; failures `FAIL MEDIA <CODE>`.
+are `EVENT <target> MEDIA …` Event Spine lines; failures `FAIL MEDIA <CODE>`.
 
 Subcommands: `JOIN <kind>` · `LEAVE` · `OFFER <codecs> [transport=webrtc]` ·
 `ANSWER <codecs>` · `ROSTER` · `PROFILE` · `STATS` · `MUTE`/`UNMUTE <kind>` ·
@@ -380,7 +380,7 @@ Subcommands: `JOIN <kind>` · `LEAVE` · `OFFER <codecs> [transport=webrtc]` ·
 
 `MEDIA ROSTER`/`SPEAKING`/`MUTE` give you the call roster + live speaking/mute state
 to render a Discord-style voice UI. `OFFER-ACK`/`ANSWER-ACK`/`TRANSPORT`/`NATIVE`
-`NOTE MEDIA` lines carry the negotiated transport + endpoint info.
+Event Spine media lines carry the negotiated transport + endpoint info.
 
 ---
 
@@ -486,6 +486,6 @@ Orochi is a CRDT **mesh** (not a TS6 tree). What a client sees:
 - [ ] Parse `time=`/`msgid=`/`account=` tags; render typing/react/reply TAGMSG tags.
 - [ ] Honor `MODES` (combine modes per line per the advertised value; live = 1).
 - [ ] Map service `FAIL`/`NOTE`/`NOTICE` replies to UI (REGISTER/IDENTIFY/CHANNEL/…).
-- [ ] Voice/video via `MEDIA` (control) + WebRTC RTP leg or native KAGURAVOX/KAGURAVIS WASM
-      codec; render roster/speaking/mute from `NOTE MEDIA`.
+- [ ] Voice/video via `MEDIA` control + KAGURAVOX/KAGURAVIS WASM codec; render
+      roster/speaking/mute from Event Spine `EVENT … MEDIA` lines.
 - [ ] Treat `:server NOTE EVENT <CAT> :…` and `EVENT … OBSERVE …` as the oper feed.

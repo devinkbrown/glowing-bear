@@ -16,6 +16,7 @@ import type {
   CallState as EngineCallState,
   SuimyakuMediaCallbacks,
   SuimyakuPeerState,
+  SuimyakuTranscriptEntry,
 } from '@/lib/suimyaku-media/types';
 import { startIncomingRing, startOutgoingRing, stopRing } from '@/lib/ringtone';
 import { bridgeRun, bridgeState } from './bridge';
@@ -34,6 +35,8 @@ export interface MediaPeer {
   audioLevel: number;
 }
 
+export type MediaTranscriptEntry = SuimyakuTranscriptEntry;
+
 interface MediaStateShape {
   callState: CallState;
   /** Voice/video room channel (null for 1:1 calls). */
@@ -50,6 +53,12 @@ interface MediaStateShape {
   screenSharing: boolean;
   /** Most recently speaking peer (for spotlight-follows-speaker UIs). */
   speakingNick: string | null;
+  /** Peers with raised hands, keyed by nick. */
+  raisedHands: Record<string, true>;
+  /** Last caption/transcript lines per room, keyed by lowercase channel. */
+  transcripts: Record<string, MediaTranscriptEntry[]>;
+  /** Most recent live caption for the current surface. */
+  liveCaption: MediaTranscriptEntry | null;
   minimized: boolean;
   spotlightNick: string | null;
   error: string | null;
@@ -70,6 +79,9 @@ function initialCallFields(): Omit<MediaStateShape, 'minimized' | 'mediaAvailabl
     cameraOn: false,
     screenSharing: false,
     speakingNick: null,
+    raisedHands: {},
+    transcripts: {},
+    liveCaption: null,
     spotlightNick: null,
     error: null,
   };
@@ -167,6 +179,7 @@ const mediaCallbacks: SuimyakuMediaCallbacks = {
     clearPeerCanvasStream(nick);
     setMediaState(produce((s) => {
       delete s.peers[nick];
+      delete s.raisedHands[nick];
       if (s.speakingNick === nick) s.speakingNick = null;
       if (s.spotlightNick === nick) s.spotlightNick = null;
     }));
@@ -206,6 +219,35 @@ const mediaCallbacks: SuimyakuMediaCallbacks = {
     setMediaState('mediaAvailable', true);
   },
 
+  onReaction(nick, emoji) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('darkbear:voice-reaction', {
+        detail: { nick, emoji },
+      }));
+    }
+  },
+
+  onHand(nick, raised) {
+    setMediaState(produce((s) => {
+      if (raised) s.raisedHands[nick] = true;
+      else delete s.raisedHands[nick];
+    }));
+  },
+
+  onCaption(entry, live) {
+    const key = entry.channel.toLowerCase();
+    setMediaState(produce((s) => {
+      const existing = s.transcripts[key] ?? [];
+      s.transcripts[key] = [...existing.slice(-199), entry];
+      if (live) s.liveCaption = entry;
+    }));
+    if (live && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('darkbear:caption', {
+        detail: entry,
+      }));
+    }
+  },
+
   enableVideoCalls: () => true,
   enableVoiceCalls: () => true,
 
@@ -223,7 +265,7 @@ export function _ensureMediaEngine(): SuimyakuMediaEngine {
 
 /**
  * Internal: bridge controller attaches/detaches its IRCClient. The engine
- * registers its own NOTE MEDIA / EVENT MEDIA + binary-frame handlers on it.
+ * registers its own EVENT MEDIA + binary-frame handlers on it.
  */
 export function _attachBridgeClient(client: IRCClient | null): void {
   if (!client) {

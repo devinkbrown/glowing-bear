@@ -196,7 +196,7 @@ export class SuimyakuMediaEngine {
 
   // --- WS media plane (browser media over binary WebSocket frames) ----------
   /** Server-issued per-stream MAC key for the active call. Null until a
-   *  `NOTE MEDIA <#chan> MACKEY <b64>` arrives — i.e. the server opted in
+   *  `EVENT <me> MEDIA MACKEY <#chan> <b64>` arrives — i.e. the server opted in
    *  (`[media].ws_media_relay`). While null, sendFrame stays a no-op. */
   private wsMediaKey: CryptoKey | null = null;
   private wsMyNick = '';
@@ -296,7 +296,7 @@ export class SuimyakuMediaEngine {
     const prev = this.client;
     this.client = client;
     // Move the media-plane subscriptions to the new client (binary datagrams +
-    // NOTE MEDIA MACKEY/JOIN/ROSTER), tolerating repeat calls with the same client.
+    // EVENT MEDIA control), tolerating repeat calls with the same client.
     if (this.boundMediaClient && this.boundMediaClient !== client) {
       this.boundMediaClient.binaryHandlers.delete(this.onMediaDatagramBound);
       this.boundMediaClient.extraMessageHandlers.delete(this.onMediaServerMessageBound);
@@ -920,21 +920,16 @@ export class SuimyakuMediaEngine {
       .catch(() => { /* a MAC failure drops one media frame; loss-tolerant */ });
   }
 
-  /** Observe MEDIA control events to drive the WS media plane. Accepts both the
-   * per-client NOTE MEDIA replies (MACKEY, ROSTER) and the live EVENT MEDIA
-   * presence feed (JOIN …) — presence moved off NOTE onto the IRCX EVENT plane,
-   * which orders fields `<verb> <#chan> <nick>` vs NOTE's `<#chan> <verb> <nick>`. */
+  /** Observe Event Spine MEDIA control events to drive the WS media plane.
+   * Orochi emits `EVENT <target> MEDIA <verb> <#chan> ...` for caller-only
+   * replies (MACKEY, ROSTER) and live state (JOIN, LEAVE, MUTE, SPEAKING,
+   * CAPTION, TRANSCRIPT). */
   private handleMediaServerMessage(msg: IRCMessage) {
-    let channel: string | undefined;
-    let verb: string | undefined;
-    let arg: string | undefined;
-    if (msg.command === 'NOTE' && msg.params[0] === 'MEDIA') {
-      channel = msg.params[1]; verb = msg.params[2]; arg = msg.params[3];
-    } else if (msg.command === 'EVENT' && (msg.params[1] ?? '').toUpperCase() === 'MEDIA') {
-      verb = msg.params[2]; channel = msg.params[3]; arg = msg.params[4];
-    } else {
-      return;
-    }
+    if (msg.command !== 'EVENT' || (msg.params[1] ?? '').toUpperCase() !== 'MEDIA') return;
+    const verb = msg.params[2]?.toUpperCase();
+    const channel = msg.params[3];
+    const arg = msg.params[4];
+    const detail = msg.params[5] ?? '';
     if (!channel || !verb || channel !== this.activeRoom) return;
 
     if (verb === 'MACKEY') {
@@ -950,7 +945,44 @@ export class SuimyakuMediaEngine {
           .catch(() => {});
       } catch { /* malformed key — stay a no-op */ }
     } else if (verb === 'JOIN' || verb === 'ROSTER') {
-      if (arg) this.streamRouter.addParticipant(arg);
+      if (arg) {
+        const kind: MediaKind = detail === 'video' || detail === 'screen' ? detail : 'voice';
+        this.streamRouter.addParticipant(arg);
+        const pm = this.registry.getOrCreate(arg, channel, kind);
+        if (kind === 'video' || kind === 'screen') pm.state.hasVideo = true;
+        this.cb.onPeerState?.(pm.state);
+      }
+    } else if (verb === 'LEAVE') {
+      if (arg) {
+        this.streamRouter.removeParticipant(arg);
+        this.registry.remove(arg);
+        this.cb.onHand?.(arg, false);
+      }
+    } else if (verb === 'SPEAKING' || verb === 'SILENT') {
+      if (arg) {
+        const pm = this.registry.getOrCreate(arg, channel, detail === 'video' || detail === 'screen' ? detail : 'voice');
+        const speaking = verb === 'SPEAKING';
+        pm.state.speaking = speaking;
+        this.cb.onPeerState?.(pm.state);
+        this.cb.onPeerSpeaking?.(arg, speaking);
+      }
+    } else if (verb === 'MUTE' || verb === 'UNMUTE') {
+      if (arg) {
+        const pm = this.registry.getOrCreate(arg, channel, detail === 'video' || detail === 'screen' ? detail : 'voice');
+        pm.state.muted = verb === 'MUTE';
+        this.cb.onPeerState?.(pm.state);
+      }
+    } else if (verb === 'HAND') {
+      if (arg) this.cb.onHand?.(arg, detail.toLowerCase() === 'up');
+    } else if (verb === 'REACT') {
+      if (arg && detail) this.cb.onReaction?.(arg, detail);
+    } else if (verb === 'CAPTION' || verb === 'TRANSCRIPT') {
+      const text = msg.params.slice(5).join(' ').trim();
+      if (arg && text) {
+        this.cb.onCaption?.({ channel, nick: arg, text, time: Date.now() }, verb === 'CAPTION');
+      }
+    } else {
+      this.handleMediaMessage('', channel, verb, msg.params.slice(4).join(' '));
     }
   }
 

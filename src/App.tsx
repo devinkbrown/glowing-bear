@@ -36,6 +36,7 @@ import ThemeBg, { type ThemeName } from '@/ui/bits/ThemeBg';
 import StarfieldBg from '@/ui/bits/StarfieldBg';
 import Sidebar from '@/ui/layout/Sidebar';
 import Header from '@/ui/layout/Header';
+import MobileDock from '@/ui/layout/MobileDock';
 import MessageView from '@/ui/chat/MessageView';
 import TypingIndicator from '@/ui/chat/TypingIndicator';
 import InputBar from '@/ui/input/InputBar';
@@ -67,8 +68,57 @@ const CUSTOM_COLOR_VARS: Array<[keyof typeof import('@/types').DEFAULT_CUSTOM_CO
   ['gray50', '--color-gray-50'],
 ];
 
+const SHEET_DISMISS_PX = 72;
+
+function setupServiceWorkerRefresh(): () => void {
+  if (!('serviceWorker' in navigator)) return () => undefined;
+  let reloaded = false;
+  const onControllerChange = () => {
+    if (reloaded) return;
+    reloaded = true;
+    window.location.reload();
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+  navigator.serviceWorker
+    .register('/darkbear/sw.js', { scope: '/darkbear/' })
+    .then((reg) => {
+      void reg.update();
+    })
+    .catch(() => undefined);
+  return () => navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+}
+
 export default function App() {
   const isDesktop = createMediaQuery('(min-width: 1024px)');
+  let sheetDrag: { startY: number; currentY: number; sheet: HTMLElement } | null = null;
+
+  const beginSheetDrag = (ev: TouchEvent & { currentTarget: HTMLElement }): void => {
+    const target = ev.target as HTMLElement | null;
+    if (!target?.closest('.mobile-sheet-grip')) return;
+    const touch = ev.touches[0];
+    if (!touch) return;
+    sheetDrag = { startY: touch.clientY, currentY: 0, sheet: ev.currentTarget };
+    ev.currentTarget.style.transition = 'none';
+  };
+
+  const moveSheetDrag = (ev: TouchEvent): void => {
+    if (!sheetDrag) return;
+    const touch = ev.touches[0];
+    if (!touch) return;
+    const delta = Math.max(0, touch.clientY - sheetDrag.startY);
+    sheetDrag.currentY = delta;
+    sheetDrag.sheet.style.transform = `translateY(${delta}px)`;
+    if (delta > 4) ev.preventDefault();
+  };
+
+  const endSheetDrag = (close: () => void): void => {
+    if (!sheetDrag) return;
+    const { currentY, sheet } = sheetDrag;
+    sheetDrag = null;
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+    if (currentY >= SHEET_DISMISS_PX) close();
+  };
 
   onMount(() => {
     applyTheme();
@@ -76,6 +126,7 @@ export default function App() {
     onCleanup(setupViewportHeight());
     onCleanup(setupKeyboardShortcuts());
     onCleanup(setupFaviconBadge(() => getTotalHighlights()));
+    onCleanup(setupServiceWorkerRefresh());
 
     // Notification click → jump to the originating buffer.
     const onJump = (ev: Event) => {
@@ -118,6 +169,12 @@ export default function App() {
   createEffect(() => {
     const ptr = buffersState.activeBuffer;
     if (ptr) markRead(ptr);
+  });
+
+  // Split panes are a desktop affordance; on phones they steal the message
+  // column and make the keyboard path feel broken.
+  createEffect(() => {
+    if (!isDesktop() && uiState.splitMode !== 'none') setSplitMode('none');
   });
 
   // Connect modal follows the relay state (see connectModalPolicy): close it
@@ -208,13 +265,41 @@ export default function App() {
           fallback={
             <>
               <Show when={uiState.sidebarOpen}>
-                <div class="fixed inset-0 z-40 bg-black/60" onClick={() => setSidebarOpen(false)} />
+                <div class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
               </Show>
               <aside
-                class="fixed inset-y-0 left-0 z-50 w-[min(85vw,var(--sidebar-w,240px))] transform transition-transform duration-200"
-                classList={{ '-translate-x-full': !uiState.sidebarOpen, 'translate-x-0': uiState.sidebarOpen }}
+                class="mobile-sheet mobile-buffer-sheet fixed bottom-0 left-0 right-0 z-50 flex h-[min(84vh,780px)] transform flex-col overflow-hidden rounded-t-3xl border-t border-white/[0.08] transition-transform duration-200"
+                classList={{ 'translate-y-full': !uiState.sidebarOpen, 'translate-y-0': uiState.sidebarOpen }}
+                onTouchStart={beginSheetDrag}
+                onTouchMove={moveSheetDrag}
+                onTouchEnd={() => endSheetDrag(() => setSidebarOpen(false))}
+                onTouchCancel={() => endSheetDrag(() => undefined)}
               >
-                <Sidebar onSelect={() => setSidebarOpen(false)} />
+                <button
+                  type="button"
+                  class="mobile-sheet-grip"
+                  aria-label="Close buffers panel"
+                  onClick={() => setSidebarOpen(false)}
+                />
+                <div class="mobile-sheet-head">
+                  <div>
+                    <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">Navigation</p>
+                    <h2 class="text-[16px] font-black tracking-tight text-gray-50">Buffers</h2>
+                  </div>
+                  <button
+                    type="button"
+                    class="mobile-sheet-close"
+                    aria-label="Close buffers panel"
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                      <path d="M4 4l8 8M12 4l-8 8" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="min-h-0 flex-1">
+                  <Sidebar onSelect={() => setSidebarOpen(false)} />
+                </div>
               </aside>
             </>
           }
@@ -273,6 +358,9 @@ export default function App() {
             {(ptr) => (
               <>
                 <TypingIndicator bufferPtr={ptr()} />
+                <Show when={!isDesktop()}>
+                  <MobileDock />
+                </Show>
                 <InputBar />
               </>
             )}
@@ -285,9 +373,39 @@ export default function App() {
             when={isDesktop()}
             fallback={
               <>
-                <div class="fixed inset-0 z-40 bg-black/60" onClick={() => setUserListOpen(false)} />
-                <aside class="fixed inset-y-0 right-0 z-50 w-[min(85vw,280px)]">
-                  <UserList mobile onClose={() => setUserListOpen(false)} />
+                <div class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={() => setUserListOpen(false)} />
+                <aside
+                  class="mobile-sheet fixed bottom-0 left-0 right-0 z-50 flex h-[min(72vh,660px)] flex-col overflow-hidden rounded-t-3xl border-t border-white/[0.08]"
+                  onTouchStart={beginSheetDrag}
+                  onTouchMove={moveSheetDrag}
+                  onTouchEnd={() => endSheetDrag(() => setUserListOpen(false))}
+                  onTouchCancel={() => endSheetDrag(() => undefined)}
+                >
+                  <button
+                    type="button"
+                    class="mobile-sheet-grip"
+                    aria-label="Close users panel"
+                    onClick={() => setUserListOpen(false)}
+                  />
+                  <div class="mobile-sheet-head">
+                    <div>
+                      <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">Channel</p>
+                      <h2 class="text-[16px] font-black tracking-tight text-gray-50">Users</h2>
+                    </div>
+                    <button
+                      type="button"
+                      class="mobile-sheet-close"
+                      aria-label="Close users panel"
+                      onClick={() => setUserListOpen(false)}
+                    >
+                      <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M4 4l8 8M12 4l-8 8" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="min-h-0 flex-1">
+                    <UserList mobile onClose={() => setUserListOpen(false)} />
+                  </div>
                 </aside>
               </>
             }

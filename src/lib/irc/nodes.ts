@@ -28,6 +28,45 @@ function envNode(): IrcNode | null {
   return NODES.find((n) => n.wss === envWss) ?? { id: 'env', host: 'custom', wss: envWss };
 }
 
+function normalizeHost(raw: string): string | null {
+  const host = raw.trim().replace(/^\[|\]$/g, '');
+  if (!host || /[\s/\\:]/.test(host)) return null;
+  return host;
+}
+
+/**
+ * Orochi's browser gateway is the node's WSS listener on :8080. The relay 004
+ * gives us the concrete server host, so synthesize a bridge endpoint from that
+ * instead of relying only on the baked-in public node list.
+ */
+export function wssUrlForOrochiHost(rawHost: string): string | null {
+  const raw = rawHost.trim();
+  if (!raw) return null;
+  try {
+    const host = raw.includes('://') ? raw : normalizeHost(raw);
+    if (!host) return null;
+    const url = new URL(host.includes('://') ? host : `wss://${host}`);
+    if (url.protocol !== 'wss:') url.protocol = 'wss:';
+    if (!url.port) url.port = '8080';
+    url.pathname = url.pathname === '/' ? '' : url.pathname.replace(/\/+$/, '');
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
+export function nodeFromWssGateway(wss: string, id = 'detected'): IrcNode | null {
+  try {
+    const url = new URL(wss);
+    if (url.protocol !== 'wss:' || !url.hostname) return null;
+    return { id, host: url.hostname, wss: url.toString().replace(/\/$/, '') };
+  } catch {
+    return null;
+  }
+}
+
 /** Random node — the inconclusive-probe fallback so there is always a target. */
 function randomNode(nodes: readonly IrcNode[] = NODES): IrcNode {
   return nodes[Math.floor(Math.random() * nodes.length)]!;
@@ -100,8 +139,9 @@ export async function selectBestNode(nodes: readonly IrcNode[] = NODES): Promise
   const pinned = envNode();
   if (pinned) return pinned;
 
-  const probed = await Promise.all(nodes.map(async (node) => ({ node, ms: await pingNode(node) })));
+  const deduped = Array.from(new Map(nodes.map((node) => [node.wss, node])).values());
+  const probed = await Promise.all(deduped.map(async (node) => ({ node, ms: await pingNode(node) })));
   const reachable = probed.filter((r) => Number.isFinite(r.ms)).sort((a, b) => a.ms - b.ms);
 
-  return reachable[0]?.node ?? randomNode(nodes);
+  return reachable[0]?.node ?? randomNode(deduped);
 }

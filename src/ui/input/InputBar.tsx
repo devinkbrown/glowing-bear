@@ -357,7 +357,7 @@ export default function InputBar() {
     <div
       ref={(el) => (wrapperEl = el)}
       class="shrink-0 relative input-bar-wrapper border-t border-white/[0.05]"
-      style={{ 'padding-bottom': 'max(0.5rem, env(safe-area-inset-bottom))' }}
+      style={{ 'padding-bottom': 'var(--input-bottom-pad, max(0.5rem, env(safe-area-inset-bottom)))' }}
     >
       {/* Paste preview */}
       <Show when={pastePreview()}>

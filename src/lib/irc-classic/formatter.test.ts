@@ -42,6 +42,60 @@ describe('formatText — mIRC colors', () => {
     expect(formatText('\x034,8warn')).toBe('<span class="irc-fg-4 irc-bg-8">warn</span>');
   });
 
+  it('supports extended 0-98 palette background codes', () => {
+    expect(formatText('\x0352,98hot')).toBe('<span class="irc-fg-52 irc-bg-98">hot</span>');
+  });
+
+  it('swaps foreground and background while reverse video is active', () => {
+    expect(formatText('\x0304,08normal \x16reverse\x16 normal')).toBe(
+      '<span class="irc-fg-4 irc-bg-8">normal </span><span class="irc-fg-8 irc-bg-4">reverse</span><span class="irc-fg-4 irc-bg-8"> normal</span>',
+    );
+  });
+
+  it('renders reverse video without explicit colors', () => {
+    expect(formatText('a \x16rev\x16 b')).toBe('a <span class="irc-reverse">rev</span> b');
+  });
+
+  it('supports mIRC hex colors', () => {
+    expect(formatText('\x04ff6600,001122hex')).toBe(
+      '<span style="color:#ff6600;background-color:#001122">hex</span>',
+    );
+  });
+
+  it('renders WeeChat relay foreground colors translated from IRC formatting', () => {
+    expect(formatText('\x19F04red')).toBe('<span style="color:#ff5555">red</span>');
+  });
+
+  it('renders WeeChat relay foreground/background color pairs', () => {
+    expect(formatText('\x19*04,08warn')).toBe('<span style="color:#ff5555;background-color:#ffff55">warn</span>');
+  });
+
+  it('resets WeeChat relay colors with the internal reset pair', () => {
+    expect(formatText('\x19F04red\x19\x1c plain')).toBe('<span style="color:#ff5555">red</span> plain');
+  });
+
+  it('renders WeeChat option-color controls from live relay buffer lines', () => {
+    expect(formatText('\x1928(\x1927host\x1928)')).toBe(
+      '<span style="color:#16a34a">(</span><span style="color:#55ffff">host</span><span style="color:#16a34a">)</span>',
+    );
+  });
+
+  it('treats WeeChat chat-text option 01 as default text, not black or white', () => {
+    expect(formatText('\x19F@00176colored\x1901 plain')).toBe(
+      '<span style="color:#d787d7">colored</span> plain',
+    );
+  });
+
+  it('renders ANSI colors returned by the WeeChat relay default', () => {
+    expect(formatText('\x1b[31mred\x1b[0m plain')).toBe('<span style="color:#cd0000">red</span> plain');
+  });
+
+  it('renders ANSI 256-color foreground/background pairs', () => {
+    expect(formatText('\x1b[38;5;196;48;5;22mhot\x1b[0m')).toBe(
+      '<span style="color:#ff0000;background-color:#005f00">hot</span>',
+    );
+  });
+
   it('treats bare \\x03 as a color reset', () => {
     expect(formatText('\x033green\x03plain')).toBe('<span class="irc-fg-3">green</span>plain');
   });
@@ -196,6 +250,18 @@ describe('extractEmbeds', () => {
 describe('stripFormatting', () => {
   it('removes toggle codes and color sequences with digits', () => {
     expect(stripFormatting('\x02bold\x02 \x0304,07red\x0f done')).toBe('bold red done');
+  });
+
+  it('removes reverse and hex color controls', () => {
+    expect(stripFormatting('\x16rev\x16 \x04ff6600,001122hex')).toBe('rev hex');
+  });
+
+  it('removes WeeChat relay color controls', () => {
+    expect(stripFormatting('\x19F04red \x19*04,08warn\x19\x1c plain')).toBe('red warn plain');
+  });
+
+  it('removes ANSI color controls', () => {
+    expect(stripFormatting('\x1b[31mred\x1b[0m plain')).toBe('red plain');
   });
 
   it('removes italic, underline, strike, and mono codes', () => {

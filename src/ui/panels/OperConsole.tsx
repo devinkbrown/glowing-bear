@@ -13,6 +13,7 @@ import type { JSX } from 'solid-js';
 import { buffersState, sendTo, isOper } from '@/state';
 import type { BufferEntry } from '@/types';
 import Modal from '@/ui/bits/Modal';
+import { parseEventFeedText, type ParsedEventFeed } from '@/lib/ircx/parser';
 
 /** Event Spine categories — docs/OROCHI_PROTOCOL.md §11. */
 const EVENT_CATEGORIES = [
@@ -62,18 +63,19 @@ export default function OperConsole(props: Props) {
     if (entry) sendTo(entry.buffer.id, `/quote ${cmd}`);
   };
 
-  /** Recent server-buffer lines mentioning EVENT (Event Spine feed). */
-  const eventLines = createMemo(() => {
+  /** Recent server-buffer lines parsed as Event Spine feed entries. */
+  const eventFeed = createMemo(() => {
     const entry = serverEntry();
     if (!entry) return [];
     return entry.lines
-      .filter((l) => l.message.includes('EVENT'))
+      .map((line) => ({ line, event: parseEventFeedText(line.message) }))
+      .filter((row): row is { line: typeof entry.lines[number]; event: ParsedEventFeed } => row.event !== null)
       .slice(-TAIL_LINES);
   });
 
   // Keep the tail scrolled to the newest line.
   createEffect(() => {
-    eventLines();
+    eventFeed();
     if (tailEl) tailEl.scrollTop = tailEl.scrollHeight;
   });
 
@@ -254,24 +256,15 @@ export default function OperConsole(props: Props) {
               class="max-h-[180px] overflow-y-auto bg-black/30 border border-white/[0.04] rounded-lg px-2 py-1.5 space-y-0.5"
             >
               <Show
-                when={eventLines().length > 0}
+                when={eventFeed().length > 0}
                 fallback={
                   <div class="text-center py-6 text-gray-600 text-[11px]">
                     No EVENT lines in the server buffer yet — subscribe to categories above.
                   </div>
                 }
               >
-                <For each={eventLines()}>
-                  {(line) => (
-                    <div class="flex items-baseline gap-2">
-                      <span class="text-[9px] font-mono tabular-nums text-gray-600 shrink-0">
-                        {line.date.toLocaleTimeString([], { hour12: false })}
-                      </span>
-                      <span class="text-[10px] font-mono text-gray-400 break-all leading-snug">
-                        {line.message}
-                      </span>
-                    </div>
-                  )}
+                <For each={eventFeed()}>
+                  {(row) => <EventFeedRow event={row.event} time={row.line.date} />}
                 </For>
               </Show>
             </div>
@@ -291,6 +284,54 @@ function Section(props: { title: string; children: JSX.Element }): JSX.Element {
     <div class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-3">
       <h4 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2.5">{props.title}</h4>
       {props.children}
+    </div>
+  );
+}
+
+function EventFeedRow(props: { event: ParsedEventFeed; time: Date }): JSX.Element {
+  const attrs = () => Object.entries(props.event.attrs);
+  const detail = () => props.event.detail || props.event.raw;
+  return (
+    <div class="rounded-lg border border-white/[0.045] bg-white/[0.018] px-2 py-1.5">
+      <div class="flex flex-wrap items-center gap-1.5">
+        <span class="text-[9px] font-mono tabular-nums text-gray-600 shrink-0">
+          {props.time.toLocaleTimeString([], { hour12: false })}
+        </span>
+        <span class="rounded-md bg-[var(--custom-accent,#818cf8)]/12 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-[var(--custom-accent,#818cf8)]">
+          {props.event.category}
+        </span>
+        <Show when={props.event.verb}>
+          <span class="rounded-md bg-white/[0.045] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-400">
+            {props.event.verb}
+          </span>
+        </Show>
+        <Show when={props.event.source}>
+          <span class="text-[9px] font-mono text-gray-600">{props.event.source}</span>
+        </Show>
+        <Show when={props.event.channel}>
+          <span class="text-[10px] font-mono text-emerald-300/80">{props.event.channel}</span>
+        </Show>
+        <Show when={props.event.subject}>
+          <span class="max-w-[180px] truncate text-[10px] font-mono text-gray-300">{props.event.subject}</span>
+        </Show>
+        <Show when={props.event.sender}>
+          <span class="max-w-[180px] truncate text-[10px] font-mono text-gray-300">{props.event.sender}</span>
+        </Show>
+      </div>
+      <Show when={detail()}>
+        <div class="mt-1 break-words text-[10px] leading-snug text-gray-500">{detail()}</div>
+      </Show>
+      <Show when={attrs().length > 0}>
+        <div class="mt-1 flex flex-wrap gap-1">
+          <For each={attrs()}>
+            {([key, value]) => (
+              <span class="rounded bg-black/25 px-1.5 py-0.5 text-[9px] font-mono text-gray-500">
+                {key}={value}
+              </span>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 }

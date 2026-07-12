@@ -4,10 +4,10 @@
  *
  * WeeChat color format after \x19:
  *   \x19\x1c          — reset
- *   \x19@NNNNN        — extended color pair (5 chars)
- *   \x19{F|B|*|~|!|_|%|E}<colorspec>[,<colorspec>]
- *     where <colorspec> = @NNNNN (extended) or digits (basic)
- *   \x19<digits>       — basic color pair
+ *   \x19NN            — color option
+ *   \x19@NNNNN        — extended color pair
+ *   \x19{F|B|*}<colorspec>[,|~<colorspec>]
+ *     where <colorspec> = @NNNNN (extended) or NN (WeeChat color)
  */
 export function stripColors(s: string): string {
 	let out = '';
@@ -22,23 +22,27 @@ export function stripColors(s: string): string {
 			if (n === 0x1c) {
 				i++; // \x19\x1c = reset
 			} else if (n === 0x40) {
-				i = Math.min(i + 6, s.length); // \x19@ + 5-char extended pair
+				i = skipColorSpec(s, i); // \x19@ + optional attrs + 5-digit extended pair
 			} else if (n === 0x46 || n === 0x42 || n === 0x2a || n === 0x7e ||
 			           n === 0x21 || n === 0x5f || n === 0x25 || n === 0x45) {
 				// \x19{F|B|*|~|!|_|%|E} + color spec
 				i++;
 				i = skipColorSpec(s, i);
 				// For * (fg+bg), there may be a comma-separated second color spec
-				if (i < s.length && s[i] === ',') {
+				if (i < s.length && (s[i] === ',' || s[i] === '~')) {
 					i++;
 					i = skipColorSpec(s, i);
 				}
 			} else if (n >= 0x30 && n <= 0x39) {
-				// \x19 + decimal digits = basic color pair
-				while (i < s.length) {
-					const cc = s.charCodeAt(i);
-					if ((cc >= 0x30 && cc <= 0x39) || cc === 0x7c || cc === 0x2c) i++;
-					else break;
+				// \x19 + two digits = WeeChat color option
+				i = Math.min(i + 2, s.length);
+				while (i < s.length && s[i] === '|') {
+					i++;
+					while (i < s.length) {
+						const cc = s.charCodeAt(i);
+						if (cc >= 0x30 && cc <= 0x39) i++;
+						else break;
+					}
 				}
 			}
 			// else: unknown subcode — just consumed \x19
@@ -71,6 +75,24 @@ export function stripColors(s: string): string {
 					} else { i = saved; }
 				}
 			}
+		} else if (c === 0x04) {
+			// IRC hex color — skip RRGGBB, optional ,RRGGBB
+			i++;
+			let seen = 0;
+			while (i < s.length && seen < 6 && isHexDigit(s.charCodeAt(i))) {
+				i++;
+				seen++;
+			}
+			if (seen === 6 && i < s.length && s[i] === ',') {
+				const saved = i;
+				i++;
+				let bgSeen = 0;
+				while (i < s.length && bgSeen < 6 && isHexDigit(s.charCodeAt(i))) {
+					i++;
+					bgSeen++;
+				}
+				if (bgSeen !== 6) i = saved;
+			}
 		} else {
 			out += s[i];
 			i++;
@@ -86,13 +108,46 @@ export function stripColors(s: string): string {
  */
 function skipColorSpec(s: string, i: number): number {
 	if (i < s.length && s.charCodeAt(i) === 0x40) {
-		i = Math.min(i + 6, s.length);
+		i++;
+		while (i < s.length && isWeeAttr(s[i])) i++;
+		let seen = 0;
+		while (i < s.length && seen < 5) {
+			const cc = s.charCodeAt(i);
+			if (cc < 0x30 || cc > 0x39) break;
+			i++;
+			seen++;
+		}
+		return i;
 	}
-	// Skip any remaining digits, pipes (attribute separators)
+	while (i < s.length && isWeeAttr(s[i])) i++;
+	let seen = 0;
 	while (i < s.length) {
 		const cc = s.charCodeAt(i);
-		if ((cc >= 0x30 && cc <= 0x39) || cc === 0x7c) i++;
+		if (cc >= 0x30 && cc <= 0x39 && seen < 2) {
+			i++;
+			seen++;
+		}
 		else break;
 	}
+	while (i < s.length && s[i] === '|') {
+		i++;
+		while (i < s.length) {
+			const cc = s.charCodeAt(i);
+			if (cc >= 0x30 && cc <= 0x39) i++;
+			else break;
+		}
+	}
 	return i;
+}
+
+function isWeeAttr(ch: string | undefined): boolean {
+	return ch !== undefined && '%.*!/_|'.includes(ch);
+}
+
+function isHexDigit(code: number): boolean {
+	return (
+		(code >= 0x30 && code <= 0x39) ||
+		(code >= 0x41 && code <= 0x46) ||
+		(code >= 0x61 && code <= 0x66)
+	);
 }

@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 import solid from 'eslint-plugin-solid/configs/typescript';
 
 export default tseslint.config(
-  { ignores: ['out/', 'node_modules/', 'bahamut/', 'hybrid/', 'inspircd/', 'ratbox/', 'unrealircd/', 'public/'] },
+  { ignores: ['out/', 'node_modules/', 'bahamut/', 'hybrid/', 'inspircd/', 'ratbox/', 'unrealircd/', 'public/', '.claude/', '**/.claude/worktrees/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

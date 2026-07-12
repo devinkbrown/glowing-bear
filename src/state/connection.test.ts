@@ -297,13 +297,28 @@ describe('connection store', () => {
       expect(isOrochiServer('esh')).toBe(true);
     });
 
-    it('matches ophion too, but only as a whole word', () => {
+    it('marks known Orochi hosts even when the 004 version does not name orochi', () => {
+      const c = connectWithBuffers();
+      const onOrochiDetected = vi.fn();
+      setRelayObserver({ onOrochiDetected });
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: SRV,
+        tags: ['irc_004'],
+        message: 'kain ircx.us ircd-compat-2026 iowx bklmnt',
+      }) });
+
+      expect(isOrochiServer('esh')).toBe(true);
+      expect(onOrochiDetected).toHaveBeenCalledWith('esh', 'wss://ircx.us:8080');
+    });
+
+    it('does not treat non-Orochi server names as current Orochi detection', () => {
       const c = connectWithBuffers();
 
       emit(c, 'lineAdded', { line: makeLine({
-        buffer: SRV, tags: ['irc_004'], message: 'kain host ophion 1.0 abc',
+        buffer: SRV, tags: ['irc_004'], message: 'kain host legacyd 1.0 abc',
       }) });
-      expect(isOrochiServer('esh')).toBe(true);
+      expect(isOrochiServer('esh')).toBe(false);
     });
 
     it('does not mark on unrelated 004s or embedded substrings', () => {
@@ -330,7 +345,7 @@ describe('connection store', () => {
         buffer: SRV, tags: ['irc_004'], message: 'kain host orochi-0.1.0 iow',
       }) });
 
-      expect(onOrochiDetected).toHaveBeenCalledWith('esh');
+      expect(onOrochiDetected).toHaveBeenCalledWith('esh', 'wss://host:8080');
       expect(onChannelBufferOpened).toHaveBeenCalledWith('esh', '#general');
 
       // New channel buffers on a known-orochi server also notify
@@ -504,6 +519,30 @@ describe('connection store', () => {
         duration: 3600,
         reason: '',
       }]);
+    });
+
+    it('LIST and LISTX numerics populate the channel browser', () => {
+      const c = connectWithBuffers();
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: SRV, tags: ['irc_322'], displayed: false,
+        message: 'kain #root 4 :Root channel',
+      }) });
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: SRV, tags: ['irc_812'], displayed: false,
+        message: 'kain #mesh 2 0 0 :Mesh channel',
+      }) });
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: SRV, tags: ['irc_323'], displayed: false,
+        message: 'kain :End of LIST',
+      }) });
+
+      expect(ircxState.channelList.status).toBe('ready');
+      expect(ircxState.channelList.rows).toEqual([
+        { channel: '#root', users: 4, topic: 'Root channel', modes: undefined },
+        { channel: '#mesh', users: 2, topic: 'Mesh channel', modes: '0 0' },
+      ]);
+      expect(entry(SRV).lines).toHaveLength(0);
     });
 
     it('bot and account tags are recorded from live lines', () => {

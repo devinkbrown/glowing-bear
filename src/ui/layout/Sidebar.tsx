@@ -7,6 +7,8 @@ import {
   buffersState,
   ConnectionState,
   connectionState,
+  getTotalHighlights,
+  getTotalUnread,
   getSorted,
   isMuted,
   isPinned,
@@ -22,6 +24,7 @@ import {
 import type { BufferEntry } from '@/state';
 import BearLogo from '@/ui/bits/BearLogo';
 import { bufferKind, type BufferKind } from '@/lib/bufferKind';
+import { stripColors } from '@/lib/weechat/strip-colors';
 import { createMediaQuery } from '@/primitives/mediaQuery';
 
 interface SidebarProps {
@@ -39,10 +42,12 @@ interface ServerGroup {
 }
 
 const PIP_MAX = 99;
+type BufferMode = 'all' | 'unread' | 'mentions' | 'dms';
 
 export default function Sidebar(props: SidebarProps) {
   const [collapsed, setCollapsed] = createSignal<Record<string, boolean>>({});
   const [filterQuery, setFilterQuery] = createSignal('');
+  const [bufferMode, setBufferMode] = createSignal<BufferMode>('all');
   const [joinInput, setJoinInput] = createSignal('');
   const [showJoinBar, setShowJoinBar] = createSignal<string | null>(null);
   const isMobile = createMediaQuery('(max-width: 1023px)');
@@ -77,11 +82,17 @@ export default function Sidebar(props: SidebarProps) {
     for (const entry of sorted) {
       const type = entry.buffer.localVars['type'] ?? '';
       const srvName = entry.buffer.localVars['server'] ?? '';
+      const kind = bufferKind(entry.buffer);
+      const mode = bufferMode();
 
       if (settings.onlyUnread && entry.unread === 0 && entry.highlighted === 0 && entry.buffer.id !== active) continue;
+      if (mode === 'unread' && entry.unread === 0 && entry.highlighted === 0 && entry.buffer.id !== active) continue;
+      if (mode === 'mentions' && entry.highlighted === 0 && entry.buffer.id !== active) continue;
+      if (mode === 'dms' && kind !== 'query' && entry.buffer.id !== active) continue;
       if (fq) {
         const name = (entry.buffer.shortName || entry.buffer.name).toLowerCase();
-        if (!name.includes(fq) && entry.buffer.id !== active) continue;
+        const last = stripColors(entry.lines.at(-1)?.message ?? '').toLowerCase();
+        if (!name.includes(fq) && !last.includes(fq) && entry.buffer.id !== active) continue;
       }
 
       if (!srvName && type !== 'channel' && type !== 'private') {
@@ -126,16 +137,46 @@ export default function Sidebar(props: SidebarProps) {
   };
 
   const nextUnread = createMemo(() => nextHighlighted(true));
+  const stats = createMemo(() => {
+    const entries = Object.values(buffersState.buffers);
+    let channels = 0;
+    let dms = 0;
+    for (const entry of entries) {
+      const kind = bufferKind(entry.buffer);
+      if (kind === 'channel') channels++;
+      else if (kind === 'query') dms++;
+    }
+    return {
+      channels,
+      dms,
+      unread: getTotalUnread(),
+      mentions: getTotalHighlights(),
+    };
+  });
+  const modeActive = (mode: BufferMode) => bufferMode() === mode;
 
   return (
     <aside
-      class="flex flex-col h-full bg-gray-950 border-r border-white/[0.03] select-none overflow-hidden touch-pan-y"
+      class="darkbear-sidebar flex flex-col h-full bg-gray-950 border-r border-white/[0.06] select-none overflow-hidden touch-pan-y"
       style={{ width: `min(${settings.sidebarWidth}px, 85vw)`, 'flex-shrink': 0 }}
     >
       {/* Brand */}
       <div class="flex items-center gap-2.5 pl-4 pr-3 pt-4 pb-3 shrink-0">
-        <BearLogo size={24} />
-        <span class="text-[14px] font-bold text-gray-200 tracking-tight flex-1">DarkBear</span>
+        <div class="relative">
+          <BearLogo size={26} />
+          <span
+            class="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-gray-950"
+            classList={{
+              'bg-emerald-400': isConnected(),
+              'bg-amber-400 animate-pulse': isConnecting() || isReconnecting(),
+              'bg-gray-600': !isConnected() && !isConnecting() && !isReconnecting(),
+            }}
+          />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[14px] font-black text-gray-100 tracking-tight leading-tight">DarkBear</div>
+          <div class="text-[9px] uppercase tracking-[0.18em] text-gray-600 leading-tight">Relay console</div>
+        </div>
         <button
           onClick={() => openModal('settings')}
           class="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.08] transition-all"
@@ -148,13 +189,13 @@ export default function Sidebar(props: SidebarProps) {
         </button>
       </div>
 
-      {/* Connection pill */}
-      <div class="mx-3 mb-2 shrink-0">
+      {/* Connection + activity deck */}
+      <div class="mx-3 mb-3 shrink-0 space-y-2">
         <div
-          class="flex items-center gap-2 px-3 py-[6px] rounded-full text-[11px] font-medium"
+          class="darkbear-connection-pill flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-semibold"
           classList={{
-            'bg-emerald-500/[0.08] text-emerald-400': isConnected(),
-            'bg-amber-500/[0.08] text-amber-400': isConnecting(),
+            'bg-emerald-500/[0.08] text-emerald-300 border-emerald-400/15': isConnected(),
+            'bg-amber-500/[0.08] text-amber-300 border-amber-400/15': isConnecting() || isReconnecting(),
             'bg-white/[0.03] text-gray-500': !isConnected() && !isConnecting(),
           }}
         >
@@ -173,26 +214,45 @@ export default function Sidebar(props: SidebarProps) {
              isReconnecting() ? 'Reconnecting...' :
              'Disconnected'}
           </span>
+          <span class="ml-auto font-mono text-[10px] opacity-70">{settings.relay.tls ? 'TLS' : 'plain'}</span>
+        </div>
+        <div class="grid grid-cols-4 gap-1.5">
+          <StatCell label="unread" value={stats().unread} hot={stats().unread > 0} />
+          <StatCell label="mentions" value={stats().mentions} hot={stats().mentions > 0} danger />
+          <StatCell label="chan" value={stats().channels} />
+          <StatCell label="dm" value={stats().dms} />
         </div>
       </div>
 
       {/* Filter */}
-      <div class="px-3 pb-1 shrink-0">
-        <input
-          type="text"
-          value={filterQuery()}
-          onInput={(e) => setFilterQuery(e.currentTarget.value)}
-          placeholder="Filter buffers"
-          autocomplete="off"
-          spellcheck={false}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              setFilterQuery('');
-              e.currentTarget.blur();
-            }
-          }}
-          class="w-full bg-white/[0.03] sm:bg-transparent border border-white/[0.06] sm:border-0 sm:border-b sm:border-white/[0.05] rounded-lg sm:rounded-none text-[13px] sm:text-[12px] text-gray-300 placeholder-gray-600 px-3 sm:px-1 py-2.5 sm:py-2 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors"
-        />
+      <div class="px-3 pb-2 shrink-0 space-y-2">
+        <label class="relative block">
+          <svg class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-600" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="6.5" cy="6.5" r="5" />
+            <path d="M10.5 10.5L14.5 14.5" />
+          </svg>
+          <input
+            type="text"
+            value={filterQuery()}
+            onInput={(e) => setFilterQuery(e.currentTarget.value)}
+            placeholder="Filter buffers or text"
+            autocomplete="off"
+            spellcheck={false}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setFilterQuery('');
+                e.currentTarget.blur();
+              }
+            }}
+            class="w-full rounded-xl border border-white/[0.07] bg-white/[0.035] py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none transition-colors placeholder:text-gray-600 focus:border-[var(--custom-accent,#818cf8)]/35 focus:bg-white/[0.055] sm:py-2 sm:text-[12px]"
+          />
+        </label>
+        <div class="grid grid-cols-4 gap-1 rounded-xl border border-white/[0.055] bg-black/20 p-1">
+          <ModeButton label="All" active={modeActive('all')} onClick={() => setBufferMode('all')} />
+          <ModeButton label="Hot" active={modeActive('unread')} onClick={() => setBufferMode('unread')} />
+          <ModeButton label="@" active={modeActive('mentions')} onClick={() => setBufferMode('mentions')} />
+          <ModeButton label="DM" active={modeActive('dms')} onClick={() => setBufferMode('dms')} />
+        </div>
       </div>
 
       {/* Buffer list */}
@@ -213,7 +273,7 @@ export default function Sidebar(props: SidebarProps) {
             return (
               <div class="mt-3 first:mt-0">
                 {/* Server header */}
-                <div class="flex items-center gap-0.5 pl-1 pr-2 mb-px">
+                <div class="darkbear-server-header flex items-center gap-0.5 pl-1 pr-2 mb-1">
                   <button
                     onClick={() => toggleCollapse(grp.serverName)}
                     class="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center text-gray-500 hover:text-gray-300 transition-colors"
@@ -251,6 +311,11 @@ export default function Sidebar(props: SidebarProps) {
                   </Show>
                   <Show when={isCollapsed() && grp.totalHighlights > 0}>
                     <Pip count={grp.totalHighlights} hot />
+                  </Show>
+                  <Show when={!isCollapsed() && (grp.totalUnread > 0 || grp.totalHighlights > 0)}>
+                    <span class="rounded-full bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-gray-500">
+                      {grp.totalHighlights > 0 ? `${grp.totalHighlights}@` : grp.totalUnread}
+                    </span>
                   </Show>
                   <Show when={!isCollapsed()}>
                     <button
@@ -353,16 +418,31 @@ function BufItem(props: {
 }) {
   const name = () => props.entry.buffer.shortName || props.entry.buffer.name;
   const kind = () => bufferKind(props.entry.buffer);
+  const lastLine = () => props.entry.lines.at(-1);
+  const preview = () => {
+    const line = lastLine();
+    if (!line) return '';
+    const text = stripColors(line.message).replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    const prefix = line.nick ? `${line.nick}: ` : '';
+    const value = `${prefix}${text}`;
+    return value.length > 96 ? `${value.slice(0, 95)}…` : value;
+  };
+  const activityTime = () => {
+    const line = lastLine();
+    if (!line) return '';
+    return line.date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <button
       onClick={() => props.onClick()}
       title={props.entry.buffer.fullName}
-      class="w-full text-left pr-2 py-2.5 sm:py-[7px] flex items-center gap-2 transition-all text-[14px] sm:text-[13px] rounded-lg group relative active:bg-white/[0.04]"
+      class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-all text-[14px] sm:text-[13px] rounded-xl group relative active:bg-white/[0.04]"
       classList={{
         'pl-6': props.indent,
         'pl-3': !props.indent,
-        'text-gray-100 bg-[var(--custom-accent,#818cf8)]/[0.07]': props.active,
+        'text-gray-100 bg-[var(--custom-accent,#818cf8)]/[0.08] ring-1 ring-[var(--custom-accent,#818cf8)]/15': props.active,
         'text-gray-100': !props.active && props.entry.highlighted > 0,
         'text-gray-300': !props.active && props.entry.highlighted === 0 && props.entry.unread > 0,
         'text-gray-400 hover:text-gray-200 hover:bg-white/[0.02]':
@@ -372,8 +452,22 @@ function BufItem(props: {
       <Show when={props.active}>
         <span class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 sm:h-4 rounded-r-full bg-[var(--custom-accent,#818cf8)]" />
       </Show>
-      <BufIcon kind={kind()} />
-      <span class="truncate flex-1 leading-snug">{name()}</span>
+      <span class="mt-0.5">
+        <BufIcon kind={kind()} active={props.active || props.entry.unread > 0 || props.entry.highlighted > 0} />
+      </span>
+      <span class="min-w-0 flex-1">
+        <span class="flex min-w-0 items-center gap-1.5">
+          <span class="truncate leading-snug font-medium">{name()}</span>
+          <Show when={activityTime()}>
+            <span class="ml-auto hidden shrink-0 font-mono text-[9px] text-gray-600 group-hover:text-gray-500 sm:inline">{activityTime()}</span>
+          </Show>
+        </span>
+        <Show when={preview()}>
+          <span class="mt-0.5 block truncate text-[10px] leading-tight text-gray-600 group-hover:text-gray-500">
+            {preview()}
+          </span>
+        </Show>
+      </span>
       <Show when={props.pinned}>
         <span class="w-1 h-1 rounded-full bg-[var(--custom-accent,#818cf8)]/50 shrink-0" />
       </Show>
@@ -391,40 +485,81 @@ function BufItem(props: {
   );
 }
 
-function BufIcon(props: { kind: BufferKind }) {
-  const cls = 'w-3.5 h-3.5 shrink-0 opacity-40';
+function StatCell(props: { label: string; value: number; hot?: boolean; danger?: boolean }) {
+  return (
+    <div
+      class="rounded-xl border border-white/[0.055] bg-white/[0.025] px-2 py-1.5 text-center"
+      classList={{
+        'border-[var(--custom-accent,#818cf8)]/20 bg-[var(--custom-accent,#818cf8)]/[0.06]': props.hot && !props.danger,
+        'border-red-400/20 bg-red-500/[0.07]': props.hot && props.danger,
+      }}
+    >
+      <div
+        class="font-mono text-[13px] font-black leading-none tabular-nums"
+        classList={{
+          'text-[var(--custom-accent,#818cf8)]': props.hot && !props.danger,
+          'text-red-300': props.hot && props.danger,
+          'text-gray-300': !props.hot,
+        }}
+      >
+        {props.value > PIP_MAX ? `${PIP_MAX}+` : props.value}
+      </div>
+      <div class="mt-1 truncate text-[8px] font-bold uppercase tracking-[0.12em] text-gray-600">{props.label}</div>
+    </div>
+  );
+}
+
+function ModeButton(props: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      class="h-7 rounded-lg text-[10px] font-black uppercase tracking-[0.08em] transition-all"
+      classList={{
+        'bg-[var(--custom-accent,#818cf8)] text-white shadow-lg shadow-black/20': props.active,
+        'text-gray-500 hover:bg-white/[0.04] hover:text-gray-300': !props.active,
+      }}
+    >
+      {props.label}
+    </button>
+  );
+}
+
+function BufIcon(props: { kind: BufferKind; active?: boolean }) {
+  const cls = 'w-3.5 h-3.5 shrink-0 transition-opacity';
+  const opacity = () => props.active ? 'opacity-80' : 'opacity-40';
   return (
     <>
       <Show when={props.kind === 'channel'}>
-        <svg class={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <svg class={`${cls} ${opacity()}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
           <path d="M6 2L4 14M12 2l-2 12M2 6h12M1 10h12" />
         </svg>
       </Show>
       <Show when={props.kind === 'query'}>
-        <svg class={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg class={`${cls} ${opacity()}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 10c0 1.1-.9 2-2 2H5l-3 2V4c0-1.1.9-2 2-2h8c1.1 0 2 .9 2 2v6z" />
         </svg>
       </Show>
       <Show when={props.kind === 'raw'}>
-        <svg class={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <svg class={`${cls} ${opacity()}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
           <rect x="1" y="2" width="14" height="12" rx="2" />
           <path d="M4 6l2 2-2 2M8 10h4" />
         </svg>
       </Show>
       <Show when={props.kind === 'fset'}>
-        <svg class={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <svg class={`${cls} ${opacity()}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
           <circle cx="8" cy="8" r="2.5" />
           <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.4 1.4M11.55 11.55l1.4 1.4M3.05 12.95l1.4-1.4M11.55 4.45l1.4-1.4" />
         </svg>
       </Show>
       <Show when={props.kind === 'core'}>
-        <svg class={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <svg class={`${cls} ${opacity()}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
           <rect x="2" y="3" width="12" height="10" rx="2" />
           <path d="M5 8h6M5 11h3" />
         </svg>
       </Show>
       <Show when={props.kind === 'plugin'}>
-        <svg class={cls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <svg class={`${cls} ${opacity()}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
           <rect x="3" y="1" width="10" height="14" rx="2" />
           <path d="M6 5h4M6 8h4M6 11h2" />
         </svg>

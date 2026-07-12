@@ -111,15 +111,15 @@ describe('Sidebar', () => {
   });
 
   it('shows an unread pip for #alpha and a hot highlight pip for #beta', () => {
-    const { getByText } = render(() => <Sidebar />);
+    const { getAllByText } = render(() => <Sidebar />);
 
-    const unreadPip = getByText('3');
+    const unreadPip = getAllByText('3').find((el) => el.classList.contains('min-w-[16px]'));
     expect(unreadPip).toBeInTheDocument();
-    expect(unreadPip.classList.contains('bg-red-500')).toBe(false);
+    expect(unreadPip?.classList.contains('bg-red-500')).toBe(false);
 
-    const hotPip = getByText('2');
+    const hotPip = getAllByText('2').find((el) => el.classList.contains('min-w-[16px]'));
     expect(hotPip).toBeInTheDocument();
-    expect(hotPip.classList.contains('bg-red-500')).toBe(true);
+    expect(hotPip?.classList.contains('bg-red-500')).toBe(true);
   });
 
   it('activates a channel when its row is clicked', () => {
@@ -151,12 +151,25 @@ describe('Sidebar', () => {
   it('narrows the buffer list with the filter input', () => {
     const { getByPlaceholderText, getByText, queryByText } = render(() => <Sidebar />);
 
-    fireEvent.input(getByPlaceholderText('Filter buffers'), { target: { value: 'beta' } });
+    fireEvent.input(getByPlaceholderText('Filter buffers or text'), { target: { value: 'beta' } });
 
     expect(getByText('#beta')).toBeInTheDocument();
     expect(queryByText('#alpha')).toBeNull();
     expect(queryByText('trev')).toBeNull();
     // The server group header survives as the group container.
     expect(getByText('eshmaki')).toBeInTheDocument();
+  });
+
+  it('filters the buffer deck by unread and DM modes', () => {
+    const { getByText, queryByText } = render(() => <Sidebar />);
+
+    fireEvent.click(getByText('Hot'));
+    expect(getByText('#alpha')).toBeInTheDocument();
+    expect(getByText('#beta')).toBeInTheDocument();
+    expect(queryByText('trev')).toBeNull();
+
+    fireEvent.click(getByText('DM'));
+    expect(getByText('trev')).toBeInTheDocument();
+    expect(queryByText('#alpha')).toBeNull();
   });
 });

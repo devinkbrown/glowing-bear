@@ -2,13 +2,16 @@ import { describe, it, expect } from 'vitest';
 
 import {
   parseIrcxLine,
+  parseEventFeedText,
   isIrcxNumeric,
+  isChannelListNumeric,
   buildPropEntry,
   type IrcxParsed,
   type ParsedProp,
   type ParsedAccessEntry,
   type ParsedEvent,
   type ParsedError,
+  type ParsedChannelListRow,
 } from './parser';
 import type { WeeChatLine } from '@/lib/weechat/model';
 
@@ -73,6 +76,133 @@ describe('parseIrcxLine — 818/819 PROP', () => {
   it('builds a PropEntry from a parsed prop', () => {
     const parsed = parse('818', '#chan TOPIC :hello') as ParsedProp;
     expect(buildPropEntry(parsed)).toEqual({ target: '#chan', key: 'TOPIC', value: 'hello' });
+  });
+});
+
+describe('parseEventFeedText — live Event Spine lines', () => {
+  it('parses raw MEDIA EVENT lines with source, target, channel, subject, and detail', () => {
+    const parsed = parseEventFeedText(':eshmaki.me EVENT dbtA3950 MEDIA JOIN #root alice voice');
+
+    expect(parsed).toMatchObject({
+      type: 'event_feed',
+      kind: 'media',
+      source: 'eshmaki.me',
+      target: 'dbtA3950',
+      category: 'MEDIA',
+      verb: 'JOIN',
+      channel: '#root',
+      subject: 'alice',
+      detail: 'voice',
+      attrs: {},
+    });
+  });
+
+  it('parses OBSERVE events and key/value attributes neatly', () => {
+    const parsed = parseEventFeedText(':ircx.us EVENT oper OBSERVE connect bob!u@real.host acct=bob tls=yes');
+
+    expect(parsed).toMatchObject({
+      kind: 'observe',
+      source: 'ircx.us',
+      target: 'oper',
+      category: 'OBSERVE',
+      verb: 'CONNECT',
+      subject: 'bob!u@real.host',
+      attrs: { acct: 'bob', tls: 'yes' },
+    });
+  });
+
+  it('parses NOTE EVENT broadcasts into category, sender, and body', () => {
+    const parsed = parseEventFeedText(':eshmaki.me NOTE EVENT SECURITY :oper!u@host: rotate passwords');
+
+    expect(parsed).toMatchObject({
+      kind: 'note',
+      source: 'eshmaki.me',
+      category: 'SECURITY',
+      sender: 'oper!u@host',
+      detail: 'rotate passwords',
+      attrs: {},
+    });
+  });
+
+  it('parses WeeChat-rendered EVENT text without a raw IRC prefix', () => {
+    const parsed = parseEventFeedText('EVENT me POLICY UPDATE #root local-only=true');
+
+    expect(parsed).toMatchObject({
+      kind: 'event',
+      target: 'me',
+      category: 'POLICY',
+      verb: 'UPDATE',
+      subject: '#root',
+      attrs: { 'local-only': 'true' },
+    });
+  });
+
+  it('unwraps WeeChat unknown-command wrappers around tagged Orochi EVENT lines', () => {
+    const parsed = parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=CONNECT;orochi.io/severity=notice :eshmaki.me EVENT kain USER CONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5"');
+
+    expect(parsed).toMatchObject({
+      kind: 'event',
+      source: 'eshmaki.me',
+      target: 'kain',
+      category: 'USER',
+      verb: 'CONNECT',
+      subject: 'C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5',
+    });
+  });
+
+  it('parses bare Orochi tag prefixes when the leading @ was stripped', () => {
+    const parsed = parseEventFeedText('orochi.io/category=CONNECT;orochi.io/severity=notice :eshmaki.me EVENT kain USER CONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5');
+
+    expect(parsed).toMatchObject({
+      source: 'eshmaki.me',
+      target: 'kain',
+      category: 'USER',
+      verb: 'CONNECT',
+      subject: 'C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5',
+    });
+  });
+
+  it('parses bare Orochi disconnect tags with a trailing reason', () => {
+    const parsed = parseEventFeedText('orochi.io/category=DISCONNECT;orochi.io/severity=notice :eshmaki.me EVENT kain USER DISCONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5 :Client quit');
+
+    expect(parsed).toMatchObject({
+      category: 'USER',
+      verb: 'DISCONNECT',
+      detail: 'Client quit',
+    });
+  });
+
+  it('unwraps member and media Event Spine wrappers from WeeChat server-buffer errors', () => {
+    expect(parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=OPER_ACTION;orochi.io/severity=notice :eshmaki.me EVENT kain MEMBER JOIN #root C"')).toMatchObject({
+      category: 'MEMBER',
+      verb: 'JOIN',
+      subject: '#root',
+      detail: 'C',
+    });
+
+    expect(parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT kain MEDIA PROFILE #root C codecs=kaguravox,kaguravis fec=rs_block"')).toMatchObject({
+      kind: 'media',
+      category: 'MEDIA',
+      verb: 'PROFILE',
+      channel: '#root',
+      subject: 'C',
+      attrs: { codecs: 'kaguravox,kaguravis', fec: 'rs_block' },
+    });
+  });
+
+  it('preserves trailing quit reasons from wrapped disconnect events', () => {
+    const parsed = parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=DISCONNECT;orochi.io/severity=notice :eshmaki.me EVENT kain USER DISCONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5 :Client quit"');
+
+    expect(parsed).toMatchObject({
+      category: 'USER',
+      verb: 'DISCONNECT',
+      subject: 'C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5',
+      detail: 'Client quit',
+    });
+  });
+
+  it('returns null for unrelated text', () => {
+    expect(parseEventFeedText('ordinary server line')).toBeNull();
   });
 });
 
@@ -169,6 +299,14 @@ describe('parseIrcxLine — 806-810/825 EVENT', () => {
     expect(parsed.mask).toBe('*');
   });
 
+  it('parses requester-prefixed EVENT numerics from raw Orochi shape', () => {
+    const parsed = parse('806', 'dbtA3950 MEDIA #root :Event added') as ParsedEvent;
+
+    expect(parsed.type).toBe('event_add');
+    expect(parsed.eventType).toBe('MEDIA');
+    expect(parsed.mask).toBe('#root');
+  });
+
   it('parses the fixture 807 delete ack (no mask on the wire)', () => {
     const parsed = parse('807', 'MEDIA :Event removed') as ParsedEvent;
 
@@ -194,7 +332,51 @@ describe('parseIrcxLine — 806-810/825 EVENT', () => {
   });
 
   it('parses 825 as an event change', () => {
-    expect(parse('825', 'whatever')).toEqual({ type: 'event_change' });
+    expect(parse('825', 'dbtA3950 CHANNEL #bar* :Event updated')).toEqual({
+      type: 'event_change',
+      eventType: 'CHANNEL',
+      mask: '#bar*',
+    });
+  });
+});
+
+describe('parseIrcxLine — LIST/LISTX channel rows', () => {
+  it('recognizes standard LIST numerics separately from IRCX numerics', () => {
+    expect(isIrcxNumeric(['irc_322'])).toBe(false);
+    expect(isChannelListNumeric(['irc_322'])).toBe(true);
+    expect(isChannelListNumeric(['irc_817'])).toBe(true);
+  });
+
+  it('parses a standard 322 LIST row', () => {
+    const parsed = parse('322', '#root 7 :Main room') as ParsedChannelListRow;
+
+    expect(parsed).toEqual({
+      type: 'channel_list_row',
+      channel: '#root',
+      users: 7,
+      topic: 'Main room',
+    });
+  });
+
+  it('parses requester-prefixed LIST rows from raw server shape', () => {
+    const parsed = parse('322', 'me #root 3 :Topic text') as ParsedChannelListRow;
+
+    expect(parsed.channel).toBe('#root');
+    expect(parsed.users).toBe(3);
+    expect(parsed.topic).toBe('Topic text');
+  });
+
+  it('parses Orochi LISTX 812 rows and the 817 end marker', () => {
+    const parsed = parse('812', 'me #test 1 0 0 :mesh room') as ParsedChannelListRow;
+
+    expect(parsed).toEqual({
+      type: 'channel_list_row',
+      channel: '#test',
+      users: 1,
+      modes: '0 0',
+      topic: 'mesh room',
+    });
+    expect(parse('817', 'me :End of LISTX')).toEqual({ type: 'channel_list_end' });
   });
 });
 

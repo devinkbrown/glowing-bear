@@ -11,9 +11,26 @@ import { sendTo } from './connection';
 
 export type ServicesPanel = 'nick' | 'chan' | 'memo' | null;
 
+export interface ChannelListRow {
+  channel: string;
+  users: number;
+  topic: string;
+  modes?: string;
+}
+
+export interface ChannelListState {
+  status: 'idle' | 'loading' | 'ready';
+  rows: ChannelListRow[];
+  query: string;
+  extended: boolean;
+  updatedAt: number | null;
+}
+
 export interface IrcxState {
   /** Server names that identified as orochi (via 004). */
   orochiServers: Record<string, true>;
+  /** Detected direct Orochi WSS gateways keyed by relay server name. */
+  orochiGateways: Record<string, string>;
   /** Channel properties: channel -> key(UPPER) -> value. */
   channelProps: Record<string, Record<string, string>>;
   /** User profiles keyed by nick. */
@@ -38,11 +55,15 @@ export interface IrcxState {
 
   /** MONITOR'd nicks (lowercase). */
   monitorList: Record<string, true>;
+
+  /** Latest LIST/LISTX result set for the channel browser. */
+  channelList: ChannelListState;
 }
 
 function initialState(): IrcxState {
   return {
     orochiServers: {},
+    orochiGateways: {},
     channelProps: {},
     userProfiles: {},
     accessLists: {},
@@ -56,6 +77,13 @@ function initialState(): IrcxState {
     userProfileTarget: null,
     servicesPanel: null,
     monitorList: {},
+    channelList: {
+      status: 'idle',
+      rows: [],
+      query: '',
+      extended: false,
+      updatedAt: null,
+    },
   };
 }
 
@@ -104,8 +132,9 @@ function activeServerName(): string {
 // Orochi detection
 // ---------------------------------------------------------------------------
 
-export function markOrochi(serverName: string): void {
+export function markOrochi(serverName: string, wssGateway?: string): void {
   setState('orochiServers', serverName, true);
+  if (wssGateway) setState('orochiGateways', serverName, wssGateway);
 }
 
 export function isOrochiServer(serverName?: string): boolean {
@@ -209,6 +238,60 @@ export function addAccess(channel: string, level: string, mask: string, reason?:
 export function removeAccess(channel: string, level: string, mask: string): void {
   sendRawToServer(`ACCESS ${channel} DELETE ${level} ${mask}`);
   setTimeout(() => requestAccess(channel), 500);
+}
+
+// ---------------------------------------------------------------------------
+// Channel LIST / LISTX
+// ---------------------------------------------------------------------------
+
+export function requestChannelList(opts: {
+  pattern?: string;
+  minUsers?: string;
+  maxUsers?: string;
+  extended?: boolean;
+} = {}): void {
+  const pattern = opts.pattern?.trim() ?? '';
+  const minUsers = opts.minUsers?.trim() ?? '';
+  const maxUsers = opts.maxUsers?.trim() ?? '';
+  const extended = !!opts.extended;
+  const filters: string[] = [];
+  if (minUsers) filters.push(`>${minUsers}`);
+  if (maxUsers) filters.push(`<${maxUsers}`);
+  const query = [pattern, filters.join(',')].filter(Boolean).join(' ');
+  setState('channelList', {
+    status: 'loading',
+    rows: [],
+    query,
+    extended,
+    updatedAt: null,
+  });
+  sendRawToServer(extended ? 'LISTX' : `LIST${query ? ` ${query}` : ''}`);
+}
+
+export function addChannelListRow(row: ChannelListRow): void {
+  const key = row.channel.toLowerCase();
+  setState('channelList', 'rows', (prev) => {
+    const idx = prev.findIndex((r) => r.channel.toLowerCase() === key);
+    if (idx === -1) return [...prev, row];
+    const next = prev.slice();
+    next[idx] = row;
+    return next;
+  });
+}
+
+export function finishChannelList(): void {
+  setState('channelList', 'status', 'ready');
+  setState('channelList', 'updatedAt', Date.now());
+}
+
+export function clearChannelList(): void {
+  setState('channelList', {
+    status: 'idle',
+    rows: [],
+    query: '',
+    extended: false,
+    updatedAt: null,
+  });
 }
 
 // ---------------------------------------------------------------------------

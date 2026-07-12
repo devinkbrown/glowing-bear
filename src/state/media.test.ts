@@ -198,6 +198,20 @@ describe('peers', () => {
     expect(media.mediaState.peers['bob']).toBeUndefined();
     expect(media.mediaState.spotlightNick).toBeNull();
   });
+
+  it('onCaption stores a bounded room transcript and dispatches live captions', () => {
+    const got: unknown[] = [];
+    const h = (e: Event) => got.push((e as CustomEvent).detail);
+    window.addEventListener('darkbear:caption', h);
+
+    cb().onCaption({ channel: '#room', nick: 'bob', text: 'first line', time: 1 }, true);
+    cb().onCaption({ channel: '#room', nick: 'bob', text: 'replayed line', time: 2 }, false);
+    window.removeEventListener('darkbear:caption', h);
+
+    expect(media.mediaState.transcripts['#room']).toHaveLength(2);
+    expect(media.mediaState.liveCaption?.text).toBe('first line');
+    expect(got).toEqual([{ channel: '#room', nick: 'bob', text: 'first line', time: 1 }]);
+  });
 });
 
 describe('toggles', () => {

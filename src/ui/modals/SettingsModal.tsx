@@ -63,12 +63,12 @@ const THEMES: { id: ThemeId; name: string; accent: string; bg: string; text: str
   { id: 'custom', name: 'Custom', accent: '#888', bg: '#0c0d12', text: '#d0d4e0' },
 ];
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'appearance', label: 'Appearance', icon: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z' },
-  { id: 'messages', label: 'Messages', icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
-  { id: 'notifications', label: 'Alerts', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
-  { id: 'connection', label: 'Connection', icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1' },
-  { id: 'advanced', label: 'Advanced', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
+const TABS: { id: Tab; label: string; desc: string; icon: string }[] = [
+  { id: 'appearance', label: 'Appearance', desc: 'Theme, type, layout', icon: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z' },
+  { id: 'messages', label: 'Messages', desc: 'Density, media, mentions', icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
+  { id: 'notifications', label: 'Alerts', desc: 'Notifications and recovery', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
+  { id: 'connection', label: 'Connection', desc: 'Relay, profiles, bridge', icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1' },
+  { id: 'advanced', label: 'Advanced', desc: 'CSS, uploads, data', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
 ];
 
 const SHORTCUTS: { keys: string; action: string }[] = [
@@ -111,7 +111,11 @@ export default function SettingsModal(props: Props) {
 
   createEffect(() => {
     tab();
-    contentRef?.scrollTo({ top: 0, behavior: 'instant' });
+    if (typeof contentRef?.scrollTo === 'function') {
+      contentRef.scrollTo({ top: 0, behavior: 'instant' });
+    } else if (contentRef) {
+      contentRef.scrollTop = 0;
+    }
   });
 
   const filteredThemes = createMemo(() => {
@@ -136,51 +140,103 @@ export default function SettingsModal(props: Props) {
   };
 
   return (
-    <Modal open={props.open} onClose={props.onClose} title="Settings" width="max-w-2xl" maxHeight="620px">
-      <div class="flex flex-col sm:flex-row" style={{ height: '540px' }}>
+    <Modal
+      open={props.open}
+      onClose={props.onClose}
+      width="min(1120px, calc(100vw - 1rem))"
+      maxHeight="min(88dvh, 820px)"
+      class="settings-modal"
+    >
+      <div class="settings-shell flex flex-col lg:grid lg:grid-cols-[228px_minmax(0,1fr)]" style={{ height: 'min(760px, calc(100dvh - 2rem))' }}>
         {/* Side navigation */}
-        <nav class="hidden sm:flex flex-col w-[160px] shrink-0 border-r border-white/[0.04] py-3 px-2 gap-0.5">
+        <nav class="settings-rail hidden lg:flex flex-col border-r border-white/[0.06] p-3 gap-1">
+          <div class="px-2.5 pb-3 pt-1">
+            <p class="text-[10px] font-black uppercase tracking-[0.18em] text-gray-600">DarkBear</p>
+            <h2 class="mt-1 text-[20px] font-black tracking-tight text-gray-50">Preferences</h2>
+            <p class="mt-1 text-[11px] leading-relaxed text-gray-600">Tune the relay console without leaving the buffer.</p>
+          </div>
           <For each={TABS}>
             {(t) => (
               <button onClick={() => setTab(t.id)}
-                class={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all text-[12px] font-medium
+                class={`settings-nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all
                   ${tab() === t.id
-                    ? 'bg-white/[0.07] text-gray-100 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.03]'}`}>
-                <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d={t.icon} />
-                </svg>
-                {t.label}
+                    ? 'bg-[var(--custom-accent,#818cf8)]/[0.11] text-gray-100 shadow-sm ring-1 ring-[var(--custom-accent,#818cf8)]/20'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.035]'}`}>
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04]">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d={t.icon} />
+                  </svg>
+                </span>
+                <span class="min-w-0">
+                  <span class="block text-[12px] font-bold leading-tight">{t.label}</span>
+                  <span class="mt-0.5 block truncate text-[10px] leading-tight text-gray-600">{t.desc}</span>
+                </span>
               </button>
             )}
           </For>
           <div class="flex-1" />
-          <div class="px-2 pt-3 border-t border-white/[0.04]">
-            <p class="text-[9px] text-gray-700 font-mono leading-relaxed">
-              DarkBear v3<br />
-              {settings.theme} theme
-            </p>
+          <div class="settings-rail-status rounded-2xl border border-white/[0.06] bg-black/20 p-3">
+            <p class="text-[9px] font-black uppercase tracking-[0.16em] text-gray-600">Current</p>
+            <div class="mt-2 flex items-center gap-2">
+              <span class="h-2.5 w-2.5 rounded-full bg-[var(--custom-accent,#818cf8)]" />
+              <span class="min-w-0 truncate text-[12px] font-semibold text-gray-300">{settings.theme}</span>
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-1.5 text-center">
+              <MiniStat label="font" value={`${settings.fontSize}px`} />
+              <MiniStat label="bridge" value={bridge().enabled ? 'on' : 'off'} hot={bridge().enabled} />
+            </div>
           </div>
         </nav>
 
-        {/* Mobile tabs */}
-        <div class="flex sm:hidden gap-0 px-2 pt-1 border-b border-white/[0.04] overflow-x-auto">
-          <For each={TABS}>
-            {(t) => (
-              <button onClick={() => setTab(t.id)}
-                class={`px-2.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider transition-colors relative whitespace-nowrap
-                  ${tab() === t.id ? 'text-[var(--custom-accent,#818cf8)]' : 'text-gray-600 hover:text-gray-400'}`}>
-                {t.label}
-                <Show when={tab() === t.id}>
-                  <span class="absolute bottom-0 left-2 right-2 h-[2px] bg-[var(--custom-accent,#818cf8)] rounded-full" />
-                </Show>
+        <div class="flex min-h-0 flex-1 flex-col">
+          <div class="settings-mobile-head border-b border-white/[0.06] px-3 pb-0 pt-3 lg:hidden">
+            <div class="mb-2 flex items-center justify-between gap-3 px-1">
+              <div class="min-w-0">
+                <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">DarkBear</p>
+                <h2 class="text-[18px] font-black tracking-tight text-gray-50">Preferences</h2>
+              </div>
+              <button
+                onClick={() => props.onClose()}
+                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.035] text-gray-500 active:bg-white/[0.08]"
+                aria-label="Close preferences"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
               </button>
-            )}
-          </For>
-        </div>
+            </div>
+            <div class="flex gap-1 overflow-x-auto pb-2">
+              <For each={TABS}>
+                {(t) => (
+                  <button onClick={() => setTab(t.id)}
+                    class={`shrink-0 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] transition-all
+                      ${tab() === t.id ? 'bg-[var(--custom-accent,#818cf8)] text-white shadow-lg shadow-black/20' : 'bg-white/[0.035] text-gray-500 active:bg-white/[0.07]'}`}>
+                    {t.label}
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
 
-        {/* Content area */}
-        <div ref={(el) => (contentRef = el)} class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+          <div class="hidden items-center justify-between border-b border-white/[0.06] px-5 py-4 lg:flex">
+            <div>
+              <p class="text-[10px] font-black uppercase tracking-[0.16em] text-gray-600">{TABS.find((t) => t.id === tab())?.desc}</p>
+              <h3 class="mt-1 text-[17px] font-black tracking-tight text-gray-50">{TABS.find((t) => t.id === tab())?.label}</h3>
+            </div>
+            <button
+              onClick={() => props.onClose()}
+              class="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.035] text-gray-500 hover:text-gray-200 hover:bg-white/[0.06]"
+              aria-label="Close preferences"
+            >
+              <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Content area */}
+          <div ref={(el) => (contentRef = el)} class="settings-content flex-1 overflow-y-auto p-3 sm:p-4 lg:p-5 space-y-4 sm:space-y-5">
+            <PreferenceOverview bridgeEnabled={bridge().enabled} />
 
           {/* ─── APPEARANCE ─── */}
           <Show when={tab() === 'appearance'}>
@@ -509,15 +565,79 @@ export default function SettingsModal(props: Props) {
           </Show>
         </div>
       </div>
+      </div>
     </Modal>
   );
 }
 
 /* ─── Shared Components ─── */
 
+function PreferenceOverview(props: { bridgeEnabled: boolean }) {
+  return (
+    <div class="settings-overview rounded-3xl border border-white/[0.07] bg-white/[0.03] p-3 sm:p-4">
+      <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <OverviewTile label="Theme" value={String(settings.theme)} tone="accent" />
+        <OverviewTile label="Messages" value={settings.compactMode ? 'compact' : 'comfortable'} />
+        <OverviewTile label="Alerts" value={settings.notifications ? 'enabled' : 'quiet'} hot={settings.notifications} />
+        <OverviewTile label="Bridge" value={props.bridgeEnabled ? 'orochi on' : 'relay only'} hot={props.bridgeEnabled} />
+      </div>
+      <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <QuickToggle label="Compact" on={settings.compactMode} onClick={() => updateSettings({ compactMode: !settings.compactMode })} />
+        <QuickToggle label="Images" on={settings.inlineImages} onClick={() => updateSettings({ inlineImages: !settings.inlineImages })} />
+        <QuickToggle label="Alerts" on={settings.notifications} onClick={() => updateSettings({ notifications: !settings.notifications })} />
+        <QuickToggle label="Bridge" on={props.bridgeEnabled} onClick={() => updateBridge({ enabled: !props.bridgeEnabled })} />
+      </div>
+    </div>
+  );
+}
+
+function OverviewTile(props: { label: string; value: string; tone?: 'accent'; hot?: boolean }) {
+  return (
+    <div
+      class="rounded-2xl border border-white/[0.055] bg-black/20 px-3 py-2.5"
+      classList={{
+        'border-[var(--custom-accent,#818cf8)]/20 bg-[var(--custom-accent,#818cf8)]/[0.06]': props.tone === 'accent' || props.hot,
+      }}
+    >
+      <p class="text-[9px] font-black uppercase tracking-[0.15em] text-gray-600">{props.label}</p>
+      <p class="mt-1 truncate text-[13px] font-black text-gray-100">{props.value}</p>
+    </div>
+  );
+}
+
+function MiniStat(props: { label: string; value: string; hot?: boolean }) {
+  return (
+    <div class="rounded-xl border border-white/[0.05] bg-white/[0.025] px-2 py-1.5">
+      <p class="text-[9px] font-black uppercase tracking-[0.12em] text-gray-600">{props.label}</p>
+      <p class="mt-0.5 truncate text-[11px] font-bold" classList={{ 'text-[var(--custom-accent,#818cf8)]': props.hot, 'text-gray-300': !props.hot }}>
+        {props.value}
+      </p>
+    </div>
+  );
+}
+
+function QuickToggle(props: { label: string; on: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={props.onClick}
+      aria-label={`Toggle ${props.label}`}
+      class="flex items-center justify-between rounded-2xl border border-white/[0.055] bg-black/15 px-3 py-2 text-left transition-all active:scale-[0.98] hover:bg-white/[0.04]"
+    >
+      <span class="text-[11px] font-bold text-gray-300">{props.label}</span>
+      <span
+        class="h-2.5 w-2.5 rounded-full"
+        classList={{
+          'bg-[var(--custom-accent,#818cf8)] shadow-[0_0_12px_var(--custom-accent,#818cf8)]': props.on,
+          'bg-gray-700': !props.on,
+        }}
+      />
+    </button>
+  );
+}
+
 function Section(props: { label: string; desc?: string; children: JSX.Element }) {
   return (
-    <div>
+    <section class="settings-section rounded-3xl border border-white/[0.06] bg-black/20 p-3 sm:p-4">
       <div class="mb-2">
         <h3 class="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">{props.label}</h3>
         <Show when={props.desc}>
@@ -525,22 +645,22 @@ function Section(props: { label: string; desc?: string; children: JSX.Element })
         </Show>
       </div>
       {props.children}
-    </div>
+    </section>
   );
 }
 
 function Toggle(props: { label: string; desc: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
     <button onClick={() => props.onChange(!props.on)} role="switch" aria-checked={props.on}
-      class="flex items-center justify-between py-2 group w-full text-left rounded-lg px-2 -mx-2 hover:bg-white/[0.02] transition-colors">
+      class="flex items-center justify-between py-3 sm:py-2.5 group w-full text-left rounded-2xl px-3 -mx-1 hover:bg-white/[0.035] active:bg-white/[0.055] transition-colors">
       <div class="min-w-0 mr-4">
-        <span class="text-[12px] text-gray-200 font-medium block leading-tight">{props.label}</span>
-        <p class="text-[10px] text-gray-600 leading-snug mt-0.5">{props.desc}</p>
+        <span class="text-[13px] sm:text-[12px] text-gray-100 font-bold block leading-tight">{props.label}</span>
+        <p class="text-[11px] sm:text-[10px] text-gray-600 leading-snug mt-1">{props.desc}</p>
       </div>
-      <span class={`relative w-9 h-[20px] rounded-full transition-all shrink-0
+      <span class={`relative w-10 h-[22px] rounded-full transition-all shrink-0
         ${props.on ? 'bg-[var(--custom-accent,#818cf8)] shadow-[0_0_8px_var(--custom-accent,#818cf8)]/25' : 'bg-white/[0.06]'}`}>
-        <span class={`absolute top-[2px] left-[2px] block w-[16px] h-[16px] rounded-full bg-white shadow-sm transition-transform duration-150
-          ${props.on ? 'translate-x-[16px]' : ''}`} />
+        <span class={`absolute top-[2px] left-[2px] block w-[18px] h-[18px] rounded-full bg-white shadow-sm transition-transform duration-150
+          ${props.on ? 'translate-x-[18px]' : ''}`} />
       </span>
     </button>
   );
@@ -549,7 +669,7 @@ function Toggle(props: { label: string; desc: string; on: boolean; onChange: (v:
 function Pill(props: { active: boolean; onClick: () => void; children: JSX.Element }) {
   return (
     <button onClick={() => props.onClick()}
-      class={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all
+      class={`px-3.5 py-2 rounded-xl text-[11px] font-black transition-all active:scale-[0.98]
         ${props.active
           ? 'bg-[var(--custom-accent,#818cf8)]/12 text-gray-100 ring-1 ring-[var(--custom-accent,#818cf8)]/30 shadow-sm'
           : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'}`}>
@@ -563,7 +683,7 @@ function Slider(props: {
   onChange: (v: number) => void;
 }) {
   return (
-    <div>
+    <div class="settings-slider">
       <div class="flex items-center justify-between mb-1">
         <span class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500">{props.label}</span>
         <span class="text-[11px] text-gray-400 tabular-nums font-mono">{props.value}{props.unit}</span>
@@ -571,7 +691,7 @@ function Slider(props: {
       <input type="range" min={props.min} max={props.max} step={props.step} value={props.value}
         onInput={(e) => props.onChange(Number(e.currentTarget.value))}
         aria-label={props.label}
-        class="w-full h-1.5 rounded-full cursor-pointer" style={{ 'accent-color': 'var(--custom-accent, #818cf8)' }} />
+        class="w-full h-7 rounded-full cursor-pointer" style={{ 'accent-color': 'var(--custom-accent, #818cf8)' }} />
     </div>
   );
 }
@@ -586,7 +706,7 @@ function InputField(props: {
         {props.label}
         <input type={props.type ?? 'text'} value={props.value} placeholder={props.placeholder}
           onInput={(e) => props.onChange(e.currentTarget.value)}
-          class="w-full mt-1 bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-2 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700 normal-case tracking-normal font-normal" />
+          class="w-full mt-1.5 bg-white/[0.035] border border-white/[0.07] rounded-xl text-gray-100 text-[13px] sm:text-[12px] px-3 py-2.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/35 focus:bg-white/[0.055] transition-colors placeholder:text-gray-700 normal-case tracking-normal font-normal" />
       </label>
     </div>
   );

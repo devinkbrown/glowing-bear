@@ -137,18 +137,20 @@ Bridge seams:
 |---|---|
 | `MediaCommandSink` | `{ startCall(nick, video), joinRoom(channel, video), hangup() }` |
 | `setMediaSink(sink \| null)` | install the bridge's media command sink |
-| `RelayObserver` | `{ onChannelBufferOpened?(serverName, channel), onOrochiDetected?(serverName) }` |
+| `RelayObserver` | `{ onChannelBufferOpened?(serverName, channel), onOrochiDetected?(serverName, wssGateway?) }` |
 | `setRelayObserver(obs \| null)` | install the bridge's relay observer |
 
-Observer timing: `onOrochiDetected` fires when a 004 matching
-`/\b(ophion|orochi)\b/i` is seen (live line or server-buffer history replay).
+Observer timing: `onOrochiDetected` fires when a 004 names Orochi, or when the
+004 server host is a known Orochi node (live line or server-buffer history
+replay).
 Immediately after detection, `onChannelBufferOpened` is replayed for every
 channel buffer already open on that server; afterwards it fires for each new
 channel buffer opened on a known-orochi server. Orochi detection also gates
 the IRCX slash commands above.
 
 Internal pipeline (for reference): lineAdded handles TAGMSG `+typing`/`+react`
-(never rendered), IRCX numerics 801–825/915–919 → ircx store, `bot`/`account`
+(never rendered), IRCX numerics 801–825/915–919 plus LIST 322/323 and LISTX
+812/817 → ircx store, `bot`/`account`
 tags, 004 orochi detection, oper detection, channel-mode tracking, typing
 clear, `addLine`, highlight notifications (`notify` + optional sound, muted
 buffers skipped), and document-title unread badges.
@@ -159,7 +161,7 @@ buffers skipped), and document-title unread badges.
 
 | Export | Semantics |
 |---|---|
-| `ircxState` | read-only store: `orochiServers{}, channelProps{chan:{KEY:val}}, userProfiles{nick}, accessLists{chan:[]}, botNicks{}, accountMap{}, pendingPropTarget/Entries, pendingAccessChannel/Entries, channelInfoTarget, userProfileTarget, servicesPanel, monitorList{}` |
+| `ircxState` | read-only store: `orochiServers{}, channelProps{chan:{KEY:val}}, userProfiles{nick}, accessLists{chan:[]}, botNicks{}, accountMap{}, pendingPropTarget/Entries, pendingAccessChannel/Entries, channelInfoTarget, userProfileTarget, servicesPanel, monitorList{}, channelList{}` |
 | `markOrochi(serverName)` | flag a server as orochi |
 | `isOrochiServer(serverName?)` | lookup |
 | `isActiveOrochi()` | active buffer's server is orochi |
@@ -171,6 +173,8 @@ buffers skipped), and document-title unread badges.
 | `addAccessEntry(entry)` / `finishAccessList(channel)` | pending assembly → `accessLists` |
 | `clearAccessRequest()` | drop pending ACCESS state |
 | `addAccess(chan, level, mask, reason?)` / `removeAccess(chan, level, mask)` | ACCESS ADD/DELETE, re-list after 500 ms |
+| `requestChannelList({ pattern?, minUsers?, maxUsers?, extended? })` | arm channel browser + raw `LIST` or Orochi `LISTX` |
+| `addChannelListRow(row)` / `finishChannelList()` / `clearChannelList()` | numeric `322/812` assembly → `ircxState.channelList` |
 | `markBot(nick)` / `unmarkBot(nick)` / `isBot(nick)` | lowercase bot registry |
 | `setAccount(nick, account)` / `getAccount(nick)` | `'*'`/`''` clears (logout) |
 | `openChannelInfo(chan)` / `closeChannelInfo()` | channel info panel target |
@@ -249,7 +253,8 @@ engine mounts here; the bridge controller attaches its IRCClient
 |---|---|
 | `CallState` | `'idle'\|'ringing_in'\|'ringing_out'\|'connecting'\|'in_call'` |
 | `MediaPeer` | `{ nick, hasVideo, speaking, muted, audioLevel }` |
-| `mediaState` | read-only store: `{ callState, channel, kind:'voice'\|'video', callWith, startedAt, peers{}, selfMuted, selfDeafened, cameraOn, screenSharing, speakingNick, minimized, spotlightNick, error, mediaAvailable }` |
+| `MediaTranscriptEntry` | Event Spine caption/transcript item: `{ channel, nick, text, time }` |
+| `mediaState` | read-only store: `{ callState, channel, kind:'voice'\|'video', callWith, startedAt, peers{}, selfMuted, selfDeafened, cameraOn, screenSharing, speakingNick, raisedHands{}, transcripts{}, liveCaption, minimized, spotlightNick, error, mediaAvailable }` |
 | `joinRoom(channel, video)` / `leaveRoom()` | channel voice/video room |
 | `startCall(nick, video)` / `acceptCall()` / `rejectCall()` / `hangup()` | 1:1 calls (incoming ring → `ringing_in` + ringtone) |
 | `toggleMute()` / `toggleDeafen()` / `toggleCamera()` / `toggleScreenShare()` | self controls |
