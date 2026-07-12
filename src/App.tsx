@@ -1,4 +1,4 @@
-import { ErrorBoundary, Show, Suspense, createEffect, createMemo, lazy, onCleanup, onMount } from 'solid-js';
+import { ErrorBoundary, Show, Suspense, createEffect, createMemo, lazy, onCleanup, onMount, type JSX } from 'solid-js';
 import {
   settings,
   buffersState,
@@ -48,6 +48,9 @@ import type { ThemeName } from '@/ui/bits/ThemeBg';
 // <Suspense> boundaries below keep a still-loading overlay from blanking the
 // main UI (a null fallback renders nothing until the chunk resolves).
 const ThemeBg = lazy(() => import('@/ui/bits/ThemeBg'));
+// The 816-line mascot stays out of the entry chunk: it only ever renders in the
+// disconnected empty state, so its import fires the first time that state shows.
+const AstronautBear = lazy(() => import('@/ui/bits/AstronautBear'));
 const VideoRoom = lazy(() => import('@/ui/media/VideoRoom'));
 const UserList = lazy(() => import('@/ui/panels/UserList'));
 const ChannelInfoPanel = lazy(() => import('@/ui/panels/ChannelInfoPanel'));
@@ -97,6 +100,25 @@ function setupServiceWorkerRefresh(): () => void {
 
 export default function App() {
   const isDesktop = createMediaQuery('(min-width: 1024px)');
+  // Honour prefers-reduced-transparency (SC-adjacent): opt-out users get the
+  // solid deep-space ink with no blur, so surfacing the scene never costs them
+  // legibility. Everyone else gets a frosted glass over the live canvas.
+  const reduceTransparency = createMediaQuery('(prefers-reduced-transparency: reduce)');
+
+  // The reading surface behind the message column + empty state. It consumes the
+  // theme translucency contract (--surface-veil / --surface-blur, owned by
+  // darkbear-theme) so the animated ThemeBg scene + the mascot read THROUGH,
+  // while the veil + backdrop-blur hold body text legible. Opaque-ish color-mix
+  // fallbacks keep it correct until those tokens land.
+  const readingSurface = (): JSX.CSSProperties =>
+    reduceTransparency()
+      ? { 'background-color': 'var(--color-gray-950, #000005)' }
+      : {
+          'background-color':
+            'var(--surface-veil, color-mix(in srgb, var(--color-gray-950, #000005) 62%, transparent))',
+          'backdrop-filter': 'blur(var(--surface-blur, 14px))',
+          '-webkit-backdrop-filter': 'blur(var(--surface-blur, 14px))',
+        };
   let sheetDrag: { startY: number; currentY: number; sheet: HTMLElement } | null = null;
 
   const beginSheetDrag = (ev: TouchEvent & { currentTarget: HTMLElement }): void => {
@@ -325,12 +347,34 @@ export default function App() {
             class="flex min-h-0 flex-1"
             classList={{ 'flex-col': uiState.splitMode === 'horizontal', 'flex-row': uiState.splitMode !== 'horizontal' }}
           >
-            <section class="flex min-h-0 min-w-0 flex-1 flex-col">
+            <section class="flex min-h-0 min-w-0 flex-1 flex-col" style={readingSurface()}>
               <Show
                 when={activePtr()}
                 fallback={
-                  <div class="flex flex-1 items-center justify-center text-sm text-gray-500">
-                    Connect to your WeeChat relay to get started
+                  <div class="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
+                    <Suspense fallback={<div class="h-[132px] w-[132px]" />}>
+                      <AstronautBear
+                        size={132}
+                        theme={settings.theme as ThemeName}
+                        class="drop-shadow-[0_10px_34px_rgba(6,6,26,0.6)]"
+                      />
+                    </Suspense>
+                    <div class="space-y-1.5">
+                      <p class="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">DarkBear</p>
+                      <h2 class="text-[22px] font-semibold tracking-tight text-gray-200 sm:text-[26px]">
+                        Ready when you are
+                      </h2>
+                      <p class="mx-auto max-w-[34ch] text-[13px] leading-relaxed text-gray-500">
+                        Connect to your WeeChat relay to bring your buffers, channels, and DMs into orbit.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openModal('connect')}
+                      class="rounded-full border border-white/[0.10] bg-white/[0.04] px-5 py-2 text-[12px] font-semibold tracking-wide text-gray-200 transition-colors hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--custom-accent,#818cf8)]"
+                    >
+                      Connect relay
+                    </button>
                   </div>
                 }
               >
@@ -341,6 +385,7 @@ export default function App() {
               {(ptr) => (
                 <section
                   class="flex min-h-0 min-w-0 flex-1 flex-col"
+                  style={readingSurface()}
                   classList={{
                     'border-l border-gray-800/70': uiState.splitMode === 'vertical',
                     'border-t border-gray-800/70': uiState.splitMode === 'horizontal',
