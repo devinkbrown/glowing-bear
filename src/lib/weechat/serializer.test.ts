@@ -47,6 +47,21 @@ describe('initCmd', () => {
 			'init password=s3cret!with spaces,compression=off\n'
 		);
 	});
+
+	// SECURITY: initCmd builds its line directly, not via cmd(), so it must strip
+	// CR/LF itself — a raw newline in the password would inject a second relay
+	// command past the `\n` framing (e.g. `init password=x\nquit`).
+	it('strips CR/LF from the password so no second command is smuggled', () => {
+		// A newline in the password must not start a new `quit` relay command.
+		const out = initCmd('x\nquit', true);
+		expect(out).toBe('init password=xquit,compression=zlib\n');
+		// Exactly one newline, and it is the terminator (last byte).
+		expect(out.indexOf('\n')).toBe(out.length - 1);
+	});
+
+	it('strips a lone CR from the password', () => {
+		expect(initCmd('pa\rss', false)).toBe('init password=pass,compression=off\n');
+	});
 });
 
 describe('hdataCmd', () => {

@@ -42,10 +42,14 @@ export function cmd(id: string, command: string, ...args: string[]): string {
  * flow below; this remains the fallback for relays too old to speak `handshake`.
  */
 export function initCmd(password: string, compression: boolean): string {
-	// WeeChat relay expects comma-separated options for init. Literal commas
-	// in the password must be escaped as "\," per the relay protocol, or the
-	// password is truncated and the remainder parsed as a bogus option.
-	const escaped = password.replace(/,/g, '\\,');
+	// WeeChat relay expects comma-separated options for init. This line is built
+	// directly (not via cmd()), so it must strip CR/LF itself: a raw newline in
+	// the password would split `init` into a second attacker-chosen relay command
+	// past the `\n` framing (the same injection class cmd()/inputCmd guard). A
+	// newline is never valid inside a relay password token, so we drop it. Literal
+	// commas must then be escaped as "\," per the relay protocol, or the password
+	// is truncated and the remainder parsed as a bogus option.
+	const escaped = stripNewlines(password).replace(/,/g, '\\,');
 	const opts = [`password=${escaped}`, `compression=${compression ? 'zlib' : 'off'}`].join(',');
 	return `init ${opts}\n`;
 }
