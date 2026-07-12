@@ -1,4 +1,4 @@
-import { ErrorBoundary, Show, Suspense, createEffect, createMemo, lazy, onCleanup, onMount, type JSX } from 'solid-js';
+import { ErrorBoundary, Show, Suspense, createEffect, createMemo, lazy, onCleanup, onMount } from 'solid-js';
 import {
   settings,
   buffersState,
@@ -158,25 +158,13 @@ function setupServiceWorkerRefresh(): () => void {
 
 export default function App() {
   const isDesktop = createMediaQuery('(min-width: 1024px)');
-  // Honour prefers-reduced-transparency (SC-adjacent): opt-out users get the
-  // solid deep-space ink with no blur, so surfacing the scene never costs them
-  // legibility. Everyone else gets a frosted glass over the live canvas.
-  const reduceTransparency = createMediaQuery('(prefers-reduced-transparency: reduce)');
-
-  // The reading surface behind the message column + empty state. It consumes the
-  // theme translucency contract (--surface-veil / --surface-blur, owned by
-  // darkbear-theme) so the animated ThemeBg scene + the mascot read THROUGH,
-  // while the veil + backdrop-blur hold body text legible. Opaque-ish color-mix
-  // fallbacks keep it correct until those tokens land.
-  const readingSurface = (): JSX.CSSProperties =>
-    reduceTransparency()
-      ? { 'background-color': 'var(--color-gray-950, #000005)' }
-      : {
-          'background-color':
-            'var(--surface-veil, color-mix(in srgb, var(--color-gray-950, #000005) 62%, transparent))',
-          'backdrop-filter': 'blur(var(--surface-blur, 14px))',
-          '-webkit-backdrop-filter': 'blur(var(--surface-blur, 14px))',
-        };
+  // The reading surface + sidebar are translucent via the shared `.db-surface`
+  // / `.darkbear-sidebar` contract in global.css: the theme's --surface-veil +
+  // backdrop-blur let the animated ThemeBg scene + the mascot read THROUGH,
+  // while a legibility scrim keeps body text >= AA over the scene's brightest
+  // frame. prefers-reduced-transparency + forced-colors fall back to a solid
+  // surface in CSS (no per-component JS media listener, and forced-colors is
+  // reachable — which an inline style could not honour).
   let sheetDrag: { startY: number; currentY: number; sheet: HTMLElement } | null = null;
 
   // Refs for the mobile dialog wiring: <main> is the region behind an open
@@ -449,7 +437,7 @@ export default function App() {
             class="flex min-h-0 flex-1"
             classList={{ 'flex-col': uiState.splitMode === 'horizontal', 'flex-row': uiState.splitMode !== 'horizontal' }}
           >
-            <section class="flex min-h-0 min-w-0 flex-1 flex-col" style={readingSurface()}>
+            <section class="db-surface flex min-h-0 min-w-0 flex-1 flex-col">
               <Show
                 when={activePtr()}
                 fallback={
@@ -486,8 +474,7 @@ export default function App() {
             <Show when={uiState.splitMode !== 'none' && splitPtr()}>
               {(ptr) => (
                 <section
-                  class="flex min-h-0 min-w-0 flex-1 flex-col"
-                  style={readingSurface()}
+                  class="db-surface flex min-h-0 min-w-0 flex-1 flex-col"
                   classList={{
                     'border-l border-gray-800/70': uiState.splitMode === 'vertical',
                     'border-t border-gray-800/70': uiState.splitMode === 'horizontal',

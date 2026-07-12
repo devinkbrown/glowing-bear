@@ -92,6 +92,15 @@ body {
      backdrop-filter radius. A theme may override either in its own block. */
   --surface-veil: color-mix(in srgb, var(--color-gray-900, #07071a) 74%, transparent);
   --surface-blur: 14px;
+  /* --surface-ink is the SOLID fallback ground (the theme's deepest bg), used
+     when prefers-reduced-transparency / forced-colors opt out of the frosted
+     shell. --surface-scrim is a thin legibility wash laid ONLY behind the
+     reading measure (.msg-area) so dense body text keeps margin over the
+     scene's brightest frame, while the empty/hero state stays at veil density
+     and lets the mascot + scene read through. Both reference gray-950, so they
+     re-price per theme by construction (no per-theme override needed). */
+  --surface-ink: var(--color-gray-950, #000005);
+  --surface-scrim: color-mix(in srgb, var(--color-gray-950, #000005) 30%, transparent);
   --input-bottom-pad: max(0.5rem, env(safe-area-inset-bottom));
   --mobile-dock-h: 76px;
   --irc-white:   #ffffff;
@@ -125,11 +134,16 @@ body { font-family: var(--app-font); }
 
 /* ── App chrome: dense relay-console treatment ─────────────────────────── */
 .darkbear-sidebar {
+  /* Translucent over the live scene: the brand washes now float on the veil,
+     not on opaque ink, so the animated ThemeBg reads through the buffer rail.
+     The final layer is --surface-veil (per-theme density) + backdrop-blur. */
   background:
     linear-gradient(180deg, rgba(255,255,255,0.035), transparent 18%),
     linear-gradient(135deg, rgba(45,212,191,0.055), transparent 30%),
     linear-gradient(315deg, rgba(248,113,113,0.035), transparent 28%),
-    var(--color-gray-950, #000005);
+    var(--surface-veil);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
 }
 
 .darkbear-topbar {
@@ -466,6 +480,11 @@ body { font-family: var(--app-font); }
   line-height: 1.65;
   overflow-wrap: anywhere;
   word-break: break-word;
+  /* Legibility scrim behind the reading measure only — deepens the panel veil
+     under running text so body/timestamps keep margin over the brightest scene
+     frame, while the empty/hero state (no .msg-area) stays veil-light. Forced
+     to solid under the reduced-transparency / forced-colors guards below. */
+  background-color: var(--surface-scrim);
 }
 
 /* Subtle top fade for scroll context */
@@ -830,6 +849,54 @@ select:focus-visible {
 /* Pointer clicks should not paint the ring; only keyboard focus does. */
 :focus:not(:focus-visible) {
   outline: none;
+}
+
+/* ── Translucent shell over the live scene ─────────────────────────────────
+   The shell floats over the animated ThemeBg / StarfieldBg canvas so the scene
+   + AstronautBear mascot read THROUGH the reading column and the buffer rail
+   (App.tsx root stays a solid ink base-coat BEHIND the scene; the scene sits
+   z-0; sidebar + message sections sit z-10 and go translucent here). Every
+   floating surface uses ONE elevation system — the per-theme --surface-veil at
+   ~74–88% + backdrop-blur — never a per-component magic value.
+
+   Legibility guarantee: at the scene's BRIGHTEST possible frame (worst case:
+   pure white behind), the veil composites down to a dark ground on which the
+   gray-200 body rail clears 4.5:1 and gray-300 clears 3:1 on EVERY theme —
+   proven on resolved hex in styles/contrast.test.ts. The reading measure adds
+   --surface-scrim on top for extra margin. Blur is a decorative refinement,
+   never load-bearing for contrast, and is never animated.
+
+   prefers-reduced-transparency and forced-colors opt OUT to a fully solid
+   surface with no blur, so surfacing the scene never costs a reader legibility
+   (formal AA / forced-colors audit → darkbear-a11y). */
+.db-surface {
+  background-color: var(--surface-veil);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .db-surface,
+  .darkbear-sidebar {
+    background: var(--surface-ink);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .msg-area {
+    background-color: var(--surface-ink);
+  }
+}
+
+@media (forced-colors: active) {
+  .db-surface,
+  .darkbear-sidebar {
+    background: Canvas;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .msg-area {
+    background-color: Canvas;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

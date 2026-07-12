@@ -168,7 +168,7 @@ export default function Sidebar(props: SidebarProps) {
 
   return (
     <aside
-      class="darkbear-sidebar flex flex-col h-full bg-gray-950 border-r border-white/[0.06] select-none overflow-hidden touch-pan-y"
+      class="darkbear-sidebar flex flex-col h-full border-r border-white/[0.06] select-none overflow-hidden touch-pan-y"
       style={{ width: `min(${settings.sidebarWidth}px, 85vw)`, 'flex-shrink': 0 }}
     >
       {/* Brand */}
