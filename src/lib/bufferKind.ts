@@ -1,4 +1,4 @@
-import type { WeeChatBuffer } from '@/types';
+import type { WeeChatBuffer } from '@/lib/weechat/model';
 
 export type BufferKind = 'channel' | 'query' | 'server' | 'raw' | 'fset' | 'core' | 'plugin';
 

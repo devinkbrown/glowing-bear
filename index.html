@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Content-Security-Policy — defense-in-depth backstop for the message-render
+      and profile surfaces. No 'unsafe-inline' for scripts: the two first-party
+      bootstrap scripts below are allowlisted by SHA-256 hash, so an injected
+      inline handler (e.g. <img onerror=…>) can never execute. 'wasm-unsafe-eval'
+      is required by the opcodec media codec (WebAssembly). Directives that are
+      IGNORED in a <meta> CSP (frame-ancestors, X-Frame-Options) should also be
+      set as nginx response headers on /darkbear/. Tuned so WS relays, media,
+      uploads, and YouTube/Twitch embeds keep working.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-y7GJxeLo2t/duzld7J7nlJXHyyhQKM3/duNOwdaitV0=' 'sha256-pZ9Thf83kNNRWD0z9UFIxXP5zEUrViZIcCCYE5vChNg='; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; media-src 'self' https: blob:; font-src 'self' data:; connect-src 'self' https: wss: ws:; worker-src 'self' blob:; child-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://clips.twitch.tv https://player.twitch.tv; manifest-src 'self'"
+    />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0b10" />
+    <title>DarkBear</title>
+    <meta name="description" content="DarkBear IRC client — WeeChat relay + direct Orochi with realtime voice/video" />
+    <!-- Preload ONLY the critical body weight (Inter 400). Other weights and
+         JetBrains Mono fetch on first use. Same-origin, so CSP font-src 'self'
+         covers it; crossorigin is still required on font preloads. -->
+    <link
+      rel="preload"
+      href="/darkbear/fonts/inter-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="manifest" href="/darkbear/manifest.json" />
+    <link rel="icon" href="/darkbear/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/darkbear/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DarkBear" />
+    <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="pragma" content="no-cache" />
+    <meta http-equiv="expires" content="0" />
+    <!-- Sync script to prevent FOUC — reads theme from localStorage before first paint -->
+    <script>
+      (function () {
+        try {
+          var s = localStorage.getItem('darkbear_settings_v2');
+          if (s) {
+            var d = JSON.parse(s);
+            if (d.theme) document.documentElement.setAttribute('data-theme', d.theme);
+          } else {
+            var v1 = localStorage.getItem('darkbear_settings_v1');
+            if (v1) {
+              var d1 = JSON.parse(v1);
+              if (d1.theme) {
+                var t = d1.theme === 'midnight' ? 'darkbear' : d1.theme;
+                document.documentElement.setAttribute('data-theme', t);
+              }
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <!-- Asset-version cache bust — deploy.sh rewrites the var v='...' literal in
+         the non-executed holder below on every deploy. The executable script
+         reads the version out of it, so the executable script's bytes (and thus
+         its CSP SHA-256 hash) stay STABLE across deploys — no deploy.sh change is
+         needed to keep the CSP valid. -->
+    <script type="text/plain" id="db-asset-version">var v = '2026-07-12-203328-darkbear-ddeeda6'</script>
+    <script>
+      (function () {
+        try {
+          var _h = document.getElementById('db-asset-version');
+          var _m = _h && _h.textContent.match(/'([^']*)'/);
+          var v = _m ? _m[1] : '';
+          if (!v) return;
+          var k = 'darkbear_asset_version';
+          if (localStorage.getItem(k) !== v) {
+            localStorage.setItem(k, v);
+            document.documentElement.setAttribute('data-build', v);
+            var guard = 'darkbear_reload_for_' + v;
+            var purge = [];
+            if ('serviceWorker' in navigator) {
+              purge.push(
+                navigator.serviceWorker.getRegistrations().then(function (rs) {
+                  return Promise.all(rs.map(function (r) { return r.unregister(); }));
+                })
+              );
+            }
+            if ('caches' in window) {
+              purge.push(
+                caches.keys().then(function (keys) {
+                  return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+                })
+              );
+            }
+            if (window.location.pathname.indexOf('/darkbear') === 0 && sessionStorage.getItem(guard) !== '1') {
+              sessionStorage.setItem(guard, '1');
+              Promise.allSettled(purge).then(function () {
+                var url = new URL(window.location.href);
+                url.searchParams.set('dbv', v);
+                window.location.replace(url.toString());
+              });
+              setTimeout(function () {
+                var url = new URL(window.location.href);
+                url.searchParams.set('dbv', v);
+                window.location.replace(url.toString());
+              }, 700);
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

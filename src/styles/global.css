@@ -1,0 +1,1365 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DarkBear v2 — Complete Design System
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Viewport */
+html {
+  background: #000;
+}
+
+html, body {
+  height: 100dvh;
+  height: -webkit-fill-available;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  /* Ensure the layout tracks the visual viewport on iOS when keyboard opens */
+  max-height: 100dvh;
+}
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* iOS standalone PWA: prevent text size adjustment on orientation change */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ── Self-hosted webfonts ──────────────────────────────────────────────────
+   Inter (UI/body) + JetBrains Mono (code/relay) are shipped as subsetted latin
+   woff2 under public/fonts/ (served at /darkbear/fonts/ — vite `base`). No
+   third-party origin, so CSP `font-src 'self'` covers them and no preconnect is
+   needed. `font-display: swap` paints immediately in the fallback stack, then
+   swaps in the real face — the --app-font / --mono-font stacks below stay a
+   deliberate, legible fallback if a face fails to load (never silent system-ui
+   by accident). Only Inter 400 (body text) is <link rel=preload>ed in
+   index.html; the rest fetch on first use.
+   To refresh binaries: fontsource `@fontsource/inter` (400/500/600) and
+   `@fontsource/jetbrains-mono` (400/500) latin `*-normal.woff2`, dropped in
+   public/fonts/ under the same names. ──────────────────────────────────────── */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/darkbear/fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/darkbear/fonts/inter-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/darkbear/fonts/inter-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/darkbear/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/darkbear/fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+}
+
+/* ── Base vars ─────────────────────────────────────────────────────────── */
+:root {
+  --app-font: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono-font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  --sidebar-w: 260px;
+  --app-radius: 12px;
+  /* Translucency surface tokens for darkbear-ui panels/overlays. Derived from
+     the active theme's own ground ramp via color-mix, so a single definition
+     re-colours per theme by construction (the [data-theme] blocks re-price
+     --color-gray-800/900, and these recompute with them). --surface-veil is a
+     semi-opaque panel fill to lay over a scene; --surface-blur is the paired
+     backdrop-filter radius. A theme may override either in its own block. */
+  --surface-veil: color-mix(in srgb, var(--color-gray-900, #07071a) 74%, transparent);
+  --surface-blur: 14px;
+  /* --surface-ink is the SOLID fallback ground (the theme's deepest bg), used
+     when prefers-reduced-transparency / forced-colors opt out of the frosted
+     shell. --surface-scrim is a thin legibility wash laid ONLY behind the
+     reading measure (.msg-area) so dense body text keeps margin over the
+     scene's brightest frame, while the empty/hero state stays at veil density
+     and lets the mascot + scene read through. Both reference gray-950, so they
+     re-price per theme by construction (no per-theme override needed). */
+  --surface-ink: var(--color-gray-950, #000005);
+  --surface-scrim: color-mix(in srgb, var(--color-gray-950, #000005) 30%, transparent);
+  --input-bottom-pad: max(0.5rem, env(safe-area-inset-bottom));
+  --mobile-dock-h: 76px;
+  --irc-white:   #ffffff;
+  --irc-black:   #000000;
+  --irc-navy:    #00007f;
+  --irc-green:   #009300;
+  --irc-red:     #ff0000;
+  --irc-maroon:  #7f0000;
+  --irc-purple:  #9c009c;
+  --irc-orange:  #fc7f00;
+  --irc-yellow:  #ffff00;
+  --irc-lime:    #00fc00;
+  --irc-teal:    #009393;
+  --irc-cyan:    #00ffff;
+  --irc-blue:    #0000fc;
+  --irc-magenta: #ff00ff;
+  --irc-gray:    #7f7f7f;
+  --irc-silver:  #d2d2d2;
+  /* mIRC message-colour legibility rail (task 2). The .irc-fg-0..98 classes
+     resolve their sender-chosen absolute hex through an OKLCH lightness clamp
+     keyed off these bounds — hue + chroma (c h) are preserved, only L is
+     clamped, exactly like the dark-adjusted nick colours. These are the DARK
+     default: lift any near-black code to L>=0.72 so it never vanishes on a dark
+     ground (verified >=4.5:1 on the lightest dark ground, nord). The light
+     theme overrides them to a ceiling (pull near-white codes down). */
+  --irc-l-floor: 0.72;
+  --irc-l-ceil:  1;
+}
+
+body { font-family: var(--app-font); }
+
+/* ── App chrome: dense relay-console treatment ─────────────────────────── */
+.darkbear-sidebar {
+  /* Translucent over the live scene: the brand washes now float on the veil,
+     not on opaque ink, so the animated ThemeBg reads through the buffer rail.
+     The final layer is --surface-veil (per-theme density) + backdrop-blur. */
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), transparent 18%),
+    linear-gradient(135deg, rgba(45,212,191,0.055), transparent 30%),
+    linear-gradient(315deg, rgba(248,113,113,0.035), transparent 28%),
+    var(--surface-veil);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+}
+
+.darkbear-topbar {
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.045), transparent 32%),
+    linear-gradient(180deg, rgba(0,0,0,0.12), rgba(0,0,0,0.34)),
+    color-mix(in srgb, var(--color-gray-950, #000005) 90%, transparent);
+}
+
+.darkbear-connection-pill {
+  border-width: 1px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+}
+
+.darkbear-server-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-radius: 10px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-gray-950, #000005) 92%, transparent), transparent);
+  backdrop-filter: blur(8px);
+}
+
+.darkbear-buffer-row {
+  min-height: 40px;
+}
+
+.darkbear-buffer-row::after {
+  content: '';
+  position: absolute;
+  inset: 5px 6px 5px auto;
+  width: 2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.darkbear-buffer-row:hover::after {
+  background: color-mix(in srgb, var(--custom-accent, #818cf8) 45%, transparent);
+  opacity: 0.55;
+}
+
+.mobile-dock {
+  padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+  position: relative;
+  z-index: 12;
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.32);
+}
+
+.mobile-dock-context {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+}
+
+.mobile-dock-btn-active {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--custom-accent, #818cf8) 92%, white 8%), var(--custom-accent, #818cf8));
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--custom-accent, #818cf8) 26%, transparent);
+}
+
+.mobile-dock-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  max-width: 100%;
+}
+
+.mobile-sheet {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05), transparent 12%),
+    var(--color-gray-950, #000005);
+  box-shadow: 0 -24px 64px rgba(0, 0, 0, 0.58);
+}
+
+.mobile-buffer-sheet .darkbear-sidebar {
+  width: 100% !important;
+  max-width: none;
+  height: 100%;
+  border-right: 0;
+}
+
+.mobile-buffer-sheet .darkbear-sidebar > div:first-child {
+  display: none;
+}
+
+.mobile-sheet:not(.mobile-buffer-sheet) > .min-h-0 > aside > div:first-child {
+  display: none;
+}
+
+.mobile-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 1.25rem 0.875rem 0.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.055);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.01)),
+    color-mix(in srgb, var(--color-gray-950, #000005) 94%, transparent);
+}
+
+.mobile-sheet-close {
+  display: flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 0.875rem;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.035);
+  color: var(--color-gray-500, #6b7280);
+}
+
+.mobile-sheet-close:active {
+  background: rgba(255,255,255,0.075);
+  color: var(--color-gray-200, #e5e7eb);
+}
+
+/* ── Preferences modal ─────────────────────────────────────────────────── */
+.settings-modal {
+  background:
+    linear-gradient(135deg, rgba(129,140,248,0.07), transparent 28%),
+    linear-gradient(315deg, rgba(45,212,191,0.045), transparent 32%),
+    var(--color-gray-900, #07071a);
+}
+
+.settings-shell {
+  min-height: 0;
+}
+
+.settings-rail {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), transparent 28%),
+    rgba(0,0,0,0.16);
+}
+
+.settings-nav-item {
+  min-height: 56px;
+}
+
+.settings-rail-status,
+.settings-section,
+.settings-overview {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+}
+
+.settings-content {
+  overscroll-behavior: contain;
+}
+
+.settings-slider input[type="range"] {
+  background: transparent;
+}
+
+@media (max-width: 1023px) {
+  .settings-modal {
+    width: min(100%, calc(100vw - 0.5rem)) !important;
+    max-height: calc(var(--vh, 100dvh) - 0.5rem) !important;
+    border-radius: 22px;
+  }
+
+  .settings-shell {
+    height: calc(var(--vh, 100dvh) - 0.5rem) !important;
+    max-height: calc(var(--vh, 100dvh) - 0.5rem);
+  }
+
+  .settings-mobile-head {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.01)),
+      color-mix(in srgb, var(--color-gray-900, #07071a) 92%, transparent);
+  }
+
+  .settings-content {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+.mobile-sheet-grip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 8;
+  width: 96px;
+  height: 28px;
+  transform: translateX(-50%);
+  touch-action: none;
+}
+
+.mobile-sheet-grip::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.2);
+}
+
+/* ── IRC colors (0-98) ─────────────────────────────────────────────────────
+   Sender-chosen mIRC colours are absolute hex, so near-black codes vanish on
+   dark themes and near-white codes on the light theme. Each .irc-fg-N keeps its
+   canonical hex as a fallback, then re-resolves it through an OKLCH lightness
+   clamp (--irc-l-floor..--irc-l-ceil, set per-theme) that preserves hue+chroma
+   (`c h`) and only clamps L toward the theme's text rail — the same stay-in-
+   family idea as the .fg-irc-* nick colours. Legible by construction on every
+   theme ground (proven by luminance in irc-color.test.ts). Browsers without
+   relative-colour syntax simply keep the canonical hex (no regression). */
+.irc-fg-0  { color: #ffffff; color: oklch(from #ffffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-1  { color: #000000; color: oklch(from #000000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-2  { color: #00007f; color: oklch(from #00007f clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-3  { color: #009300; color: oklch(from #009300 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-4  { color: #ff4444; color: oklch(from #ff4444 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-5  { color: #7f0000; color: oklch(from #7f0000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-6  { color: #9c009c; color: oklch(from #9c009c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-7  { color: #fc7f00; color: oklch(from #fc7f00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-8  { color: #ffff00; color: oklch(from #ffff00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-9  { color: #00fc00; color: oklch(from #00fc00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-10 { color: #009393; color: oklch(from #009393 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-11 { color: #00ffff; color: oklch(from #00ffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-12 { color: #4444ff; color: oklch(from #4444ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-13 { color: #ff00ff; color: oklch(from #ff00ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-14 { color: #7f7f7f; color: oklch(from #7f7f7f clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-15 { color: #d2d2d2; color: oklch(from #d2d2d2 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+
+.irc-bg-0  { background-color: #ffffff; color: #000; }
+.irc-bg-1  { background-color: #1a1a1a; }
+.irc-bg-2  { background-color: #00007f; }
+.irc-bg-3  { background-color: #009300; }
+.irc-bg-4  { background-color: #ff4444; }
+.irc-bg-5  { background-color: #7f0000; }
+.irc-bg-6  { background-color: #9c009c; }
+.irc-bg-7  { background-color: #fc7f00; }
+.irc-bg-8  { background-color: #ffff00; color: #000; }
+.irc-bg-9  { background-color: #00fc00; color: #000; }
+.irc-bg-10 { background-color: #009393; }
+.irc-bg-11 { background-color: #00ffff; color: #000; }
+.irc-bg-12 { background-color: #4444ff; }
+.irc-bg-13 { background-color: #ff00ff; }
+.irc-bg-14 { background-color: #7f7f7f; }
+.irc-bg-15 { background-color: #d2d2d2; color: #000; }
+
+/* Formatting */
+.irc-bold      { font-weight: 700; }
+.irc-italic    { font-style: italic; }
+.irc-underline { text-decoration: underline; }
+.irc-strike, .irc-strikethrough { text-decoration: line-through; }
+.irc-monospace, .irc-mono { font-family: var(--mono-font); font-size: 0.9em; }
+.irc-reverse { color: #05070c; background-color: #e5e7eb; }
+
+/* Dark-adjusted nick colors */
+.fg-irc-white   { color: #e8e8e8; }
+.fg-irc-black   { color: #666; }
+.fg-irc-navy    { color: #5b8dd9; }
+.fg-irc-green   { color: #4ade80; }
+.fg-irc-red     { color: #f87171; }
+.fg-irc-maroon  { color: #c084fc; }
+.fg-irc-purple  { color: #a78bfa; }
+.fg-irc-orange  { color: #fb923c; }
+.fg-irc-yellow  { color: #fbbf24; }
+.fg-irc-lime    { color: #86efac; }
+.fg-irc-teal    { color: #2dd4bf; }
+.fg-irc-cyan    { color: #67e8f9; }
+.fg-irc-blue    { color: #60a5fa; }
+.fg-irc-magenta { color: #f472b6; }
+.fg-irc-gray    { color: #94a3b8; }
+.fg-irc-silver  { color: #cbd5e1; }
+
+/* Extended palette (16-98) */
+.irc-fg-16 { color: #470000; color: oklch(from #470000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-17 { color: #472100; color: oklch(from #472100 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-18 { color: #474700; color: oklch(from #474700 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-19 { color: #324700; color: oklch(from #324700 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-20 { color: #004700; color: oklch(from #004700 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-21 { color: #00472c; color: oklch(from #00472c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-22 { color: #004747; color: oklch(from #004747 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-23 { color: #002747; color: oklch(from #002747 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-24 { color: #000047; color: oklch(from #000047 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-25 { color: #2e0047; color: oklch(from #2e0047 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-26 { color: #470047; color: oklch(from #470047 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-27 { color: #47002a; color: oklch(from #47002a clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-28 { color: #740000; color: oklch(from #740000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-29 { color: #743a00; color: oklch(from #743a00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-30 { color: #747400; color: oklch(from #747400 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-31 { color: #517400; color: oklch(from #517400 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-32 { color: #007400; color: oklch(from #007400 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-33 { color: #007449; color: oklch(from #007449 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-34 { color: #007474; color: oklch(from #007474 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-35 { color: #004074; color: oklch(from #004074 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-36 { color: #000074; color: oklch(from #000074 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-37 { color: #4b0074; color: oklch(from #4b0074 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-38 { color: #740074; color: oklch(from #740074 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-39 { color: #740045; color: oklch(from #740045 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-40 { color: #b50000; color: oklch(from #b50000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-41 { color: #b56300; color: oklch(from #b56300 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-42 { color: #b5b500; color: oklch(from #b5b500 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-43 { color: #7db500; color: oklch(from #7db500 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-44 { color: #00b500; color: oklch(from #00b500 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-45 { color: #00b571; color: oklch(from #00b571 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-46 { color: #00b5b5; color: oklch(from #00b5b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-47 { color: #0063b5; color: oklch(from #0063b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-48 { color: #0000b5; color: oklch(from #0000b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-49 { color: #7500b5; color: oklch(from #7500b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-50 { color: #b500b5; color: oklch(from #b500b5 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-51 { color: #b5006b; color: oklch(from #b5006b clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-52 { color: #ff0000; color: oklch(from #ff0000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-53 { color: #ff8c00; color: oklch(from #ff8c00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-54 { color: #ffff00; color: oklch(from #ffff00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-55 { color: #b2ff00; color: oklch(from #b2ff00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-56 { color: #00ff00; color: oklch(from #00ff00 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-57 { color: #00ffa0; color: oklch(from #00ffa0 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-58 { color: #00ffff; color: oklch(from #00ffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-59 { color: #008cff; color: oklch(from #008cff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-60 { color: #0000ff; color: oklch(from #0000ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-61 { color: #a500ff; color: oklch(from #a500ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-62 { color: #ff00ff; color: oklch(from #ff00ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-63 { color: #ff0098; color: oklch(from #ff0098 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-64 { color: #ff5959; color: oklch(from #ff5959 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-65 { color: #ffb459; color: oklch(from #ffb459 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-66 { color: #ffff71; color: oklch(from #ffff71 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-67 { color: #cfff60; color: oklch(from #cfff60 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-68 { color: #6fff6f; color: oklch(from #6fff6f clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-69 { color: #65ffc9; color: oklch(from #65ffc9 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-70 { color: #6dffff; color: oklch(from #6dffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-71 { color: #59b4ff; color: oklch(from #59b4ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-72 { color: #5959ff; color: oklch(from #5959ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-73 { color: #c459ff; color: oklch(from #c459ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-74 { color: #ff66ff; color: oklch(from #ff66ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-75 { color: #ff59bc; color: oklch(from #ff59bc clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-76 { color: #ff9c9c; color: oklch(from #ff9c9c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-77 { color: #ffd39c; color: oklch(from #ffd39c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-78 { color: #ffff9c; color: oklch(from #ffff9c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-79 { color: #e2ff9c; color: oklch(from #e2ff9c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-80 { color: #9cff9c; color: oklch(from #9cff9c clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-81 { color: #9cffdb; color: oklch(from #9cffdb clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-82 { color: #9cffff; color: oklch(from #9cffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-83 { color: #9cd3ff; color: oklch(from #9cd3ff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-84 { color: #9c9cff; color: oklch(from #9c9cff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-85 { color: #dc9cff; color: oklch(from #dc9cff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-86 { color: #ff9cff; color: oklch(from #ff9cff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-87 { color: #ff94d3; color: oklch(from #ff94d3 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-88 { color: #000000; color: oklch(from #000000 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-89 { color: #131313; color: oklch(from #131313 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-90 { color: #282828; color: oklch(from #282828 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-91 { color: #363636; color: oklch(from #363636 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-92 { color: #4d4d4d; color: oklch(from #4d4d4d clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-93 { color: #656565; color: oklch(from #656565 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-94 { color: #818181; color: oklch(from #818181 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-95 { color: #9f9f9f; color: oklch(from #9f9f9f clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+.irc-fg-96 { color: #bcbcbc; color: oklch(from #bcbcbc clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-97 { color: #e2e2e2; color: oklch(from #e2e2e2 clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); } .irc-fg-98 { color: #ffffff; color: oklch(from #ffffff clamp(var(--irc-l-floor),l,var(--irc-l-ceil)) c h); }
+
+.irc-bg-16 { background-color: #470000; } .irc-bg-17 { background-color: #472100; } .irc-bg-18 { background-color: #474700; }
+.irc-bg-19 { background-color: #324700; } .irc-bg-20 { background-color: #004700; } .irc-bg-21 { background-color: #00472c; }
+.irc-bg-22 { background-color: #004747; } .irc-bg-23 { background-color: #002747; } .irc-bg-24 { background-color: #000047; }
+.irc-bg-25 { background-color: #2e0047; } .irc-bg-26 { background-color: #470047; } .irc-bg-27 { background-color: #47002a; }
+.irc-bg-28 { background-color: #740000; } .irc-bg-29 { background-color: #743a00; } .irc-bg-30 { background-color: #747400; }
+.irc-bg-31 { background-color: #517400; } .irc-bg-32 { background-color: #007400; } .irc-bg-33 { background-color: #007449; }
+.irc-bg-34 { background-color: #007474; } .irc-bg-35 { background-color: #004074; } .irc-bg-36 { background-color: #000074; }
+.irc-bg-37 { background-color: #4b0074; } .irc-bg-38 { background-color: #740074; } .irc-bg-39 { background-color: #740045; }
+.irc-bg-40 { background-color: #b50000; } .irc-bg-41 { background-color: #b56300; } .irc-bg-42 { background-color: #b5b500; }
+.irc-bg-43 { background-color: #7db500; } .irc-bg-44 { background-color: #00b500; } .irc-bg-45 { background-color: #00b571; }
+.irc-bg-46 { background-color: #00b5b5; } .irc-bg-47 { background-color: #0063b5; } .irc-bg-48 { background-color: #0000b5; }
+.irc-bg-49 { background-color: #7500b5; } .irc-bg-50 { background-color: #b500b5; } .irc-bg-51 { background-color: #b5006b; }
+.irc-bg-52 { background-color: #ff0000; } .irc-bg-53 { background-color: #ff8c00; } .irc-bg-54 { background-color: #ffff00; color:#000; }
+.irc-bg-55 { background-color: #b2ff00; color:#000; } .irc-bg-56 { background-color: #00ff00; color:#000; }
+.irc-bg-57 { background-color: #00ffa0; color:#000; } .irc-bg-58 { background-color: #00ffff; color:#000; }
+.irc-bg-59 { background-color: #008cff; } .irc-bg-60 { background-color: #0000ff; } .irc-bg-61 { background-color: #a500ff; }
+.irc-bg-62 { background-color: #ff00ff; } .irc-bg-63 { background-color: #ff0098; }
+.irc-bg-64 { background-color: #ff5959; } .irc-bg-65 { background-color: #ffb459; } .irc-bg-66 { background-color: #ffff71; color:#000; }
+.irc-bg-67 { background-color: #cfff60; color:#000; } .irc-bg-68 { background-color: #6fff6f; color:#000; }
+.irc-bg-69 { background-color: #65ffc9; color:#000; } .irc-bg-70 { background-color: #6dffff; color:#000; }
+.irc-bg-71 { background-color: #59b4ff; } .irc-bg-72 { background-color: #5959ff; } .irc-bg-73 { background-color: #c459ff; }
+.irc-bg-74 { background-color: #ff66ff; } .irc-bg-75 { background-color: #ff59bc; }
+.irc-bg-76 { background-color: #ff9c9c; color:#000; } .irc-bg-77 { background-color: #ffd39c; color:#000; }
+.irc-bg-78 { background-color: #ffff9c; color:#000; } .irc-bg-79 { background-color: #e2ff9c; color:#000; }
+.irc-bg-80 { background-color: #9cff9c; color:#000; } .irc-bg-81 { background-color: #9cffdb; color:#000; }
+.irc-bg-82 { background-color: #9cffff; color:#000; } .irc-bg-83 { background-color: #9cd3ff; }
+.irc-bg-84 { background-color: #9c9cff; } .irc-bg-85 { background-color: #dc9cff; } .irc-bg-86 { background-color: #ff9cff; }
+.irc-bg-87 { background-color: #ff94d3; }
+.irc-bg-88 { background-color: #000000; } .irc-bg-89 { background-color: #131313; } .irc-bg-90 { background-color: #282828; }
+.irc-bg-91 { background-color: #363636; } .irc-bg-92 { background-color: #4d4d4d; } .irc-bg-93 { background-color: #656565; }
+.irc-bg-94 { background-color: #818181; } .irc-bg-95 { background-color: #9f9f9f; } .irc-bg-96 { background-color: #bcbcbc; color:#000; }
+.irc-bg-97 { background-color: #e2e2e2; color:#000; } .irc-bg-98 { background-color: #ffffff; color:#000; }
+
+/* ── Message area ──────────────────────────────────────────────────────── */
+.msg-area {
+  font-family: var(--app-font);
+  font-size: var(--app-font-size, 14px);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  /* Legibility scrim behind the reading measure only — deepens the panel veil
+     under running text so body/timestamps keep margin over the brightest scene
+     frame, while the empty/hero state (no .msg-area) stays veil-light. Forced
+     to solid under the reduced-transparency / forced-colors guards below. */
+  background-color: var(--surface-scrim);
+}
+
+/* Subtle top fade for scroll context */
+.msg-area-fade-top {
+  mask-image: linear-gradient(to bottom, transparent 0%, black 40px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 40px);
+}
+
+/* ── Message row layout ──────────────────────────────────────────────── */
+.msg-row {
+  display: flex;
+  align-items: baseline;
+  padding: 1px 12px;
+}
+.msg-row.msg-gap {
+  margin-top: 8px;
+}
+.msg-row.msg-system {
+  min-height: auto;
+}
+
+@media (min-width: 640px) {
+  .msg-system .msg-body::before {
+    content: '—';
+    margin-right: 6px;
+    opacity: 0.25;
+    font-size: 9px;
+    font-weight: 400;
+  }
+}
+
+/* Highlight bar */
+.msg-highlight {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.07) 0%, rgba(245, 158, 11, 0.015) 60%);
+  border-left: 3px solid rgba(245, 158, 11, 0.5);
+  padding-left: 9px;
+}
+
+/* Timestamp — hidden on mobile */
+.msg-ts {
+  display: none;
+}
+
+/* Nick column — hidden on mobile */
+.msg-nick {
+  display: none;
+}
+
+/* Nick spacer — hidden on mobile */
+.msg-nick-spacer {
+  display: none;
+}
+
+/* Message body */
+.msg-body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Desktop: show columns */
+@media (min-width: 640px) {
+  .msg-row {
+    padding: 2px 10px 2px 6px;
+    transition: background 0.08s;
+  }
+  .msg-row:not(.msg-highlight):hover {
+    background: rgba(255,255,255,0.02);
+    border-radius: 4px;
+  }
+  .msg-row:hover .msg-ts.invisible {
+    visibility: visible;
+    opacity: 0.45;
+    transition: opacity 0.12s ease;
+  }
+  .msg-ts {
+    display: block;
+    font-size: 10px;
+    font-family: var(--mono-font);
+    font-feature-settings: "tnum";
+    color: var(--color-timestamp, #747b9b);
+    width: 46px;
+    text-align: right;
+    flex-shrink: 0;
+    user-select: none;
+    margin-right: 6px;
+  }
+  .msg-nick {
+    display: block;
+    width: 112px;
+    flex-shrink: 0;
+    text-align: right;
+    font-weight: 600;
+    font-size: 13px;
+    padding-right: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-right: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+    transition: opacity 0.1s;
+  }
+  .msg-nick:hover {
+    opacity: 0.7;
+  }
+  .msg-nick-spacer {
+    display: block;
+    width: 112px;
+    flex-shrink: 0;
+    border-right: 1px solid rgba(255,255,255,0.05);
+  }
+}
+
+.irc-msg-text {
+  white-space: pre-wrap !important;
+}
+
+/* ── Links ─────────────────────────────────────────────────────────────── */
+.irc-link {
+  color: var(--custom-accent, #818cf8);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--custom-accent, #818cf8) 30%, transparent);
+  transition: border-color 0.15s;
+}
+.irc-link:hover {
+  border-color: var(--custom-accent, #818cf8);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--custom-accent, #818cf8) 35%, transparent);
+}
+
+/* ── Inline images ─────────────────────────────────────────────────────── */
+.irc-inline-image {
+  max-height: 220px;
+  max-width: min(100%, 420px);
+  border-radius: 10px;
+  display: block;
+  margin-top: 6px;
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.irc-inline-image:hover {
+  transform: scale(1.015);
+  border-color: rgba(255,255,255,0.1);
+}
+@media (max-width: 639px) {
+  .irc-inline-image { max-height: 160px; max-width: 100%; }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --input-bottom-pad: 0.2rem;
+  }
+
+  .darkbear-topbar {
+    min-height: 48px;
+    padding-left: max(0.375rem, env(safe-area-inset-left));
+    padding-right: max(0.375rem, env(safe-area-inset-right));
+  }
+
+  .mobile-header-actions {
+    justify-content: flex-end;
+  }
+
+  .msg-area {
+    line-height: 1.55;
+    scroll-padding-bottom: 0.75rem;
+  }
+
+  .msg-row {
+    padding: 3px 12px;
+  }
+
+  .msg-row.msg-gap {
+    margin-top: 10px;
+  }
+
+  .msg-highlight {
+    padding-left: 10px;
+    border-left-width: 3px;
+  }
+
+  .input-bar-wrapper {
+    background:
+      linear-gradient(180deg, transparent, rgba(0,0,0,0.28)),
+      color-mix(in srgb, var(--color-gray-950, #000005) 94%, transparent);
+    backdrop-filter: blur(14px);
+    margin-bottom: calc(var(--mobile-dock-h) + env(safe-area-inset-bottom));
+  }
+
+  .input-bar-wrapper:focus-within {
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom)) !important;
+  }
+
+  .mobile-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 38;
+    padding-left: max(0.5rem, env(safe-area-inset-left));
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+  }
+
+  .mobile-dock-btn {
+    min-height: 38px;
+  }
+
+  .mobile-sheet {
+    max-height: calc(var(--vh, 100dvh) - 0.5rem);
+  }
+
+  .mobile-sheet-head {
+    padding-top: 1.375rem;
+  }
+
+  .mobile-sheet .darkbear-sidebar {
+    padding-top: 0;
+  }
+
+  .mobile-sheet .darkbear-sidebar,
+  .mobile-sheet [class*="overflow-y-auto"] {
+    overscroll-behavior: contain;
+  }
+}
+
+/* ── Code spans ────────────────────────────────────────────────────────── */
+.irc-code {
+  font-family: var(--mono-font);
+  font-size: 0.85em;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: #c4b5fd;
+}
+
+/* ── Channel references ────────────────────────────────────────────────── */
+.irc-chan-ref {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--custom-accent, #818cf8);
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.irc-chan-ref:hover { text-decoration-style: solid; }
+
+/* ── Color swatches ────────────────────────────────────────────────────── */
+.irc-color-swatch {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 3px;
+  margin-left: 3px;
+  vertical-align: middle;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.14);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+
+/* ── Selection ─────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(129, 140, 248, 0.28);
+  color: inherit;
+}
+
+/* ── Color picker ──────────────────────────────────────────────────────── */
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 6px;
+  overflow: hidden;
+}
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 5px; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 5px; }
+input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
+
+/* ── Animations ────────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-up { animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in { animation: fadeIn 0.25s ease-out both; }
+.animate-slide-down { animation: slideDown 0.2s ease-out both; }
+
+/* ── Reduced motion — app-wide ─────────────────────────────────────────────
+   OS "reduce motion" must stop ALL looping chrome (pulse-glow, shimmer, the
+   .animate-* entrance utilities) — not just ThemeBg's Shell. One-shot entrance
+   easing is neutralised too so nothing keeps moving. Scene SMIL nodes still
+   need JS gating (owned with darkbear-a11y). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Focus visibility ──────────────────────────────────────────────────────
+   Inputs/controls set outline:none and signal focus only via a faint border.
+   Give every keyboard-focused control a high-contrast, theme-aware ring. */
+:focus-visible {
+  outline: 2px solid var(--custom-accent, #818cf8);
+  outline-offset: 2px;
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--custom-accent, #818cf8);
+  outline-offset: 1px;
+}
+/* Pointer clicks should not paint the ring; only keyboard focus does. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ── Translucent shell over the live scene ─────────────────────────────────
+   The shell floats over the animated ThemeBg / StarfieldBg canvas so the scene
+   + AstronautBear mascot read THROUGH the reading column and the buffer rail
+   (App.tsx root stays a solid ink base-coat BEHIND the scene; the scene sits
+   z-0; sidebar + message sections sit z-10 and go translucent here). Every
+   floating surface uses ONE elevation system — the per-theme --surface-veil at
+   ~74–88% + backdrop-blur — never a per-component magic value.
+
+   Legibility guarantee: at the scene's BRIGHTEST possible frame (worst case:
+   pure white behind), the veil composites down to a dark ground on which the
+   gray-200 body rail clears 4.5:1 and gray-300 clears 3:1 on EVERY theme —
+   proven on resolved hex in styles/contrast.test.ts. The reading measure adds
+   --surface-scrim on top for extra margin. Blur is a decorative refinement,
+   never load-bearing for contrast, and is never animated.
+
+   prefers-reduced-transparency and forced-colors opt OUT to a fully solid
+   surface with no blur, so surfacing the scene never costs a reader legibility
+   (formal AA / forced-colors audit → darkbear-a11y). */
+.db-surface {
+  background-color: var(--surface-veil);
+  backdrop-filter: blur(var(--surface-blur));
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .db-surface,
+  .darkbear-sidebar {
+    background: var(--surface-ink);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .msg-area {
+    background-color: var(--surface-ink);
+  }
+}
+
+@media (forced-colors: active) {
+  .db-surface,
+  .darkbear-sidebar {
+    background: Canvas;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .msg-area {
+    background-color: Canvas;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THEMES — Override Tailwind v4 gray palette per theme
+
+   Contrast hierarchy (text on gray-950 bg):
+     gray-200: primary text   — bright, clearly readable
+     gray-300: secondary text — easily visible
+     gray-400: tertiary text  — visible, slightly muted
+     gray-500: muted text     — subdued but legible
+     gray-600: borders/faint  — subtle UI elements
+     gray-700: dividers       — barely visible separators
+     gray-800: card surfaces  — slightly lighter than bg
+     gray-900: panels         — near-bg shade
+     gray-950: deepest bg     — main background
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root, [data-theme="darkbear"] {
+  --color-gray-50:  #f0f2ff;
+  --color-gray-100: #e0e4f5;
+  --color-gray-200: #d0d5e8;
+  --color-gray-300: #b0b8d0;
+  --color-gray-400: #8a92b0;
+  --color-gray-500: #717898;
+  --color-gray-600: #505578;
+  --color-gray-700: #2a2e4a;
+  --color-gray-800: #0e0e24;
+  --color-gray-900: #07071a;
+  --color-gray-950: #000005;
+  --custom-accent:  #818cf8;
+  --color-timestamp: #747b9b;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 74%, transparent);
+}
+
+/* True AMOLED dark — pure black bg, max contrast */
+[data-theme="midnight"] {
+  --color-gray-50:  #f5f5f5;
+  --color-gray-100: #e8e8e8;
+  --color-gray-200: #e0e0e0;
+  --color-gray-300: #c0c0c0;
+  --color-gray-400: #a0a0a0;
+  --color-gray-500: #787878;
+  --color-gray-600: #505050;
+  --color-gray-700: #303030;
+  --color-gray-800: #151515;
+  --color-gray-900: #090909;
+  --color-gray-950: #000000;
+  --custom-accent:  #8b9cf8;
+  --color-timestamp: #7c7c7c;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 72%, transparent);
+}
+
+[data-theme="obsidian"] {
+  --color-gray-50:  #f0f0f0;
+  --color-gray-100: #e2e2e2;
+  --color-gray-200: #d4d4d4;
+  --color-gray-300: #b4b4b4;
+  --color-gray-400: #909090;
+  --color-gray-500: #787878;
+  --color-gray-600: #565656;
+  --color-gray-700: #3a3a3a;
+  --color-gray-800: #171717;
+  --color-gray-900: #0f0f0f;
+  --color-gray-950: #070707;
+  --custom-accent:  #a78bfa;
+  --color-timestamp: #7f7f7f;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 77%, transparent);
+}
+
+[data-theme="nord"] {
+  --color-gray-50:  #eceff4;
+  --color-gray-100: #e5e9f0;
+  --color-gray-200: #d8dee9;
+  --color-gray-300: #bcc4d4;
+  --color-gray-400: #8c96ae;
+  --color-gray-500: #7b8ba6;
+  --color-gray-600: #545e72;
+  --color-gray-700: #434c5e;
+  --color-gray-800: #343a4a;
+  --color-gray-900: #292e3a;
+  --color-gray-950: #1e232b;
+  --custom-accent:  #88c0d0;
+  --color-timestamp: #8192ae;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 84%, transparent);
+}
+
+[data-theme="gruvbox"] {
+  --color-gray-50:  #fbf1c7;
+  --color-gray-100: #ebdbb2;
+  --color-gray-200: #d5c4a1;
+  --color-gray-300: #bdae93;
+  --color-gray-400: #a89984;
+  --color-gray-500: #8a7e72;
+  --color-gray-600: #605550;
+  --color-gray-700: #44403c;
+  --color-gray-800: #2c2b2a;
+  --color-gray-900: #1a1d1e;
+  --color-gray-950: #111314;
+  --custom-accent:  #d79921;
+  --color-timestamp: #8f8376;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 83%, transparent);
+}
+
+[data-theme="rose-pine"] {
+  --color-gray-50:  #f4f2ff;
+  --color-gray-100: #e0def4;
+  --color-gray-200: #d2d0ea;
+  --color-gray-300: #b8b5d0;
+  --color-gray-400: #908caa;
+  --color-gray-500: #7f7b9c;
+  --color-gray-600: #524e6a;
+  --color-gray-700: #3a3650;
+  --color-gray-800: #211f34;
+  --color-gray-900: #1c1a29;
+  --color-gray-950: #15131e;
+  --custom-accent:  #eb6f92;
+  --color-timestamp: #8682a5;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 80%, transparent);
+}
+
+[data-theme="abyss"] {
+  --color-gray-50:  #e8fafa;
+  --color-gray-100: #c8eded;
+  --color-gray-200: #b0e0e0;
+  --color-gray-300: #88c8c8;
+  --color-gray-400: #60a8a8;
+  --color-gray-500: #4c8888;
+  --color-gray-600: #346868;
+  --color-gray-700: #1e4040;
+  --color-gray-800: #0e2020;
+  --color-gray-900: #071212;
+  --color-gray-950: #03080a;
+  --custom-accent:  #2dd4bf;
+  --color-timestamp: #4c8989;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 75%, transparent);
+}
+
+[data-theme="ember"] {
+  --color-gray-50:  #fcecd8;
+  --color-gray-100: #f0d4b4;
+  --color-gray-200: #e0c0a0;
+  --color-gray-300: #c8a080;
+  --color-gray-400: #a88060;
+  --color-gray-500: #92714b;
+  --color-gray-600: #5c3e28;
+  --color-gray-700: #341c10;
+  --color-gray-800: #1a0e08;
+  --color-gray-900: #100804;
+  --color-gray-950: #080402;
+  --custom-accent:  #f97316;
+  --color-timestamp: #9b7750;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 79%, transparent);
+  --surface-blur: 18px;
+}
+
+[data-theme="aurora"] {
+  --color-gray-50:  #f0e8fc;
+  --color-gray-100: #e0d4f4;
+  --color-gray-200: #d0c0ee;
+  --color-gray-300: #b4a0d4;
+  --color-gray-400: #9480b8;
+  --color-gray-500: #816bb2;
+  --color-gray-600: #5c4880;
+  --color-gray-700: #3c2c58;
+  --color-gray-800: #1c122e;
+  --color-gray-900: #0e0719;
+  --color-gray-950: #07030c;
+  --custom-accent:  #a78bfa;
+  --color-timestamp: #8971bc;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 79%, transparent);
+  --surface-blur: 18px;
+}
+
+[data-theme="catppuccin"] {
+  --color-gray-50:  #eaecf8;
+  --color-gray-100: #dce0f4;
+  --color-gray-200: #cdd6f4;
+  --color-gray-300: #bac2de;
+  --color-gray-400: #a6adc8;
+  --color-gray-500: #8890a8;
+  --color-gray-600: #6c7086;
+  --color-gray-700: #50546a;
+  --color-gray-800: #2b2c3c;
+  --color-gray-900: #1b1b29;
+  --color-gray-950: #0e0e17;
+  --custom-accent:  #cba6f7;
+  --color-timestamp: #8890a8;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 77%, transparent);
+}
+
+[data-theme="tokyo-night"] {
+  --color-gray-50:  #eaedff;
+  --color-gray-100: #d5daf8;
+  --color-gray-200: #c0caf5;
+  --color-gray-300: #a9b1d6;
+  --color-gray-400: #8890b4;
+  --color-gray-500: #717ca2;
+  --color-gray-600: #4c5476;
+  --color-gray-700: #383f5c;
+  --color-gray-800: #1f2335;
+  --color-gray-900: #171b22;
+  --color-gray-950: #101119;
+  --custom-accent:  #7aa2f7;
+  --color-timestamp: #7883ab;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 82%, transparent);
+}
+
+[data-theme="dracula"] {
+  --color-gray-50:  #f8f8ff;
+  --color-gray-100: #f0f0ec;
+  --color-gray-200: #e4e4e0;
+  --color-gray-300: #ccccd4;
+  --color-gray-400: #a8acc4;
+  --color-gray-500: #7882a6;
+  --color-gray-600: #585c78;
+  --color-gray-700: #44475a;
+  --color-gray-800: #2f3140;
+  --color-gray-900: #242630;
+  --color-gray-950: #191a23;
+  --custom-accent:  #bd93f9;
+  --color-timestamp: #7e89af;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 78%, transparent);
+}
+
+[data-theme="solarized"] {
+  --color-gray-50:  #fdf6e3;
+  --color-gray-100: #eee8d5;
+  --color-gray-200: #c8d4d0;
+  --color-gray-300: #93a1a1;
+  --color-gray-400: #839496;
+  --color-gray-500: #768c93;
+  --color-gray-600: #466068;
+  --color-gray-700: #244650;
+  --color-gray-800: #0e3138;
+  --color-gray-900: #06303b;
+  --color-gray-950: #002430;
+  --custom-accent:  #268bd2;
+  --color-timestamp: #7b939a;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 88%, transparent);
+}
+
+[data-theme="lightning"] {
+  --color-gray-50:  #e8ecf8;
+  --color-gray-100: #d0d8e8;
+  --color-gray-200: #b8c4dc;
+  --color-gray-300: #90a0c0;
+  --color-gray-400: #6880a8;
+  --color-gray-500: #5e78a0;
+  --color-gray-600: #425478;
+  --color-gray-700: #263248;
+  --color-gray-800: #0c1222;
+  --color-gray-900: #070910;
+  --color-gray-950: #030408;
+  --custom-accent:  #60a5fa;
+  --color-timestamp: #637fa9;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 82%, transparent);
+  --surface-blur: 18px;
+}
+
+/* Deep space starfield — cosmic void with nebula accent */
+[data-theme="starfield"] {
+  --color-gray-50:  #eef0ff;
+  --color-gray-100: #dde0f5;
+  --color-gray-200: #c8cce8;
+  --color-gray-300: #a0a8c8;
+  --color-gray-400: #7880a8;
+  --color-gray-500: #6e7599;
+  --color-gray-600: #484e6e;
+  --color-gray-700: #2a2e4a;
+  --color-gray-800: #0f1124;
+  --color-gray-900: #090a15;
+  --color-gray-950: #030408;
+  --custom-accent:  #818cf8;
+  --color-timestamp: #747ca2;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 79%, transparent);
+  --surface-blur: 18px;
+  --starfield-nebula-1: #818cf8;
+  --starfield-nebula-2: #c084fc;
+  --starfield-nebula-3: #2dd4bf;
+}
+
+/* Flame phoenix — deep ember and molten gold */
+[data-theme="phoenix"] {
+  --color-gray-50:  #fef0d0;
+  --color-gray-100: #f4daa8;
+  --color-gray-200: #f0d8b0;
+  --color-gray-300: #d4b080;
+  --color-gray-400: #b08850;
+  --color-gray-500: #9a6f3e;
+  --color-gray-600: #704e30;
+  --color-gray-700: #402c18;
+  --color-gray-800: #190e07;
+  --color-gray-900: #0e0904;
+  --color-gray-950: #0a0503;
+  --custom-accent:  #f59e0b;
+  --color-timestamp: #a27642;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 75%, transparent);
+  --surface-blur: 18px;
+}
+
+/* Retro arcade — deep CRT blacks with neon phosphor glow */
+[data-theme="retro"] {
+  --color-gray-50:  #e0ffe0;
+  --color-gray-100: #c0e8c0;
+  --color-gray-200: #a0d0a0;
+  --color-gray-300: #70a870;
+  --color-gray-400: #578a57;
+  --color-gray-500: #4f844f;
+  --color-gray-600: #2e5030;
+  --color-gray-700: #183018;
+  --color-gray-800: #091009;
+  --color-gray-900: #060b06;
+  --color-gray-950: #040609;
+  --custom-accent:  #ff00ff;
+  --color-timestamp: #538b53;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 83%, transparent);
+  --surface-blur: 18px;
+}
+
+/* ── Mobile optimizations ──────────────────────────────────────────────── */
+@media (max-width: 639px) {
+  ::-webkit-scrollbar { width: 2px; height: 2px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
+
+  /* Prevent iOS zoom on input focus — 16px is the threshold */
+  input, select, textarea { font-size: 16px !important; }
+  input[type="range"] { font-size: inherit !important; }
+
+  /* Momentum scrolling + contained overscroll for chat area */
+  .msg-area {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    /* GPU-accelerated scrolling layer on both iOS and Android */
+    transform: translateZ(0);
+    /* Prevent scroll chaining to the body/nav */
+    touch-action: pan-y;
+  }
+
+  /* Input bar: stay composited so keyboard resize doesn't cause repaints */
+  .input-bar-wrapper {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  /* Mobile message rows — tighter horizontal padding */
+  .msg-row {
+    padding: 1px 10px;
+  }
+  .msg-highlight {
+    padding-left: 8px;
+  }
+
+  /* Mobile inline images — full-bleed with tighter radius */
+  .irc-inline-image {
+    max-height: 180px;
+    max-width: 100%;
+    border-radius: 10px;
+  }
+}
+
+/* ── Scroll anchoring ─────────────────────────────────────────────────── */
+
+/* Let the browser automatically keep the bottom anchor in view when new
+   content is appended above the fold — eliminates manual scroll-to-bottom
+   timing issues on both iOS and Android. */
+.scroll-smooth-container {
+  overflow-anchor: none;
+}
+.scroll-anchor {
+  overflow-anchor: auto;
+  height: 1px;
+}
+
+/* Input bar: no flicker when keyboard opens/closes */
+.input-bar-wrapper {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* ── iOS / WebKit / Android fixes ─────────────────────────────────────── */
+
+/* Prevent elastic overscroll bounce on scrollable containers */
+.msg-area,
+.overflow-y-auto {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* iOS Safari: backdrop-filter requires -webkit prefix */
+.backdrop-blur-sm {
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* iOS: prevent callout on long-press (images, links) in non-text areas */
+nav, aside, header, .video-controls {
+  -webkit-touch-callout: none;
+}
+
+/* iOS: prevent rubber-band when scrolling at boundaries inside fixed overlays */
+.fixed {
+  overscroll-behavior: contain;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Larger touch targets for mobile */
+  .irc-link {
+    padding: 4px 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Disable hover effects that feel wrong on touch */
+  .irc-inline-image:hover { transform: none; }
+
+  /* iOS: suppress the grey highlight flash on any tappable element */
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent accidental text selection during swipes */
+  .msg-area {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  nav, aside, header {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* iOS: prevent context menu on long-press of images in chat */
+  .irc-inline-image {
+    -webkit-touch-callout: none;
+  }
+}
+
+/* iOS Safari standalone PWA: fill status bar area properly */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-area-top { padding-top: env(safe-area-inset-top); }
+  .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+/* Landscape video call — maximize screen real estate */
+@media (orientation: landscape) and (max-height: 500px) {
+  .msg-area { font-size: 13px; }
+}
+
+[data-theme="light"] {
+  --color-gray-50:  #111827;
+  --color-gray-100: #1f2937;
+  --color-gray-200: #374151;
+  --color-gray-300: #4b5563;
+  --color-gray-400: #6b7280;
+  --color-gray-500: #71767f;
+  --color-gray-600: #d1d5db;
+  --color-gray-700: #e5e7eb;
+  --color-gray-800: #f3f4f6;
+  --color-gray-900: #f9fafb;
+  --color-gray-950: #ffffff;
+  --custom-accent:  #4f46e5;
+  --color-timestamp: #696f7d;
+  --surface-veil: color-mix(in srgb, var(--color-gray-900) 80%, transparent);
+  /* Light theme inverts the vanishing problem: near-WHITE mIRC codes disappear
+     on the pale ground. Drop the floor and cap the ceiling so the OKLCH clamp
+     pulls bright codes DOWN to L<=0.50 (verified >=4.5:1 on #f9fafb), hue kept. */
+  --irc-l-floor: 0;
+  --irc-l-ceil:  0.5;
+}

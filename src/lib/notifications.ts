@@ -1,6 +1,29 @@
-const ICON = '/favicon.svg';
+import { ENVELOPE_PREFIX, LOCKED_PLACEHOLDER } from './e2ee/dmCipher';
+
+const ICON = '/darkbear/favicon.svg';
 const NOTIFY_TIMEOUT = 5000;
 const TITLE_BASE = 'DarkBear';
+
+/**
+ * Neutral body shown for a DM that reaches the alert path unreadable — an
+ * unopened TSUMUGI1 ciphertext envelope or the locked placeholder. OS
+ * notifications can render on a lock screen, so ciphertext (or a decrypt-failed
+ * sentinel) must never surface there. Decrypt happens upstream; if it didn't,
+ * we fail CLOSED to this string.
+ */
+export const ENCRYPTED_BODY = 'New encrypted message';
+
+/**
+ * Fail closed for E2EE DMs. Returns a neutral string when `body` is an
+ * unreadable encrypted DM; otherwise returns the plaintext untouched. Pure and
+ * DOM-free so the decision is exhaustively testable.
+ */
+export function safeNotificationBody(body: string): string {
+	if (body.startsWith(ENVELOPE_PREFIX) || body === LOCKED_PLACEHOLDER) {
+		return ENCRYPTED_BODY;
+	}
+	return body;
+}
 
 // iOS requires AudioContext to be created/resumed inside a user gesture.
 // We unlock it on first touch/click so subsequent playSound() calls work.
@@ -10,7 +33,7 @@ function getAudioCtx(): AudioContext | null {
 		if (!_audioCtx) _audioCtx = new AudioContext();
 		if (_audioCtx.state === 'suspended') _audioCtx.resume();
 		return _audioCtx;
-	} catch (_) {
+	} catch {
 		return null;
 	}
 }
@@ -42,7 +65,7 @@ export function notify(title: string, body: string, icon?: string, bufferId?: st
 
 	try {
 		const n = new Notification(title, {
-			body,
+			body: safeNotificationBody(body),
 			icon: icon ?? ICON,
 			tag: title
 		});
@@ -54,7 +77,7 @@ export function notify(title: string, body: string, icon?: string, bufferId?: st
 			n.close();
 		};
 		setTimeout(() => n.close(), NOTIFY_TIMEOUT);
-	} catch (_) {
+	} catch {
 		// Notifications are blocked in some secure contexts (e.g. sandboxed iframes)
 	}
 }
@@ -91,7 +114,7 @@ export function playSound(): void {
 		gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
 		osc.start(ctx.currentTime);
 		osc.stop(ctx.currentTime + 0.35);
-	} catch (_) {
+	} catch {
 		// AudioContext unavailable (e.g. sandboxed iframe)
 	}
 }

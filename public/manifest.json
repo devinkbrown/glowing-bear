@@ -1,17 +1,39 @@
 {
+  "id": "/darkbear/",
   "name": "DarkBear",
   "short_name": "DarkBear",
-  "description": "DarkBear IRC client with Ophion LADON media controls",
-  "start_url": "/",
+  "description": "DarkBear IRC client with Orochi media controls",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/darkbear/",
+  "scope": "/darkbear/",
   "display": "standalone",
   "background_color": "#0a0b10",
   "theme_color": "#0a0b10",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "/darkbear/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/darkbear/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/darkbear/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/darkbear/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
