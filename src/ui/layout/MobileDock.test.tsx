@@ -73,6 +73,27 @@ describe('MobileDock', () => {
     expect(getAllByText('3').length).toBeGreaterThan(0);
   });
 
+  it('keeps a keyboard-operable buffers control even with no active buffer (SC 2.1.1)', () => {
+    // No active buffer: swipe-to-open is the only gesture, so the dock must
+    // still expose a real <button> a keyboard/touch user can activate.
+    clearBuffers();
+    expect(buffersState.activeBuffer).toBeNull();
+
+    const { getByLabelText } = render(() => <MobileDock />);
+    const buffersBtn = getByLabelText('Buffers');
+
+    // Native button element => inherently keyboard focusable/activable.
+    expect(buffersBtn.tagName).toBe('BUTTON');
+    expect(buffersBtn).toBeEnabled();
+    // Disclosure state exposed programmatically, reflecting the drawer.
+    expect(buffersBtn).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(buffersBtn);
+
+    expect(uiState.sidebarOpen).toBe(true);
+    expect(buffersBtn).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('toggles message search from the dock', () => {
     const { getByLabelText } = render(() => <MobileDock />);
 

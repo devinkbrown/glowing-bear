@@ -26,6 +26,7 @@ function activeIsChannel(): boolean {
 
 function DockButton(props: {
   label: string;
+  expanded?: boolean;
   active?: boolean;
   disabled?: boolean;
   badge?: number;
@@ -44,6 +45,7 @@ function DockButton(props: {
         'text-gray-500 active:bg-white/[0.06]': !props.active,
       }}
       aria-label={props.label}
+      aria-expanded={props.expanded}
     >
       <span class="relative flex h-4 w-4 items-center justify-center">
         {props.children}
@@ -96,6 +98,7 @@ export default function MobileDock() {
       <div class="mx-auto grid max-w-[520px] grid-cols-5 gap-1 rounded-xl border border-white/[0.07] bg-black/25 p-0.5 shadow-2xl shadow-black/30">
         <DockButton
           label="Buffers"
+          expanded={uiState.sidebarOpen}
           active={uiState.sidebarOpen}
           badge={mentions() > 0 ? mentions() : unread()}
           hot={mentions() > 0}
