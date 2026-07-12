@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { connectModalAction } from './connectModalPolicy';
 import { ConnectionState } from '@/lib/weechat/model';
+import type { ModalType } from '@/types';
+
+const KNOWN_NON_CONNECT_MODALS: Exclude<ModalType, 'connect' | null>[] = [
+  'settings',
+  'bufferSwitcher',
+  'help',
+  'about',
+  'channelInfo',
+  'userProfile',
+  'services',
+  'channelList',
+  'operConsole',
+];
 
 describe('connectModalAction', () => {
   it('closes the connect modal once connected (the regression that broke connect)', () => {
@@ -17,7 +30,9 @@ describe('connectModalAction', () => {
   });
 
   it('does not steal focus from another open modal on disconnect', () => {
-    expect(connectModalAction(ConnectionState.DISCONNECTED, 'settings')).toBe('none');
+    for (const modal of KNOWN_NON_CONNECT_MODALS) {
+      expect(connectModalAction(ConnectionState.DISCONNECTED, modal)).toBe('none');
+    }
     expect(connectModalAction(ConnectionState.DISCONNECTED, 'connect')).toBe('none');
   });
 
@@ -31,5 +46,19 @@ describe('connectModalAction', () => {
       expect(connectModalAction(s, 'connect')).toBe('none');
       expect(connectModalAction(s, null)).toBe('none');
     }
+  });
+
+  it('keeps the policy fail-closed for malformed connection states', () => {
+    const malformedState = 'half-open' as ConnectionState;
+
+    expect(connectModalAction(malformedState, null)).toBe('none');
+    expect(connectModalAction(malformedState, 'connect')).toBe('none');
+  });
+
+  it('keeps malformed modal values from opening or closing anything', () => {
+    const malformedModal = 'floating-debug-panel' as ModalType;
+
+    expect(connectModalAction(ConnectionState.CONNECTED, malformedModal)).toBe('none');
+    expect(connectModalAction(ConnectionState.DISCONNECTED, malformedModal)).toBe('none');
   });
 });
