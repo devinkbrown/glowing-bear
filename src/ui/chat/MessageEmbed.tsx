@@ -12,6 +12,17 @@ export interface MessageEmbedProps {
   embed: MediaEmbed;
 }
 
+/**
+ * A direct-media `src` must be http(s). extractEmbeds already gates every URL
+ * through URL_RE_SRC, so the live path can only produce http(s) urls — this is
+ * a fail-closed second layer at the render boundary so a `javascript:`/`data:`/
+ * `vbscript:` url (from any future producer) yields no live element instead of
+ * a smuggled scheme in a media `src`.
+ */
+function isHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
 /** Indent to the desktop message-body column (ts 46+6 + nick 112+6). */
 const EMBED_INDENT = 'mt-1 px-3 sm:px-0 sm:ml-[170px]';
 
@@ -72,8 +83,10 @@ export default function MessageEmbed(props: MessageEmbedProps) {
   const youtube = () => (props.embed.type === 'youtube' ? props.embed : undefined);
   const twitchClip = () => (props.embed.type === 'twitch_clip' ? props.embed : undefined);
   const twitchStream = () => (props.embed.type === 'twitch_stream' ? props.embed : undefined);
-  const video = () => (props.embed.type === 'video' ? props.embed : undefined);
-  const audio = () => (props.embed.type === 'audio' ? props.embed : undefined);
+  const video = () =>
+    props.embed.type === 'video' && isHttpUrl(props.embed.url) ? props.embed : undefined;
+  const audio = () =>
+    props.embed.type === 'audio' && isHttpUrl(props.embed.url) ? props.embed : undefined;
 
   return (
     <Switch>

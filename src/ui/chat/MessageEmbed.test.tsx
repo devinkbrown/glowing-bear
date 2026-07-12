@@ -142,6 +142,57 @@ describe('MessageEmbed', () => {
     }
   });
 
+  it('does not render a live media element for a non-http(s) direct video/audio url', () => {
+    // Arrange — a hostile MediaEmbed fed straight to the render boundary,
+    // bypassing extractEmbeds' URL_RE_SRC scheme gate.
+    const hostileUrls = ['javascript:alert(1)', 'data:text/html,<svg onload=alert(1)>', 'vbscript:msgbox(1)'];
+
+    for (const url of hostileUrls) {
+      for (const type of ['video', 'audio'] as const) {
+        // Act
+        const { container, unmount } = renderEmbed({ type, url } as MediaEmbed);
+
+        // Assert — fail closed: no live element, no smuggled scheme in any src.
+        expect(container.querySelector('video, audio, a, iframe, img')).toBeNull();
+        expect(liveUrls(container).some((u) => /^(?:javascript|data|vbscript):/i.test(u))).toBe(false);
+
+        unmount();
+      }
+    }
+  });
+
+  it('renders a normal https direct video url as a live element (scheme guard allows http(s))', () => {
+    // Arrange
+    const embed: MediaEmbed = { type: 'video', url: 'https://media.example.test/clip.mp4' };
+
+    // Act
+    const { container } = renderEmbed(embed);
+    const video = container.querySelector('video');
+
+    // Assert
+    expect(video).not.toBeNull();
+    expect(video).toHaveAttribute('src', 'https://media.example.test/clip.mp4');
+  });
+
+  it('binds hostile embed metadata as inert attribute data, never as injected markup', () => {
+    // Arrange — a YouTube id crafted to break out of the poster/src attribute.
+    const embed: MediaEmbed = {
+      type: 'youtube',
+      videoId: 'x"><img src=y onerror=alert(1)><script>alert(2)</script>',
+      start: 0,
+    };
+
+    // Act
+    const { container } = renderEmbed(embed);
+
+    // Assert — Solid sets the poster src via setAttribute, so the payload is
+    // attribute data, not parsed HTML: exactly the one poster <img>, no script,
+    // no element carrying an onerror handler.
+    expect(container.querySelectorAll('img')).toHaveLength(1);
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('[onerror]')).toBeNull();
+  });
+
   it('renders nothing for image and plain URLs because they are not MessageEmbed types', () => {
     // Arrange
     const imageUrl = 'https://media.example.test/still.png';
