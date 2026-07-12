@@ -56,6 +56,10 @@ function lsBlob(): string {
   return localStorage.getItem(LS_KEY) ?? '';
 }
 
+function ssBlob(): string {
+  return sessionStorage.getItem(SS_KEY) ?? '';
+}
+
 describe('credentials — bearer tokens live in sessionStorage, password in localStorage', () => {
   it('keeps the password in localStorage and out of sessionStorage', () => {
     saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
@@ -69,7 +73,7 @@ describe('credentials — bearer tokens live in sessionStorage, password in loca
     storeSessionToken('sess-abc123', Math.floor(Date.now() / 1000) + 3600);
 
     expect(lsBlob()).not.toContain('sess-abc123');
-    expect(sessionStorage.getItem(SS_KEY) ?? '').toContain('sess-abc123');
+    expect(ssBlob()).toContain('sess-abc123');
 
     // and it round-trips back through loadCredentials
     expect(loadCredentials('wss://irc.example/', 'kain')?.sessionToken).toBe('sess-abc123');
@@ -80,8 +84,30 @@ describe('credentials — bearer tokens live in sessionStorage, password in loca
     storeMeshToken('mesh-XYZ789');
 
     expect(lsBlob()).not.toContain('mesh-XYZ789');
-    expect(sessionStorage.getItem(SS_KEY) ?? '').toContain('mesh-XYZ789');
+    expect(ssBlob()).toContain('mesh-XYZ789');
     expect(loadCredentials('wss://irc.example/', 'kain')?.meshToken).toBe('mesh-XYZ789');
+  });
+
+  it('keeps tokenExpiry in sessionStorage with the bearer token, never localStorage', () => {
+    const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+    saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
+    storeMeshToken('mesh-XYZ789', expiresAt);
+
+    expect(lsBlob()).not.toContain('tokenExpiry');
+    expect(ssBlob()).toContain('tokenExpiry');
+    expect(ssBlob()).toContain('mesh-XYZ789');
+  });
+
+  it('loads the password but no bearer token after the sessionStorage token map disappears', () => {
+    saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
+    storeSessionToken('sess-abc123', Math.floor(Date.now() / 1000) + 3600);
+    storeMeshToken('mesh-XYZ789');
+    sessionStorage.clear();
+
+    const creds = loadCredentials('wss://irc.example/', 'kain');
+    expect(creds?.password).toBe('hunter2');
+    expect(creds?.sessionToken).toBeUndefined();
+    expect(creds?.meshToken).toBeUndefined();
   });
 
   it('getAuthSecret returns only the password, never a token (regression)', () => {
@@ -115,6 +141,35 @@ describe('credentials — mesh token cannot linger without a bound (MEDIUM)', ()
     expect(new Date(creds!.tokenExpiry!).getTime()).toBe(exp * 1000);
   });
 
+  it('keeps a mesh token at the exact expiry instant and purges it just after', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
+    const expiresAtSeconds = Date.parse('2026-01-01T00:00:10Z') / 1000;
+    storeMeshToken('mesh-XYZ789', expiresAtSeconds);
+
+    vi.setSystemTime(new Date('2026-01-01T00:00:10Z'));
+    expect(loadCredentials('wss://irc.example/', 'kain')?.meshToken).toBe('mesh-XYZ789');
+
+    vi.setSystemTime(new Date('2026-01-01T00:00:10.001Z'));
+    const expired = loadCredentials('wss://irc.example/', 'kain');
+    expect(expired?.meshToken).toBeUndefined();
+    expect(ssBlob()).not.toContain('mesh-XYZ789');
+  });
+
+  it('purges an explicitly expired mesh token on the next load', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
+    const alreadyExpiredSeconds = Date.parse('2025-12-31T23:59:59Z') / 1000;
+    storeMeshToken('mesh-expired', alreadyExpiredSeconds);
+
+    const creds = loadCredentials('wss://irc.example/', 'kain');
+    expect(creds?.meshToken).toBeUndefined();
+    expect(creds?.password).toBe('hunter2');
+    expect(ssBlob()).not.toContain('mesh-expired');
+  });
+
   it('purges a mesh token once its conservative TTL has elapsed', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
@@ -126,7 +181,7 @@ describe('credentials — mesh token cannot linger without a bound (MEDIUM)', ()
     const creds = loadCredentials('wss://irc.example/', 'kain');
     expect(creds?.meshToken).toBeUndefined();
     expect(creds?.password).toBe('hunter2'); // password survives the token purge
-    expect(sessionStorage.getItem(SS_KEY) ?? '').not.toContain('mesh-XYZ789');
+    expect(ssBlob()).not.toContain('mesh-XYZ789');
   });
 
   it('ages out an expiry-less token (e.g. a session token stored without TTL) via savedAt', () => {
@@ -178,10 +233,33 @@ describe('credentials — legacy inline-token migration', () => {
     // …but now stripped from localStorage and moved to sessionStorage.
     expect(lsBlob()).not.toContain('legacy-sess');
     expect(lsBlob()).not.toContain('legacy-mesh');
-    expect(sessionStorage.getItem(SS_KEY) ?? '').toContain('legacy-sess');
-    expect(sessionStorage.getItem(SS_KEY) ?? '').toContain('legacy-mesh');
+    expect(ssBlob()).toContain('legacy-sess');
+    expect(ssBlob()).toContain('legacy-mesh');
     // Password stays put.
     expect(lsBlob()).toContain('hunter2');
+  });
+
+  it('migrates a legacy single-credential blob and strips inline tokens from localStorage', () => {
+    const legacy = {
+      nick: 'Kain',
+      server: 'WSS://IRC.EXAMPLE/',
+      password: 'hunter2',
+      sessionToken: 'legacy-single-sess',
+      meshToken: 'legacy-single-mesh',
+      tokenExpiry: new Date(Date.now() + 3_600_000).toISOString(),
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(legacy));
+
+    const creds = loadCredentials('wss://irc.example/', 'kain');
+
+    expect(creds?.sessionToken).toBe('legacy-single-sess');
+    expect(creds?.meshToken).toBe('legacy-single-mesh');
+    expect(lsBlob()).toContain('"version":2');
+    expect(lsBlob()).not.toContain('legacy-single-sess');
+    expect(lsBlob()).not.toContain('legacy-single-mesh');
+    expect(ssBlob()).toContain('legacy-single-sess');
+    expect(ssBlob()).toContain('legacy-single-mesh');
   });
 });
 
@@ -206,7 +284,7 @@ describe('credentials — clear paths', () => {
     expect(creds?.sessionToken).toBeUndefined();
     expect(creds?.meshToken).toBeUndefined();
     expect(creds?.password).toBe('hunter2');
-    expect(sessionStorage.getItem(SS_KEY) ?? '').not.toContain('sess-abc123');
+    expect(ssBlob()).not.toContain('sess-abc123');
   });
 });
 
@@ -231,6 +309,16 @@ describe('credentials — fail-closed / degradation branches', () => {
   it('returns null on a corrupt localStorage blob rather than throwing', () => {
     localStorage.setItem(LS_KEY, '{not valid json');
     expect(loadCredentials('wss://irc.example/', 'kain')).toBeNull();
+  });
+
+  it('ignores a corrupt sessionStorage token blob while keeping local credentials usable', () => {
+    saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
+    sessionStorage.setItem(SS_KEY, '{"wss://irc.example|kain":');
+
+    const creds = loadCredentials('wss://irc.example/', 'kain');
+    expect(creds?.password).toBe('hunter2');
+    expect(creds?.sessionToken).toBeUndefined();
+    expect(creds?.meshToken).toBeUndefined();
   });
 
   it('purges a token whose entry has neither tokenExpiry nor a valid savedAt', () => {
