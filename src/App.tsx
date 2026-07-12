@@ -510,16 +510,18 @@ export default function App() {
               )}
             </Show>
           </div>
+          {/* Preserve the original active-buffer order (typing → dock → input) while
+              keeping the mobile dock mounted even with NO active buffer, so the buffers
+              drawer always has a keyboard/pointer opener (WCAG SC 2.1.1) — swipe alone is
+              not keyboard-accessible. TypingIndicator/InputBar still require a buffer. */}
           <Show when={activePtr()}>
-            {(ptr) => (
-              <>
-                <TypingIndicator bufferPtr={ptr()} />
-                <Show when={!isDesktop()}>
-                  <MobileDock />
-                </Show>
-                <InputBar />
-              </>
-            )}
+            {(ptr) => <TypingIndicator bufferPtr={ptr()} />}
+          </Show>
+          <Show when={!isDesktop()}>
+            <MobileDock />
+          </Show>
+          <Show when={activePtr()}>
+            <InputBar />
           </Show>
         </main>
 
