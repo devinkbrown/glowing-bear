@@ -32,6 +32,12 @@ describe('ui store', () => {
   });
 
   describe('modals', () => {
+    it('starts with the connect modal until explicitly closed', () => {
+      openModal('connect');
+
+      expect(uiState.activeModal).toBe('connect');
+    });
+
     it('opens a modal by type', () => {
       openModal('settings');
 
@@ -50,6 +56,22 @@ describe('ui store', () => {
       openModal('channelList');
 
       closeModal();
+
+      expect(uiState.activeModal).toBeNull();
+    });
+
+    it('keeps closeModal idempotent when no modal is active', () => {
+      closeModal();
+
+      closeModal();
+
+      expect(uiState.activeModal).toBeNull();
+    });
+
+    it('treats opening a null modal as clearing the active modal', () => {
+      openModal('settings');
+
+      openModal(null);
 
       expect(uiState.activeModal).toBeNull();
     });
@@ -87,6 +109,26 @@ describe('ui store', () => {
       expect(uiState.splitBuffer).toBeNull();
     });
 
+    it('toggleSplit can open without an active buffer and still closes cleanly', () => {
+      toggleSplit(null);
+      expect(uiState.splitMode).toBe('vertical');
+      expect(uiState.splitBuffer).toBeNull();
+
+      toggleSplit('0xignored');
+      expect(uiState.splitMode).toBe('none');
+      expect(uiState.splitBuffer).toBeNull();
+    });
+
+    it('toggleSplit closes a horizontal split and ignores the passed active buffer', () => {
+      setSplitMode('horizontal');
+      setSplitBuffer('0xpinned');
+
+      toggleSplit('0xactive');
+
+      expect(uiState.splitMode).toBe('none');
+      expect(uiState.splitBuffer).toBeNull();
+    });
+
     it('openSplitWith pins a buffer and opens the split if closed', () => {
       expect(uiState.splitMode).toBe('none');
       openSplitWith('0xother');
@@ -96,6 +138,16 @@ describe('ui store', () => {
       openSplitWith('0xthird');
       expect(uiState.splitBuffer).toBe('0xthird');
       expect(uiState.splitMode).toBe('vertical');
+    });
+
+    it('openSplitWith keeps an already-open horizontal split in horizontal mode', () => {
+      setSplitMode('horizontal');
+      setSplitBuffer('0xleft');
+
+      openSplitWith('0xright');
+
+      expect(uiState.splitMode).toBe('horizontal');
+      expect(uiState.splitBuffer).toBe('0xright');
     });
   });
 
@@ -115,6 +167,15 @@ describe('ui store', () => {
       setSidebarOpen(false);
       expect(uiState.sidebarOpen).toBe(false);
     });
+
+    it('does not disturb the user list when the sidebar changes', () => {
+      setUserListOpen(true);
+
+      toggleSidebar();
+
+      expect(uiState.sidebarOpen).toBe(true);
+      expect(uiState.userListOpen).toBe(true);
+    });
   });
 
   describe('user list', () => {
@@ -129,6 +190,9 @@ describe('ui store', () => {
     it('sets the user list open state directly', () => {
       setUserListOpen(true);
       expect(uiState.userListOpen).toBe(true);
+
+      setUserListOpen(false);
+      expect(uiState.userListOpen).toBe(false);
     });
   });
 
@@ -144,6 +208,9 @@ describe('ui store', () => {
     it('sets the oper console open state directly', () => {
       setOperConsoleOpen(true);
       expect(uiState.operConsoleOpen).toBe(true);
+
+      setOperConsoleOpen(false);
+      expect(uiState.operConsoleOpen).toBe(false);
     });
   });
 
@@ -159,6 +226,20 @@ describe('ui store', () => {
     it('sets the search open state directly', () => {
       setSearchOpen(true);
       expect(uiState.searchOpen).toBe(true);
+
+      setSearchOpen(false);
+      expect(uiState.searchOpen).toBe(false);
+    });
+
+    it('keeps search state independent from panel toggles', () => {
+      setSearchOpen(true);
+
+      toggleSidebar();
+      toggleUserList();
+
+      expect(uiState.searchOpen).toBe(true);
+      expect(uiState.sidebarOpen).toBe(true);
+      expect(uiState.userListOpen).toBe(true);
     });
   });
 });

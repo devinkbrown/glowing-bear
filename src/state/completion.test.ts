@@ -92,6 +92,30 @@ describe('completion store', () => {
       expect(result).toBe('/zzznotacmd');
       expect(completionState.active).toBe(false);
     });
+
+    it('completes a slash command in the middle of text with stable prefix and suffix', () => {
+      const result = complete('try /v now', 6, null);
+
+      expect(result).toBe('try /vcall  now');
+      expect(completionState.active).toBe(true);
+      expect(completionState.prefix).toBe('try ');
+      expect(completionState.suffix).toBe(' now');
+      expect(completionState.candidates).toEqual([
+        '/vcall',
+        '/video',
+        '/videocall',
+        '/voice',
+        '/voicecall',
+      ]);
+    });
+
+    it('cycles command candidates forward and backward from the active command set', () => {
+      complete('/jo', 3, null);
+
+      expect(cycleCompletion(true)).toBe('/joinvideo ');
+      expect(cycleCompletion(true)).toBe('/joinvoice ');
+      expect(cycleCompletion(false)).toBe('/joinvideo ');
+    });
   });
 
   describe('nick completion', () => {
@@ -127,6 +151,26 @@ describe('completion store', () => {
 
       expect(result).toBe('alfred:  foo');
       expect(completionState.suffix).toBe(' foo');
+    });
+
+    it('uses the cursor word as the prefix boundary when completing before punctuation', () => {
+      const result = complete('hello al, meet Bob', 8, CHAN);
+
+      expect(result).toBe('hello alfred , meet Bob');
+      expect(completionState.prefix).toBe('hello ');
+      expect(completionState.suffix).toBe(', meet Bob');
+    });
+
+    it('restarts completion with a new prefix instead of reusing stale cycling state', () => {
+      complete('al', 2, CHAN);
+      expect(cycleCompletion(true)).toBe('alice: ');
+
+      const result = complete('bo', 2, CHAN);
+
+      expect(result).toBe('Bob: ');
+      expect(completionState.candidates).toEqual(['Bob']);
+      expect(completionState.index).toBe(0);
+      expect(cycleCompletion(true)).toBe('Bob: ');
     });
   });
 
@@ -183,11 +227,25 @@ describe('completion store', () => {
   });
 
   describe('edge cases', () => {
+    it('returns empty input unchanged and clears prior completion state', () => {
+      complete('al', 2, CHAN);
+
+      const result = complete('', 0, CHAN);
+
+      expect(result).toBe('');
+      expect(completionState.active).toBe(false);
+      expect(completionState.candidates).toEqual([]);
+      expect(cycleCompletion(true)).toBe('');
+    });
+
     it('returns input unchanged when the cursor is not on a word', () => {
+      complete('al', 2, CHAN);
+
       const result = complete('hello ', 6, CHAN);
 
       expect(result).toBe('hello ');
       expect(completionState.active).toBe(false);
+      expect(completionState.candidates).toEqual([]);
     });
 
     it('returns input unchanged for an unknown buffer pointer', () => {
@@ -195,6 +253,17 @@ describe('completion store', () => {
 
       expect(result).toBe('al');
       expect(completionState.active).toBe(false);
+    });
+
+    it('clears a previous active completion when a later nick prefix has no match', () => {
+      complete('al', 2, CHAN);
+
+      const result = complete('zz', 2, CHAN);
+
+      expect(result).toBe('zz');
+      expect(completionState.active).toBe(false);
+      expect(completionState.candidates).toEqual([]);
+      expect(cycleCompletion(false)).toBe('');
     });
   });
 });
