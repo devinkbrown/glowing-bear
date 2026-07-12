@@ -3,6 +3,26 @@
 // Valid mIRC color range (0-15 standard, 16-98 extended)
 const IRC_COLOR_MAX = 98;
 
+/**
+ * Hard input cap for the live render/embed path.
+ *
+ * A relay line is fully attacker-controlled. formatText and extractEmbeds run a
+ * battery of regexes (some mildly super-linear, e.g. YOUTUBE_RE) on the main
+ * thread, and message rows re-run on scroll remount, so an uncapped multi-KB
+ * line is a main-thread DoS. Every entry point truncates to this bound BEFORE
+ * any pass. Chosen to comfortably exceed any legitimate IRC line.
+ */
+export const MAX_FORMAT_LENGTH = 4000;
+
+// Non-URL, single-char marker appended when a line is truncated at the cap.
+const TRUNCATION_MARKER = '…';
+
+/** Truncate attacker-controlled input to the hard cap before any parse pass. */
+function capInput(text: string): string {
+	if (text.length <= MAX_FORMAT_LENGTH) return text;
+	return text.slice(0, MAX_FORMAT_LENGTH) + TRUNCATION_MARKER;
+}
+
 const IMAGE_EXTENSIONS = /\.(png|jpg|jpeg|gif|webp|svg|avif)(\?[^\s]*)?$/i;
 // Hosts that serve images directly even without a file extension
 const IMAGE_HOSTS = /^https?:\/\/(i\.imgur\.com|i\.redd\.it|pbs\.twimg\.com|media\.discordapp\.net|cdn\.discordapp\.com|i\.ibb\.co|files\.catbox\.moe)\//i;
@@ -27,10 +47,11 @@ export type MediaEmbed =
 
 /** Extract rich media embeds from a message string (for rendering below the line). */
 export function extractEmbeds(text: string): MediaEmbed[] {
+	const capped = capInput(text);
 	const embeds: MediaEmbed[] = [];
 	let m: RegExpExecArray | null;
 	const urlRe = new RegExp(URL_RE_SRC.source, 'g');
-	while ((m = urlRe.exec(text)) !== null) {
+	while ((m = urlRe.exec(capped)) !== null) {
 		const url = m[0];
 		const ytMatch = YOUTUBE_RE.exec(url);
 		if (ytMatch) {
@@ -750,8 +771,10 @@ function preStripWeeColors(text: string): string {
  * Handles IRC formatting codes, URL linkification, and optional inline images.
  */
 export function formatText(text: string, inlineImages: boolean = false): string {
+	// Cap attacker-controlled input before any parse pass (main-thread DoS guard).
+	const capped = capInput(text);
 	// Pre-strip orphaned WeeChat extended color specs (when \x19 was lost in transit)
-	const cleaned = preStripWeeColors(text);
+	const cleaned = preStripWeeColors(capped);
 	// First tokenize by URLs (before escaping)
 	const tokens = tokenizeUrls(cleaned);
 	let result = '';

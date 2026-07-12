@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { formatText, extractEmbeds, stripFormatting } from './formatter';
+import { formatText, extractEmbeds, stripFormatting, MAX_FORMAT_LENGTH } from './formatter';
 
 describe('formatText — formatting toggles', () => {
   it('renders bold spans and toggles off', () => {
@@ -244,6 +244,74 @@ describe('extractEmbeds', () => {
   it('returns an empty array when no media URLs are present', () => {
     expect(extractEmbeds('nothing to see here')).toEqual([]);
     expect(extractEmbeds('plain link https://example.com/page')).toEqual([]);
+  });
+});
+
+describe('formatText — hostile scheme / attribute safety', () => {
+  it('never produces an href for a javascript: / data: / vbscript: scheme', () => {
+    for (const payload of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'vbscript:msgbox(1)',
+    ]) {
+      const out = formatText(payload);
+      expect(out).not.toMatch(/href="javascript:/i);
+      expect(out).not.toMatch(/href="data:/i);
+      expect(out).not.toMatch(/href="vbscript:/i);
+      expect(out).not.toContain('<a ');
+    }
+  });
+
+  it('does not break out of the data-channel attribute via a crafted channel ref', () => {
+    const out = formatText('#chan"><img onerror=alert(1)>');
+    // The <img stays escaped inert text; no live tag, no attribute breakout.
+    expect(out).not.toContain('<img');
+    expect(out).toContain('&lt;img');
+    expect(out).not.toContain('"><img');
+    // The channel ref is confined to a restricted-charset data-channel value.
+    expect(out).toContain('data-channel="#chan"');
+  });
+});
+
+describe('formatText / extractEmbeds — input length cap (DoS bound)', () => {
+  it('exposes a hard cap constant', () => {
+    expect(MAX_FORMAT_LENGTH).toBeGreaterThan(0);
+  });
+
+  it('truncates a pathological long line and never renders content past the cap', () => {
+    const sentinel = 'PASTCAPSENTINEL';
+    const out = formatText('a'.repeat(MAX_FORMAT_LENGTH) + sentinel);
+    expect(out).not.toContain(sentinel);
+    expect(out).toContain('…');
+    // Worst-case escape expansion is ~6x; output must stay bounded by the cap.
+    expect(out.length).toBeLessThan(MAX_FORMAT_LENGTH * 8);
+  });
+
+  it('does not stall formatText on a hostile multi-KB URL-shaped line', () => {
+    const payload = 'https://youtube.com/watch?' + 'a'.repeat(200_000);
+    const start = performance.now();
+    const out = formatText(payload);
+    expect(typeof out).toBe('string');
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+
+  it('extractEmbeds ignores URLs positioned entirely past the cap', () => {
+    const embeds = extractEmbeds(`${'x'.repeat(MAX_FORMAT_LENGTH)} https://youtu.be/dQw4w9WgXcQ`);
+    expect(embeds).toEqual([]);
+  });
+
+  it('does not stall extractEmbeds on a hostile multi-KB line', () => {
+    const payload = 'https://youtube.com/watch?' + 'a'.repeat(200_000);
+    const start = performance.now();
+    const embeds = extractEmbeds(payload);
+    expect(Array.isArray(embeds)).toBe(true);
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+
+  it('still extracts a valid embed that fits within the cap', () => {
+    expect(extractEmbeds('watch https://youtu.be/dQw4w9WgXcQ now')).toEqual([
+      { type: 'youtube', videoId: 'dQw4w9WgXcQ', start: 0 },
+    ]);
   });
 });
 
