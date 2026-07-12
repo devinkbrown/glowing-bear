@@ -225,7 +225,8 @@ function eventTone(event: ParsedEventFeed): string {
   if (/(DISCONNECT|LEAVE|QUIT|KILL|ERROR)/.test(key)) return 'border-rose-500/20 bg-rose-500/[0.055] text-rose-200';
   if (/(MEDIA|SERVICE)/.test(key)) return 'border-sky-500/20 bg-sky-500/[0.055] text-sky-200';
   if (/(OPER|SECURITY|POLICY)/.test(key)) return 'border-amber-500/20 bg-amber-500/[0.055] text-amber-200';
-  return 'border-[var(--custom-accent,#818cf8)]/20 bg-[var(--custom-accent,#818cf8)]/[0.055] text-gray-200';
+  // Uncategorised events are informational — carry --role-info, not the accent.
+  return 'border-[var(--role-info,#7dd3fc)]/20 bg-[var(--role-info,#7dd3fc)]/[0.055] text-gray-200';
 }
 
 function EventFeedLine(props: { event: ParsedEventFeed; timestamp: string; rowHandlers: JSX.HTMLAttributes<HTMLDivElement> }) {
@@ -445,7 +446,7 @@ export default function MessageLine(props: MessageLineProps) {
   const botBadge = (extraClass: string) => (
     <Show when={nickIsBot()}>
       <span
-        class={`px-1 py-px rounded text-[7px] font-bold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/20 leading-none ${extraClass}`}
+        class={`px-1 py-px rounded text-[7px] font-bold uppercase tracking-wider bg-[var(--role-primary,#818cf8)]/15 text-[var(--role-primary,#818cf8)] border border-[var(--role-primary,#818cf8)]/20 leading-none ${extraClass}`}
       >
         BOT
       </span>
@@ -520,9 +521,9 @@ export default function MessageLine(props: MessageLineProps) {
             </Show>
             <span class="msg-nick-spacer" />
             <div class="msg-body">
-              <span class="text-[var(--custom-accent,#818cf8)]/40 text-[11px] mr-1">&raquo;</span>
-              <span class="text-[var(--custom-accent,#818cf8)]/80 text-[13px] font-semibold tracking-tight">-{nick()}-</span>{' '}
-              <span class="text-[var(--custom-accent,#818cf8)]/60 irc-msg-text text-[13px]" innerHTML={html()} onClick={onBodyClick} />
+              <span class="text-[var(--role-info,#7dd3fc)]/40 text-[11px] mr-1">&raquo;</span>
+              <span class="text-[var(--role-info,#7dd3fc)]/80 text-[13px] font-semibold tracking-tight">-{nick()}-</span>{' '}
+              <span class="text-[var(--role-info,#7dd3fc)]/70 irc-msg-text text-[13px]" innerHTML={html()} onClick={onBodyClick} />
             </div>
           </div>
         </Match>
