@@ -448,26 +448,38 @@ function BufItem(props: {
     <button
       onClick={(e) => props.onClick(e)}
       title={props.entry.buffer.fullName}
-      class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-all text-[14px] sm:text-[13px] rounded-xl group relative active:bg-white/[0.04]"
+      class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-[transform,background-color,box-shadow,color] duration-150 ease-out text-[14px] sm:text-[13px] rounded-xl group relative active:scale-[0.985]"
       classList={{
         'pl-6': props.indent,
         'pl-3': !props.indent,
-        'text-gray-100 bg-[var(--custom-accent,#818cf8)]/[0.08] ring-1 ring-[var(--custom-accent,#818cf8)]/15': props.active,
-        'text-gray-100': !props.active && props.entry.highlighted > 0,
-        'text-gray-300': !props.active && props.entry.highlighted === 0 && props.entry.unread > 0,
-        'text-gray-400 hover:text-gray-200 hover:bg-white/[0.02]':
+        'text-gray-100 bg-[var(--custom-accent,#818cf8)]/[0.14] ring-1 ring-inset ring-[var(--custom-accent,#818cf8)]/30 shadow-sm shadow-black/20': props.active,
+        'text-gray-100 hover:bg-white/[0.04]': !props.active && props.entry.highlighted > 0,
+        'text-gray-300 hover:bg-white/[0.03]': !props.active && props.entry.highlighted === 0 && props.entry.unread > 0,
+        'text-gray-400 hover:text-gray-200 hover:bg-white/[0.025]':
           !props.active && props.entry.highlighted === 0 && props.entry.unread === 0,
       }}
     >
-      <Show when={props.active}>
-        <span class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 sm:h-4 rounded-r-full bg-[var(--custom-accent,#818cf8)]" />
-      </Show>
+      {/* Selection rail — an accent left-edge that reads as a continuum:
+          hidden when idle, faint on hover, solid + taller when selected.
+          Animated on opacity/transform only (compositor-friendly). */}
+      <span
+        class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-[var(--custom-accent,#818cf8)] origin-center transition-[opacity,transform] duration-200 ease-out"
+        classList={{
+          'h-6 sm:h-5 scale-y-100 opacity-100': props.active,
+          'h-4 scale-y-50 opacity-0 group-hover:opacity-50 group-hover:scale-y-100': !props.active,
+        }}
+      />
       <span class="mt-0.5">
         <BufIcon kind={kind()} active={props.active || props.entry.unread > 0 || props.entry.highlighted > 0} />
       </span>
       <span class="min-w-0 flex-1">
         <span class="flex min-w-0 items-center gap-1.5">
-          <span class="truncate leading-snug font-medium">{name()}</span>
+          <span
+            class="truncate leading-snug"
+            classList={{ 'font-semibold': props.active, 'font-medium': !props.active }}
+          >
+            {name()}
+          </span>
           <Show when={activityTime()}>
             <span class="ml-auto hidden shrink-0 font-mono text-[9px] text-gray-600 group-hover:text-gray-500 sm:inline">{activityTime()}</span>
           </Show>
@@ -581,10 +593,12 @@ function BufIcon(props: { kind: BufferKind; active?: boolean }) {
 function Pip(props: { count: number; hot?: boolean }) {
   return (
     <span
-      class="shrink-0 min-w-[16px] h-4 rounded-full text-[10px] font-bold flex items-center justify-center px-1 leading-none"
+      class="shrink-0 flex items-center justify-center rounded-full min-w-[16px] h-4 text-[10px] font-bold tabular-nums leading-none"
       classList={{
-        'bg-red-500 text-white': props.hot,
-        'bg-[var(--custom-accent,#818cf8)]/20 text-[var(--custom-accent,#818cf8)]': !props.hot,
+        // Mention: rose role, ringed + colored glow — the "what did I miss" focal point.
+        'px-1.5 bg-red-500 text-white ring-1 ring-red-400/50 shadow-sm shadow-red-500/40': props.hot,
+        // Unread: quieter accent tint, one tier down.
+        'px-1 bg-[var(--custom-accent,#818cf8)]/20 text-[var(--custom-accent,#818cf8)]': !props.hot,
       }}
     >
       {props.count > PIP_MAX ? `${PIP_MAX}+` : props.count}
