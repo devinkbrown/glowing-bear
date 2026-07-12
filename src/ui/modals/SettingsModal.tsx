@@ -616,10 +616,10 @@ function MiniStat(props: { label: string; value: string; hot?: boolean }) {
   );
 }
 
-function QuickToggle(props: { label: string; on: boolean; onClick: () => void }) {
+function QuickToggle(props: { label: string; on: boolean; onClick: (e: MouseEvent) => void }) {
   return (
     <button
-      onClick={props.onClick}
+      onClick={(e) => props.onClick(e)}
       aria-label={`Toggle ${props.label}`}
       class="flex items-center justify-between rounded-2xl border border-white/[0.055] bg-black/15 px-3 py-2 text-left transition-all active:scale-[0.98] hover:bg-white/[0.04]"
     >

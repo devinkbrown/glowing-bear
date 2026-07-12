@@ -428,21 +428,6 @@ function setForegroundColor(state: FormattingState, value: number | null): void 
 	}
 }
 
-function setBackgroundColor(state: FormattingState, value: number | null): void {
-	if (value === null) return;
-	if (value >= 0 && value <= IRC_COLOR_MAX) {
-		state.bg = value;
-		state.bgHex = null;
-		return;
-	}
-
-	const hex = xterm256Color(value);
-	if (hex) {
-		state.bg = null;
-		state.bgHex = hex;
-	}
-}
-
 function setWeeForegroundColor(state: FormattingState, value: number | null): void {
 	if (value === null) return;
 	const hex = WEECHAT_STANDARD_COLOR_HEX[value] ?? xterm256Color(value);

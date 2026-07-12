@@ -30,14 +30,14 @@ function DockButton(props: {
   disabled?: boolean;
   badge?: number;
   hot?: boolean;
-  onClick: () => void;
+  onClick: (e: MouseEvent) => void;
   children: JSX.Element;
 }) {
   return (
     <button
       type="button"
       disabled={props.disabled}
-      onClick={props.onClick}
+      onClick={(e) => props.onClick(e)}
       class="mobile-dock-btn relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[9px] font-black uppercase tracking-[0.03em] transition-all disabled:opacity-35"
       classList={{
         'mobile-dock-btn-active text-white': props.active,

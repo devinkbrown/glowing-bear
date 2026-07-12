@@ -519,11 +519,11 @@ function StatCell(props: { label: string; value: number; hot?: boolean; danger?:
   );
 }
 
-function ModeButton(props: { label: string; active: boolean; onClick: () => void }) {
+function ModeButton(props: { label: string; active: boolean; onClick: (e: MouseEvent) => void }) {
   return (
     <button
       type="button"
-      onClick={props.onClick}
+      onClick={(e) => props.onClick(e)}
       class="h-7 rounded-lg text-[10px] font-black uppercase tracking-[0.08em] transition-all"
       classList={{
         'bg-[var(--custom-accent,#818cf8)] text-white shadow-lg shadow-black/20': props.active,
