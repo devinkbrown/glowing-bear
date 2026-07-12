@@ -37,6 +37,25 @@ const FIELD_ICONS: Record<string, string> = {
 
 const EDITABLE_FIELDS = ['URL', 'GENDER', 'PICTURE', 'LOCATION', 'BIO', 'REALNAME', 'EMAIL'];
 
+/**
+ * True only when `value` is an absolute http(s) URL. Profile URL/PICTURE
+ * fields are attacker-controlled (set via IRCX METADATA/WHOIS), so they must
+ * never reach an `<a href>` / `<img src>` unless the scheme is safe — a
+ * `javascript:` URI executes on click and `rel="noopener noreferrer"` does not
+ * stop it. Fail closed: anything that is not clearly http(s) renders as inert
+ * plain text instead. Whitespace/control-char scheme obfuscation is neutralised
+ * because the URL parser normalises those away before we read the protocol.
+ */
+export function isSafeProfileUrl(value: string | null | undefined): boolean {
+  if (!value) return false;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 /** Own nick on the active buffer's server (falls back to any sibling buffer). */
 function ownNick(): string {
   const active = buffersState.activeBuffer;
@@ -144,7 +163,7 @@ export default function UserProfileCard(props: Props) {
             {/* Avatar + Name header */}
             <div class="flex items-center gap-4 pb-4 border-b border-white/[0.06]">
               <Show
-                when={profile()?.picture}
+                when={isSafeProfileUrl(profile()?.picture)}
                 fallback={
                   <div
                     class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold"
@@ -259,7 +278,7 @@ export default function UserProfileCard(props: Props) {
                               <FieldIcon type={FIELD_ICONS[key] ?? 'text'} />
                               <span class="text-[11px] text-gray-500 w-[80px] shrink-0">{label}</span>
                               <Show
-                                when={(key === 'URL' || key === 'PICTURE') && rawVal()}
+                                when={(key === 'URL' || key === 'PICTURE') && isSafeProfileUrl(rawVal())}
                                 fallback={
                                   <Show
                                     when={rawVal()}

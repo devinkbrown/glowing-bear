@@ -2,6 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      Content-Security-Policy — defense-in-depth backstop for the message-render
+      and profile surfaces. No 'unsafe-inline' for scripts: the two first-party
+      bootstrap scripts below are allowlisted by SHA-256 hash, so an injected
+      inline handler (e.g. <img onerror=…>) can never execute. 'wasm-unsafe-eval'
+      is required by the opcodec media codec (WebAssembly). Directives that are
+      IGNORED in a <meta> CSP (frame-ancestors, X-Frame-Options) should also be
+      set as nginx response headers on /darkbear/. Tuned so WS relays, media,
+      uploads, and YouTube/Twitch embeds keep working.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-y7GJxeLo2t/duzld7J7nlJXHyyhQKM3/duNOwdaitV0=' 'sha256-pZ9Thf83kNNRWD0z9UFIxXP5zEUrViZIcCCYE5vChNg='; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; media-src 'self' https: blob:; font-src 'self' data:; connect-src 'self' https: wss: ws:; worker-src 'self' blob:; child-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://clips.twitch.tv https://player.twitch.tv; manifest-src 'self'"
+    />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
@@ -41,11 +55,19 @@
         } catch (e) {}
       })();
     </script>
-    <!-- Asset-version cache bust — deploy.sh rewrites var v='...' on every deploy -->
+    <!-- Asset-version cache bust — deploy.sh rewrites the var v='...' literal in
+         the non-executed holder below on every deploy. The executable script
+         reads the version out of it, so the executable script's bytes (and thus
+         its CSP SHA-256 hash) stay STABLE across deploys — no deploy.sh change is
+         needed to keep the CSP valid. -->
+    <script type="text/plain" id="db-asset-version">var v = '2026-07-09-091518-darkbear-5b1738f'</script>
     <script>
       (function () {
         try {
-          var v = '2026-07-09-091518-darkbear-5b1738f';
+          var _h = document.getElementById('db-asset-version');
+          var _m = _h && _h.textContent.match(/'([^']*)'/);
+          var v = _m ? _m[1] : '';
+          if (!v) return;
           var k = 'darkbear_asset_version';
           if (localStorage.getItem(k) !== v) {
             localStorage.setItem(k, v);
