@@ -23,6 +23,17 @@ describe('Orochi WSS gateway discovery', () => {
     );
   });
 
+  it('adds the browser gateway fallback port to explicit WSS URLs without one', () => {
+    expect(wssUrlForOrochiHost('wss://node.example/relay')).toBe('wss://node.example:8080/relay');
+    expect(wssUrlForOrochiHost('https://Example.COM')).toBe('wss://example.com:8080');
+  });
+
+  it('preserves IPv6 literals and explicit ports while normalizing path suffixes', () => {
+    expect(wssUrlForOrochiHost('wss://[2001:db8::1]:9443/irc/')).toBe(
+      'wss://[2001:db8::1]:9443/irc',
+    );
+  });
+
   it('rejects malformed host tokens', () => {
     expect(wssUrlForOrochiHost('')).toBeNull();
     expect(wssUrlForOrochiHost('   ')).toBeNull();
@@ -30,6 +41,7 @@ describe('Orochi WSS gateway discovery', () => {
     expect(wssUrlForOrochiHost('example.com:6697')).toBeNull();
     expect(wssUrlForOrochiHost('example.com/path')).toBeNull();
     expect(wssUrlForOrochiHost(String.raw`example.com\path`)).toBeNull();
+    expect(wssUrlForOrochiHost('wss://')).toBeNull();
   });
 
   it('turns a discovered gateway into a node candidate', () => {
@@ -48,9 +60,26 @@ describe('Orochi WSS gateway discovery', () => {
     });
   });
 
+  it('preserves a caller-provided id and normalized secure gateway URL', () => {
+    expect(nodeFromWssGateway('wss://Example.COM:8080/path/', 'relay-004')).toEqual({
+      id: 'relay-004',
+      host: 'example.com',
+      wss: 'wss://example.com:8080/path',
+    });
+  });
+
+  it('accepts secure IPv6 gateway URLs', () => {
+    expect(nodeFromWssGateway('wss://[2001:db8::1]:9443/irc/', 'v6')).toEqual({
+      id: 'v6',
+      host: '[2001:db8::1]',
+      wss: 'wss://[2001:db8::1]:9443/irc',
+    });
+  });
+
   it('rejects malformed or non-secure gateway URLs fail-closed', () => {
     expect(nodeFromWssGateway('not a url')).toBeNull();
     expect(nodeFromWssGateway('http://ircx.us:8080')).toBeNull();
     expect(nodeFromWssGateway('ws://ircx.us:8080')).toBeNull();
+    expect(nodeFromWssGateway('wss://')).toBeNull();
   });
 });
