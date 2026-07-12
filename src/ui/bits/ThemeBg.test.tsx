@@ -6,6 +6,8 @@
 // prefers-reduced-motion: reduce those nodes must be absent from the DOM entirely
 // (WCAG 2.2.2 Pause, Stop, Hide). This asserts the JS gate does that.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import ThemeBg, { shimmerLayers, type ThemeName } from './ThemeBg';
@@ -85,6 +87,33 @@ describe('shimmerLayers', () => {
     expect(shimmerLayers([1, 2], 5)).toHaveLength(2);
     expect(shimmerLayers([], 5)).toHaveLength(1);
     expect(shimmerLayers([1], 1)).toHaveLength(1);
+  });
+});
+
+// ── Compositor-only motion (no layout-bound keyframes) ─────────────────────────
+// Every decorative @keyframes must animate only compositor-friendly properties
+// (transform/opacity/filter/background). Animating left/right/top/bottom/width/
+// height/margin thrashes layout+paint each frame across the always-running scene.
+// This source-scan pins that: the moving cars, rain, bats, drips, wind, birds and
+// scanlines drive their travel with transform, so a regression back to a layout
+// property fails here rather than only under a frame profiler.
+describe('ThemeBg keyframes are compositor-only', () => {
+  const source = readFileSync(join(process.cwd(), 'src/ui/bits/ThemeBg.tsx'), 'utf8');
+  // Match each `@keyframes name { …one nesting level… }` block whole.
+  const blocks = source.match(/@keyframes\s+[\w-]+\s*\{(?:[^{}]|\{[^{}]*\})*\}/g) ?? [];
+  // A layout property only counts when it appears as a declaration key (after `{`,
+  // `;` or whitespace, before `:`) — so `transform-origin` values and gradient
+  // directions like `to bottom` are not false positives.
+  const LAYOUT_PROP = /[{;\s](?:left|right|top|bottom|width|height|margin|padding|font-size)\s*:/;
+  const nameOf = (block: string): string => block.match(/@keyframes\s+([\w-]+)/)?.[1] ?? '?';
+
+  it('scans the full keyframe set', () => {
+    expect(blocks.length).toBeGreaterThan(50);
+  });
+
+  it('no @keyframes animates a layout-bound property', () => {
+    const offenders = blocks.filter((b) => LAYOUT_PROP.test(b)).map(nameOf);
+    expect(offenders).toEqual([]);
   });
 });
 

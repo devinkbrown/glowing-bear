@@ -291,6 +291,7 @@ function DarkBearBg() {
       {/* Scan line */}
       <div class="absolute left-0 right-0 h-[1px]"
         style={{
+          top: 0,
           background: 'linear-gradient(90deg, transparent 10%, rgba(129,140,248,0.06) 30%, rgba(129,140,248,0.1) 50%, rgba(129,140,248,0.06) 70%, transparent 90%)',
           animation: 'db-scan 12s ease-in-out infinite',
         }} />
@@ -303,7 +304,7 @@ function DarkBearBg() {
         @keyframes db-edge-breathe { 0%,100%{opacity:1} 50%{opacity:0.2} }
         @keyframes db-hex-drift { 0%,100%{transform:rotate(var(--r,0deg)) translateY(0)} 50%{transform:rotate(var(--r,0deg)) translateY(-8px) scale(1.05)} }
         @keyframes db-stream { 0%,100%{opacity:0.5} 50%{opacity:0} }
-        @keyframes db-scan { 0%{top:0%} 50%{top:100%} 100%{top:0%} }
+        @keyframes db-scan { 0%{transform:translateY(0)} 50%{transform:translateY(100vh)} 100%{transform:translateY(0)} }
       `}</style>
     </Shell>
   );
@@ -1059,7 +1060,7 @@ function RosePineBg() {
         @keyframes rp-drift-b   { 0%,100%{transform:translate(0,0)} 33%{transform:translate(22px,-16px)} 66%{transform:translate(-18px,12px)} }
         @keyframes rp-drift-c   { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-16px,20px)} }
         @keyframes rp-fly       { 0%,100%{opacity:0;transform:translate(0,0)} 15%{opacity:0.8} 50%{opacity:0.6;transform:translate(18px,-14px)} 80%{opacity:0.8} }
-        @keyframes rp-wind      { 0%{opacity:0;left:-2%} 10%{opacity:inherit} 90%{opacity:inherit} 100%{opacity:0;left:102%} }
+        @keyframes rp-wind      { 0%{opacity:0;transform:translateX(0)} 10%{opacity:inherit} 90%{opacity:inherit} 100%{opacity:0;transform:translateX(104vw)} }
         @keyframes rp-bloom     { 0%,100%{opacity:0.7;transform:scale(0.9)} 50%{opacity:1;transform:scale(1.15)} }
         @keyframes rp-dew       { 0%,100%{opacity:0.7;r:inherit} 50%{opacity:1;r:inherit} }
         @keyframes rp-moonbeam  { 0%,100%{opacity:0.8} 50%{opacity:1} }
@@ -1861,6 +1862,7 @@ function TokyoNightBg() {
       {cars.map((car, i) => (
         <div class="absolute rounded-full"
           style={{ bottom: `${15 + car.y * 2}%`, width: '8px', height: '3px',
+            ...(car.dir === 'ltr' ? { left: 0 } : { right: 0 }),
             background: car.color,
             'box-shadow': `0 0 15px ${car.color}, 0 0 30px ${car.color}80`,
             animation: `tn-car${car.dir === 'ltr' ? 'L' : 'R'} ${car.speed}s linear ${car.delay}s infinite` }} />
@@ -1869,8 +1871,8 @@ function TokyoNightBg() {
       <div class="absolute inset-0" style={{ animation: 'tn-lightning 12s ease-in-out infinite' }} />
       <style>{`
         @keyframes tn-blink { 0%,100%{opacity:0.2} 40%{opacity:0.9} 60%{opacity:0.9} }
-        @keyframes tn-carL { 0%{left:-3%;opacity:0} 8%{opacity:0.9} 92%{opacity:0.9} 100%{left:105%;opacity:0} }
-        @keyframes tn-carR { 0%{right:-3%;opacity:0} 8%{opacity:0.9} 92%{opacity:0.9} 100%{right:105%;opacity:0} }
+        @keyframes tn-carL { 0%{transform:translateX(-3vw);opacity:0} 8%{opacity:0.9} 92%{opacity:0.9} 100%{transform:translateX(105vw);opacity:0} }
+        @keyframes tn-carR { 0%{transform:translateX(3vw);opacity:0} 8%{opacity:0.9} 92%{opacity:0.9} 100%{transform:translateX(-105vw);opacity:0} }
         @keyframes tn-rain { 0%{opacity:0;transform:translateY(0)} 10%{opacity:0.7} 90%{opacity:0.4} 100%{opacity:0;transform:translateY(115vh)} }
         @keyframes tn-neon1 { 0%,100%{opacity:1} 48%{opacity:0.3} 52%{opacity:1} }
         @keyframes tn-neon2 { 0%,100%{opacity:0.9} 50%{opacity:0.2} }
@@ -1968,7 +1970,8 @@ function DraculaBg() {
       {/* Blood drip streaks */}
       {bloodDrops.map((bd, i) => (
         <div class="absolute top-0"
-          style={{ left: `${bd.x}%`, width: '4px', height: '0%',
+          style={{ left: `${bd.x}%`, width: '4px', height: '60vh',
+            'transform-origin': 'top', transform: 'scaleY(0)',
             background: 'linear-gradient(to bottom, rgba(220,40,60,0.6), rgba(180,30,40,0.4) 60%, rgba(140,20,30,0.2))',
             animation: `dr-drip ${bd.dur}s ease-in ${bd.delay}s infinite` }} />
       ))}
@@ -2037,14 +2040,14 @@ function DraculaBg() {
       </svg>
       <style>{`
         @keyframes dr-fog { 0%,100%{transform:translateX(0) translateY(0) scaleX(1)} 50%{transform:translateX(80px) translateY(-30px) scaleX(1.25)} }
-        @keyframes dr-bat { 0%{left:-8%;opacity:0;transform:translateY(0)} 8%{opacity:0.7} 25%{transform:translateY(calc(-1 * var(--wa)))} 50%{transform:translateY(calc(var(--wa) * 0.6))} 75%{transform:translateY(calc(-1 * var(--wa) * 0.8))} 92%{opacity:0.7} 100%{left:110%;opacity:0} }
+        @keyframes dr-bat { 0%{opacity:0;transform:translate(0,0)} 8%{opacity:0.7} 25%{transform:translate(29.5vw,calc(-1 * var(--wa)))} 50%{transform:translate(59vw,calc(var(--wa) * 0.6))} 75%{transform:translate(88.5vw,calc(-1 * var(--wa) * 0.8))} 92%{opacity:0.7} 100%{opacity:0;transform:translate(118vw,0)} }
         @keyframes dr-lightning { 0%,100%{background:transparent} 44%{background:transparent} 44.3%{background:rgba(189,147,249,0.2)} 44.6%{background:transparent} 45%{background:rgba(189,147,249,0.15)} 45.3%{background:transparent} }
         @keyframes dr-lightning2 { 0%,100%{background:transparent} 44%{background:transparent} 44.3%{background:rgba(139,92,246,0.25)} 44.6%{background:transparent} 45%{background:rgba(139,92,246,0.18)} 45.3%{background:transparent} }
         @keyframes dr-moon { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.8;transform:scale(1.08)} }
         @keyframes dr-moonring { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.15)} }
         @keyframes dr-candle { 0%,100%{transform:scale(1) translateX(0);opacity:1} 25%{transform:scale(1.3,0.7) translateX(2px);opacity:0.8} 50%{transform:scale(0.8,1.2) translateX(-2px);opacity:1} 75%{transform:scale(1.2,0.8) translateX(1px);opacity:0.9} }
         @keyframes dr-tendril { 0%,100%{transform:translateX(0) scaleX(1);opacity:1} 50%{transform:translateX(60px) scaleX(1.5);opacity:0.4} }
-        @keyframes dr-drip { 0%{height:0%;opacity:0} 15%{opacity:0.8} 85%{opacity:0.6} 100%{height:60%;opacity:0} }
+        @keyframes dr-drip { 0%{transform:scaleY(0);opacity:0} 15%{opacity:0.8} 85%{opacity:0.6} 100%{transform:scaleY(1);opacity:0} }
       `}</style>
     </Shell>
   );
@@ -2199,8 +2202,8 @@ function SolarizedBg() {
         @keyframes sl-flare { 0%,100%{opacity:0} 40%{opacity:0.9} 60%{opacity:0.9} }
         @keyframes sl-sunrefl { 0%,100%{opacity:1;transform:scaleX(1)} 50%{opacity:0.6;transform:scaleX(1.4)} }
         @keyframes sl-spray { 0%{opacity:0;transform:translateY(0)} 25%{opacity:0.8} 100%{opacity:0;transform:translateY(-30px) translateX(12px)} }
-        @keyframes sl-wind { 0%{opacity:0;left:-3%} 12%{opacity:0.7} 88%{opacity:0.5} 100%{opacity:0;left:108%} }
-        @keyframes sl-bird { 0%{left:-8%;opacity:0} 8%{opacity:0.8} 92%{opacity:0.8} 100%{left:112%;opacity:0} }
+        @keyframes sl-wind { 0%{opacity:0;transform:translateX(0)} 12%{opacity:0.7} 88%{opacity:0.5} 100%{opacity:0;transform:translateX(111vw)} }
+        @keyframes sl-bird { 0%{opacity:0;transform:translateX(0)} 8%{opacity:0.8} 92%{opacity:0.8} 100%{opacity:0;transform:translateX(120vw)} }
         @keyframes sl-cloud { 0%{transform:translateX(0)} 100%{transform:translateX(125vw)} }
       `}</style>
     </Shell>
@@ -2460,7 +2463,8 @@ function LightningBg() {
               : r.layer === 1
               ? `linear-gradient(to bottom, transparent, rgba(150,190,240,${r.opacity * 0.75}))`
               : `linear-gradient(to bottom, transparent, rgba(130,170,230,${r.opacity * 0.5}))`,
-            transform: `rotate(${r.angle}deg)`,
+            ['--ln-rot' as string]: `${r.angle}deg`,
+            transform: 'rotate(var(--ln-rot))',
             'transform-origin': 'top left',
             animation: `ln-rain ${r.dur}s linear ${r.delay}s infinite`,
           }} />
@@ -2500,7 +2504,7 @@ function LightningBg() {
         }} />
 
       <style>{`
-        @keyframes ln-rain { 0%{top:-12%;opacity:0} 4%{opacity:1} 92%{opacity:0.7} 100%{top:112%;opacity:0} }
+        @keyframes ln-rain { 0%{transform:translateY(0) rotate(var(--ln-rot));opacity:0} 4%{opacity:1} 92%{opacity:0.7} 100%{transform:translateY(124vh) rotate(var(--ln-rot));opacity:0} }
         @keyframes ln-cloud { 0%,100%{transform:translateX(0) scale(1)} 50%{transform:translateX(30px) scale(1.04)} }
         @keyframes ln-roil { 0%,100%{transform:scaleX(1) scaleY(1)} 30%{transform:scaleX(1.06) scaleY(0.95)} 60%{transform:scaleX(0.96) scaleY(1.04)} }
         @keyframes ln-underglow { 0%,100%{opacity:0.4} 40%{opacity:0.9} 60%{opacity:0.5} }
@@ -3392,6 +3396,7 @@ function RetroArcadeBg() {
 
       {/* Horizontal CRT interference line */}
       <div class="absolute left-0 right-0 h-[2px]" style={{
+        top: '-2%',
         background: 'rgba(255,255,255,0.03)',
         animation: 'rc-hline 4s linear infinite',
       }} />
@@ -3444,12 +3449,12 @@ function RetroArcadeBg() {
         @keyframes rc-chomp { 0%,49%{opacity:1} 50%,100%{opacity:0} }
         @keyframes rc-ghost { 0%{opacity:0;transform:translateX(0)} 6%{opacity:0.55} 94%{opacity:0.35} 100%{opacity:0;transform:translateX(var(--rc-gdir,120px))} }
         @keyframes rc-tetfall { 0%{opacity:0;transform:translateY(0)} 3%{opacity:0.22} 97%{opacity:0.1} 100%{opacity:0;transform:translateY(115vh)} }
-        @keyframes rc-laser { 0%{opacity:0;bottom:0} 5%{opacity:0.6} 95%{opacity:0.4} 100%{opacity:0;bottom:100%} }
+        @keyframes rc-laser { 0%{opacity:0;transform:translateY(0)} 5%{opacity:0.6} 95%{opacity:0.4} 100%{opacity:0;transform:translateY(-100vh)} }
         @keyframes rc-coin { 0%{opacity:0;transform:translateY(0) rotateY(0deg)} 6%{opacity:0.3} 92%{opacity:0.15} 100%{opacity:0;transform:translateY(110vh) rotateY(1440deg)} }
         @keyframes rc-screen { 0%{opacity:0.07} 25%{opacity:0.09} 50%{opacity:0.04} 75%{opacity:0.08} 100%{opacity:0.07} }
         @keyframes rc-blink { 0%,49%{opacity:inherit} 50%,100%{opacity:0} }
         @keyframes rc-scanroll { 0%{background-position:0 0} 100%{background-position:0 80px} }
-        @keyframes rc-hline { 0%{top:-2%} 100%{top:102%} }
+        @keyframes rc-hline { 0%{transform:translateY(0)} 100%{transform:translateY(104vh)} }
         @keyframes rc-glow1 { 0%,100%{opacity:0.65;transform:scale(1)} 50%{opacity:1;transform:scale(1.12)} }
         @keyframes rc-crtflick { 0%,96%{opacity:0} 96.5%{opacity:1} 97%{opacity:0} 97.5%{opacity:0.6} 98%{opacity:0} }
         @keyframes rc-powerup { 0%{opacity:0;transform:scale(0.5)} 15%{opacity:0.5;transform:scale(1.1)} 50%{opacity:0.4;transform:scale(1) translateY(-8px)} 85%{opacity:0.3;transform:scale(0.9)} 100%{opacity:0;transform:scale(0.4)} }
