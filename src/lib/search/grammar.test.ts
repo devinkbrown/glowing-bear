@@ -58,9 +58,19 @@ describe('parseSearchQuery — operators', () => {
     expect(parseSearchQuery('after:45m', NOW).after).toBe(NOW - 45 * 60_000);
   });
 
+  it('resolves a zero relative age to the injected now', () => {
+    expect(parseSearchQuery('after:0m', NOW).after).toBe(NOW);
+    expect(parseSearchQuery('before:0h', NOW).before).toBe(NOW);
+  });
+
   it('parses today / yesterday keywords', () => {
     expect(parseSearchQuery('after:today', NOW).after).toBe(midnight(0));
     expect(parseSearchQuery('before:yesterday', NOW).before).toBe(midnight(-1));
+  });
+
+  it('accepts valid leap-day absolute dates', () => {
+    const leapDay = new Date(2024, 1, 29, 0, 0, 0, 0).getTime();
+    expect(parseSearchQuery('after:2024-02-29', NOW).after).toBe(leapDay);
   });
 
   it('combines multiple operators plus free text', () => {
@@ -95,11 +105,26 @@ describe('parseSearchQuery — malformed', () => {
     expect(q.isEmpty).toBe(true);
   });
 
+  it('a dangling before:/after: counts as an empty malformed date operator', () => {
+    for (const raw of ['before:', 'after:']) {
+      const q = parseSearchQuery(raw, NOW);
+      expect(q.before).toBeNull();
+      expect(q.after).toBeNull();
+      expect(q.text).toBeNull();
+      expect(q.isEmpty).toBe(true);
+    }
+  });
+
   it('a dangling from:/in: with no value falls back to free text', () => {
     const q = parseSearchQuery('from:', NOW);
     expect(q.from).toBeNull();
     expect(q.text).toBe('from:');
     expect(q.isEmpty).toBe(false);
+  });
+
+  it('keeps dangling from:/in: tokens as free text alongside real operators', () => {
+    const q = parseSearchQuery('from: in:#dev in:', NOW);
+    expect(q).toMatchObject({ from: null, in: 'dev', text: 'from: in:', isEmpty: false });
   });
 });
 
