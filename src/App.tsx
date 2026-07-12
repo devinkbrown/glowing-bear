@@ -1,4 +1,4 @@
-import { ErrorBoundary, Show, createEffect, createMemo, onCleanup, onMount } from 'solid-js';
+import { ErrorBoundary, Show, Suspense, createEffect, createMemo, lazy, onCleanup, onMount } from 'solid-js';
 import {
   settings,
   buffersState,
@@ -32,7 +32,6 @@ import { setupKeyboardShortcuts } from '@/primitives/keyboard';
 import { setupFaviconBadge } from '@/primitives/faviconBadge';
 import { createSwipeGesture } from '@/primitives/swipe';
 
-import ThemeBg, { type ThemeName } from '@/ui/bits/ThemeBg';
 import StarfieldBg from '@/ui/bits/StarfieldBg';
 import Sidebar from '@/ui/layout/Sidebar';
 import Header from '@/ui/layout/Header';
@@ -40,19 +39,27 @@ import MobileDock from '@/ui/layout/MobileDock';
 import MessageView from '@/ui/chat/MessageView';
 import TypingIndicator from '@/ui/chat/TypingIndicator';
 import InputBar from '@/ui/input/InputBar';
-import UserList from '@/ui/panels/UserList';
-import ChannelInfoPanel from '@/ui/panels/ChannelInfoPanel';
-import ServicesPanel from '@/ui/panels/ServicesPanel';
-import UserProfileCard from '@/ui/panels/UserProfileCard';
-import ChannelListModal from '@/ui/panels/ChannelListModal';
-import OperConsole from '@/ui/panels/OperConsole';
-import ConnectModal from '@/ui/modals/ConnectModal';
-import SettingsModal from '@/ui/modals/SettingsModal';
-import HelpModal from '@/ui/modals/HelpModal';
-import AboutModal from '@/ui/modals/AboutModal';
-import BufferSwitcher from '@/ui/modals/BufferSwitcher';
-import VideoRoom from '@/ui/media/VideoRoom';
 import CallNotification from '@/ui/media/CallNotification';
+import type { ThemeName } from '@/ui/bits/ThemeBg';
+
+// Heavy, non-critical surfaces are code-split via lazy() so they stay out of
+// the first-paint entry chunk. Each is rendered behind a <Show> gate, so its
+// dynamic import only fires the first time the surface is actually opened; the
+// <Suspense> boundaries below keep a still-loading overlay from blanking the
+// main UI (a null fallback renders nothing until the chunk resolves).
+const ThemeBg = lazy(() => import('@/ui/bits/ThemeBg'));
+const VideoRoom = lazy(() => import('@/ui/media/VideoRoom'));
+const UserList = lazy(() => import('@/ui/panels/UserList'));
+const ChannelInfoPanel = lazy(() => import('@/ui/panels/ChannelInfoPanel'));
+const ServicesPanel = lazy(() => import('@/ui/panels/ServicesPanel'));
+const UserProfileCard = lazy(() => import('@/ui/panels/UserProfileCard'));
+const ChannelListModal = lazy(() => import('@/ui/panels/ChannelListModal'));
+const OperConsole = lazy(() => import('@/ui/panels/OperConsole'));
+const ConnectModal = lazy(() => import('@/ui/modals/ConnectModal'));
+const SettingsModal = lazy(() => import('@/ui/modals/SettingsModal'));
+const HelpModal = lazy(() => import('@/ui/modals/HelpModal'));
+const AboutModal = lazy(() => import('@/ui/modals/AboutModal'));
+const BufferSwitcher = lazy(() => import('@/ui/modals/BufferSwitcher'));
 
 const CUSTOM_COLOR_VARS: Array<[keyof typeof import('@/types').DEFAULT_CUSTOM_COLORS, string]> = [
   ['gray950', '--color-gray-950'],
@@ -238,9 +245,11 @@ export default function App() {
       <div class="relative flex h-[var(--vh,100dvh)] w-full overflow-hidden bg-gray-950 text-gray-200">
         {/* Theme background layers */}
         <Show when={settings.animateThemes && settings.theme !== 'custom' && !settings.bgImage}>
-          <Show when={settings.theme === 'starfield'} fallback={<ThemeBg theme={settings.theme as ThemeName} />}>
-            <StarfieldBg />
-          </Show>
+          <Suspense>
+            <Show when={settings.theme === 'starfield'} fallback={<ThemeBg theme={settings.theme as ThemeName} />}>
+              <StarfieldBg />
+            </Show>
+          </Suspense>
         </Show>
         <Show when={settings.bgImage}>
           <div
@@ -368,75 +377,100 @@ export default function App() {
         </main>
 
         {/* User list — desktop drawer / mobile overlay */}
-        <Show when={uiState.userListOpen}>
-          <Show
-            when={isDesktop()}
-            fallback={
-              <>
-                <div class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={() => setUserListOpen(false)} />
-                <aside
-                  class="mobile-sheet fixed bottom-0 left-0 right-0 z-50 flex h-[min(72vh,660px)] flex-col overflow-hidden rounded-t-3xl border-t border-white/[0.08]"
-                  onTouchStart={beginSheetDrag}
-                  onTouchMove={moveSheetDrag}
-                  onTouchEnd={() => endSheetDrag(() => setUserListOpen(false))}
-                  onTouchCancel={() => endSheetDrag(() => undefined)}
-                >
-                  <button
-                    type="button"
-                    class="mobile-sheet-grip"
-                    aria-label="Close users panel"
-                    onClick={() => setUserListOpen(false)}
-                  />
-                  <div class="mobile-sheet-head">
-                    <div>
-                      <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">Channel</p>
-                      <h2 class="text-[16px] font-black tracking-tight text-gray-50">Users</h2>
-                    </div>
+        <Suspense>
+          <Show when={uiState.userListOpen}>
+            <Show
+              when={isDesktop()}
+              fallback={
+                <>
+                  <div class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={() => setUserListOpen(false)} />
+                  <aside
+                    class="mobile-sheet fixed bottom-0 left-0 right-0 z-50 flex h-[min(72vh,660px)] flex-col overflow-hidden rounded-t-3xl border-t border-white/[0.08]"
+                    onTouchStart={beginSheetDrag}
+                    onTouchMove={moveSheetDrag}
+                    onTouchEnd={() => endSheetDrag(() => setUserListOpen(false))}
+                    onTouchCancel={() => endSheetDrag(() => undefined)}
+                  >
                     <button
                       type="button"
-                      class="mobile-sheet-close"
+                      class="mobile-sheet-grip"
                       aria-label="Close users panel"
                       onClick={() => setUserListOpen(false)}
-                    >
-                      <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                        <path d="M4 4l8 8M12 4l-8 8" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div class="min-h-0 flex-1">
-                    <UserList mobile onClose={() => setUserListOpen(false)} />
-                  </div>
-                </aside>
-              </>
-            }
-          >
-            <aside class="relative z-10 h-full w-[240px] shrink-0 border-l border-gray-800/70">
-              <UserList />
-            </aside>
+                    />
+                    <div class="mobile-sheet-head">
+                      <div>
+                        <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">Channel</p>
+                        <h2 class="text-[16px] font-black tracking-tight text-gray-50">Users</h2>
+                      </div>
+                      <button
+                        type="button"
+                        class="mobile-sheet-close"
+                        aria-label="Close users panel"
+                        onClick={() => setUserListOpen(false)}
+                      >
+                        <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                          <path d="M4 4l8 8M12 4l-8 8" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="min-h-0 flex-1">
+                      <UserList mobile onClose={() => setUserListOpen(false)} />
+                    </div>
+                  </aside>
+                </>
+              }
+            >
+              <aside class="relative z-10 h-full w-[240px] shrink-0 border-l border-gray-800/70">
+                <UserList />
+              </aside>
+            </Show>
           </Show>
-        </Show>
+        </Suspense>
 
-        {/* Media surfaces */}
-        <Show when={mediaState.callState !== 'idle'}>
-          <VideoRoom />
-        </Show>
+        {/* Media surfaces — VideoRoom is code-split; CallNotification stays in the
+            entry chunk (always mounted, small) so it never blanks under Suspense. */}
+        <Suspense>
+          <Show when={mediaState.callState !== 'idle'}>
+            <VideoRoom />
+          </Show>
+        </Suspense>
         <CallNotification />
 
-        {/* Modals */}
-        <ConnectModal open={uiState.activeModal === 'connect'} onClose={closeModal} />
-        <SettingsModal open={uiState.activeModal === 'settings'} onClose={closeModal} />
-        <HelpModal open={uiState.activeModal === 'help'} onClose={closeModal} />
-        <AboutModal open={uiState.activeModal === 'about'} onClose={closeModal} />
-        <Show when={uiState.activeModal === 'bufferSwitcher'}>
-          <BufferSwitcher />
-        </Show>
-        <ChannelListModal open={uiState.activeModal === 'channelList'} onClose={closeModal} />
-
-        {/* IRCX panels */}
-        <ChannelInfoPanel open={!!ircxState.channelInfoTarget} onClose={closeChannelInfo} />
-        <UserProfileCard open={!!ircxState.userProfileTarget} onClose={closeUserProfile} />
-        <ServicesPanel open={ircxState.servicesPanel !== null} onClose={closeServicesPanel} />
-        <OperConsole open={uiState.operConsoleOpen} onClose={() => setOperConsoleOpen(false)} />
+        {/* Modals + IRCX panels — each <Show>-gated so its chunk loads on first
+            open. Grouped under one Suspense: only one is open at a time and the
+            null fallback renders nothing over the (separate) main column. */}
+        <Suspense>
+          <Show when={uiState.activeModal === 'connect'}>
+            <ConnectModal open onClose={closeModal} />
+          </Show>
+          <Show when={uiState.activeModal === 'settings'}>
+            <SettingsModal open onClose={closeModal} />
+          </Show>
+          <Show when={uiState.activeModal === 'help'}>
+            <HelpModal open onClose={closeModal} />
+          </Show>
+          <Show when={uiState.activeModal === 'about'}>
+            <AboutModal open onClose={closeModal} />
+          </Show>
+          <Show when={uiState.activeModal === 'bufferSwitcher'}>
+            <BufferSwitcher />
+          </Show>
+          <Show when={uiState.activeModal === 'channelList'}>
+            <ChannelListModal open onClose={closeModal} />
+          </Show>
+          <Show when={!!ircxState.channelInfoTarget}>
+            <ChannelInfoPanel open onClose={closeChannelInfo} />
+          </Show>
+          <Show when={!!ircxState.userProfileTarget}>
+            <UserProfileCard open onClose={closeUserProfile} />
+          </Show>
+          <Show when={ircxState.servicesPanel !== null}>
+            <ServicesPanel open onClose={closeServicesPanel} />
+          </Show>
+          <Show when={uiState.operConsoleOpen}>
+            <OperConsole open onClose={() => setOperConsoleOpen(false)} />
+          </Show>
+        </Suspense>
       </div>
     </ErrorBoundary>
   );
