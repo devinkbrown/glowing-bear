@@ -46,6 +46,22 @@ describe('bufferKind', () => {
     expect(kind).toBe('server');
   });
 
+  it('lets the explicit WeeChat buffer type take priority over plugin/name heuristics', () => {
+    const channelNamedRaw = makeBuffer({
+      fullName: 'irc.libera.raw',
+      localVars: { type: 'channel', plugin: 'irc' },
+      name: 'raw',
+    });
+    const queryNamedCore = makeBuffer({
+      fullName: '',
+      localVars: { type: 'private', plugin: 'core' },
+      name: 'weechat',
+    });
+
+    expect(bufferKind(channelNamedRaw)).toBe('channel');
+    expect(bufferKind(queryNamedCore)).toBe('query');
+  });
+
   it('classifies fset plugin buffers before generic plugins', () => {
     const buffer = makeBuffer({ localVars: { plugin: 'fset' } });
 
@@ -59,6 +75,18 @@ describe('bufferKind', () => {
       fullName: 'irc.libera.raw',
       localVars: { plugin: 'irc' },
       name: 'raw',
+    });
+
+    const kind = bufferKind(buffer);
+
+    expect(kind).toBe('raw');
+  });
+
+  it('classifies IRC raw logs from the fallback buffer name when fullName is empty', () => {
+    const buffer = makeBuffer({
+      fullName: '',
+      localVars: { plugin: 'irc' },
+      name: 'IRC.RAW',
     });
 
     const kind = bufferKind(buffer);
@@ -91,6 +119,8 @@ describe('isIrcBuffer', () => {
     expect(isIrcBuffer('channel')).toBe(true);
     expect(isIrcBuffer('query')).toBe(true);
     expect(isIrcBuffer('server')).toBe(true);
+    expect(isIrcBuffer('raw')).toBe(false);
+    expect(isIrcBuffer('fset')).toBe(false);
     expect(isIrcBuffer('core')).toBe(false);
     expect(isIrcBuffer('plugin')).toBe(false);
   });
