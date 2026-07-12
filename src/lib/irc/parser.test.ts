@@ -88,6 +88,35 @@ describe('parseIRCMessage', () => {
     expect(msg.tags['k']).toBe('aqb');
   });
 
+  it('decodes multiple IRCv3 message tags from one semicolon-delimited tag section', () => {
+    const msg = parseIRCMessage('@time=2026-07-03T20:38:05.726Z;account=alice;msgid=abc PRIVMSG #c :hi');
+
+    expect(msg.tags).toEqual({
+      time: '2026-07-03T20:38:05.726Z',
+      account: 'alice',
+      msgid: 'abc',
+    });
+  });
+
+  it('keeps client-only +tags and value-less tags', () => {
+    const msg = parseIRCMessage('@+typing=active;+draft/reply=MSGID1;bot TAGMSG #c');
+
+    expect(msg.tags['+typing']).toBe('active');
+    expect(msg.tags['+draft/reply']).toBe('MSGID1');
+    expect(msg.tags['bot']).toBe('');
+  });
+
+  it('returns no tags for an empty IRCv3 tag section', () => {
+    expect(parseIRCMessage('@ PRIVMSG #c :hi').tags).toEqual({});
+    expect(parseIRCMessage('PRIVMSG #c :hi').tags).toEqual({});
+  });
+
+  it('keeps the last value when duplicate tag keys appear', () => {
+    const msg = parseIRCMessage('@dup=first;dup=second PRIVMSG #c :hi');
+
+    expect(msg.tags).toEqual({ dup: 'second' });
+  });
+
   it('treats a dotted prefix without user/host as a server name', () => {
     const msg = parseIRCMessage(':eshmaki.me 001 dbtA3950 :Welcome');
 
