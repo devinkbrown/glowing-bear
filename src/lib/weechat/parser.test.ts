@@ -94,6 +94,12 @@ function frame(id: string | null, body: BinWriter): ArrayBuffer {
 	return w.build().buffer as ArrayBuffer;
 }
 
+function rawFrame(declaredLength: number, compression: number, idLen: number, body: Uint8Array): ArrayBuffer {
+	const w = new BinWriter();
+	w.u32(declaredLength).u8(compression).u32(idLen).raw(body);
+	return w.build().buffer as ArrayBuffer;
+}
+
 const parser = new WeeRelayParser();
 
 async function parseFrame(id: string | null, body: BinWriter): Promise<WeeChatMessage> {
@@ -383,6 +389,88 @@ describe('WeeRelayParser frame envelope', () => {
 		const bytes = frame(null, w);
 
 		await expect(parser.parse(bytes)).rejects.toThrow();
+	});
+});
+
+// ── hostile input hardening ─────────────────────────────────────────────────
+
+describe('WeeRelayParser hostile input', () => {
+	it('rejects empty input before reading a compression byte', async () => {
+		const bytes = new ArrayBuffer(0);
+
+		const act = () => parser.parse(bytes);
+
+		await expect(act()).rejects.toThrow();
+	});
+
+	it('rejects a frame truncated before the id length field is complete', async () => {
+		const bytes = Uint8Array.from([0, 0, 0, 9, 0, 0]).buffer as ArrayBuffer;
+
+		const act = () => parser.parse(bytes);
+
+		await expect(act()).rejects.toThrow();
+	});
+
+	it('rejects an id length that points beyond the available payload', async () => {
+		const bytes = rawFrame(13, 0, 64, Uint8Array.from([0x61, 0x62, 0x63, 0x64]));
+
+		const act = () => parser.parse(bytes);
+
+		await expect(act()).rejects.toThrow();
+	});
+
+	it('returns an empty object list for an implausibly oversized length prefix without over-reading', async () => {
+		const bytes = rawFrame(0xfffffff0, 0, NULL_STRING, new Uint8Array(0));
+
+		const msg = await parser.parse(bytes);
+
+		expect(msg.length).toBe(0xfffffff0);
+		expect(msg.compression).toBe(0);
+		expect(msg.id).toBe('');
+		expect(msg.objects).toEqual([]);
+	});
+
+	it('rejects a truncated string payload with an oversized length prefix', async () => {
+		const body = new BinWriter().typ('str').u32(0x7fffffff).ascii('x');
+		const bytes = frame(null, body);
+
+		const act = () => parser.parse(bytes);
+
+		await expect(act()).rejects.toThrow();
+	});
+
+	it('rejects a malformed hdata path whose pointer list is truncated', async () => {
+		const body = new BinWriter()
+			.typ('hda')
+			.str('buffer/lines')
+			.str('message:str')
+			.u32(1)
+			.short('abc123');
+
+		const act = () => parseFrame(null, body);
+
+		await expect(act()).rejects.toThrow();
+	});
+
+	it('rejects hdata keys with an unknown value type before decoding item data', async () => {
+		const body = new BinWriter()
+			.typ('hda')
+			.str('buffer')
+			.str('message:zzz')
+			.u32(1)
+			.short('abc123');
+
+		const act = () => parseFrame(null, body);
+
+		await expect(act()).rejects.toThrow(/Unknown WeeChat type: zzz/);
+	});
+
+	it('rejects an array that declares an unknown element type', async () => {
+		const body = new BinWriter().typ('arr').typ('zzz').u32(1);
+
+		const act = () => parseFrame(null, body);
+
+		await expect(act()).rejects.toThrow(/Unknown WeeChat type: zzz/);
 	});
 });
 

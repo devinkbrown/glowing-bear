@@ -187,3 +187,29 @@ describe('stripColors output hygiene', () => {
 		expect(stripColors(line)).toBe('kain: deploy done ok');
 	});
 });
+
+describe('stripColors hostile input', () => {
+	it('strips a pathological run of WeeChat color prefixes without hanging', () => {
+		const run = '\x19F05'.repeat(2048);
+
+		const out = stripColors(`${run}done`);
+
+		expect(out).toBe('done');
+	});
+
+	it('makes progress through incomplete composite WeeChat color specs', () => {
+		const line = `start${'\x19*05,'.repeat(512)}end`;
+
+		const out = stripColors(line);
+
+		expect(out).toBe('startend');
+	});
+
+	it('handles long unterminated ANSI sequences as bounded skips', () => {
+		const ansiPayload = '123456789012345VISIBLE';
+
+		const out = stripColors(`a\x1b[${ansiPayload}`);
+
+		expect(out).toBe('aVISIBLE');
+	});
+});

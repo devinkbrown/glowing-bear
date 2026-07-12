@@ -69,3 +69,41 @@ describe('parseIrcv3Tags', () => {
     expect(parseIrcv3Tags([]).size).toBe(0);
   });
 });
+
+describe('parseIrcv3Tags hostile input', () => {
+  it('drops an unterminated escape instead of carrying a dangling backslash', () => {
+    const tags = parseIrcv3Tags(['payload=abc\\']);
+
+    expect(tags.get('payload')).toBe('abc');
+  });
+
+  it('decodes every IRCv3 escaped delimiter in a single left-to-right pass', () => {
+    const tags = parseIrcv3Tags(['payload=space\\ssemi\\:cr\\rnl\\nslash\\\\end']);
+
+    expect(tags.get('payload')).toBe('space semi;cr\rnl\nslash\\end');
+  });
+
+  it('preserves empty values separately from value-less tags', () => {
+    const tags = parseIrcv3Tags(['empty=', 'flag']);
+
+    expect(tags.get('empty')).toBe('');
+    expect(tags.get('flag')).toBe('');
+    expect(tags.size).toBe(2);
+  });
+
+  it('keeps the last value for duplicate keys', () => {
+    const tags = parseIrcv3Tags(['dup=first', 'dup=second']);
+
+    expect(tags.get('dup')).toBe('second');
+    expect(tags.size).toBe(1);
+  });
+
+  it('decodes an oversized tag value without creating extra keys', () => {
+    const value = `start\\s${'x'.repeat(131072)}\\:end`;
+
+    const tags = parseIrcv3Tags([`big=${value}`]);
+
+    expect(tags.size).toBe(1);
+    expect(tags.get('big')).toBe(`start ${'x'.repeat(131072)};end`);
+  });
+});
