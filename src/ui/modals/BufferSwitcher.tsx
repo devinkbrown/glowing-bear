@@ -5,11 +5,18 @@
 // grouped (Buffers / Actions) and exposed as an aria listbox with a roving
 // aria-activedescendant. Mount while activeModal === 'bufferSwitcher'.
 //
+// Overlay concerns — focus trap, initial focus, focus restore to the opener,
+// Escape, and backdrop click-to-close — are delegated to the shared <Modal>
+// shell (@/ui/bits/Modal) so the palette can't leak focus and returns it to
+// whatever opened it. This file owns only the query state, the arrow/Enter
+// keyboard model, and the combobox+listbox presentation inside the dialog.
+//
 // The command model + fuzzy ranker live in ../palette; this file owns only the
 // query state, keyboard model, and presentation.
 
-import { createEffect, createMemo, createSignal, For, on, onMount, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, on, Show } from 'solid-js';
 import { closeModal } from '@/state';
+import Modal from '@/ui/bits/Modal';
 import { buildPaletteCommands, type PaletteCommand, type PaletteGroup } from '@/ui/palette/commands';
 import { rankCommands } from '@/ui/palette/fuzzy';
 
@@ -35,7 +42,6 @@ export default function BufferSwitcher() {
   const [query, setQuery] = createSignal('');
   const [selected, setSelected] = createSignal(0);
 
-  let inputRef: HTMLInputElement | undefined;
   let listRef: HTMLDivElement | undefined;
 
   // Ranked, grouped view of the palette. Buffers render before Actions; within
@@ -67,7 +73,9 @@ export default function BufferSwitcher() {
     setSelected((s) => (n === 0 ? 0 : Math.min(s, n - 1)));
   });
 
-  onMount(() => inputRef?.focus());
+  // Initial focus lands on the search input via the Modal shell (it focuses the
+  // first focusable child on mount, and the roving listbox rows are role=option
+  // divs, not tab stops), so the shell can first record the opener for restore.
 
   // Keep the highlighted row visible.
   createEffect(() => {
@@ -96,6 +104,9 @@ export default function BufferSwitcher() {
     setSelected((s) => (s + delta + n) % n);
   };
 
+  // Arrow/Enter only. Escape (and backdrop click) are owned by the Modal shell
+  // so there is exactly one close path — the shell also restores focus to the
+  // opener, which a local closeModal() here would bypass.
   const onKeyDown = (e: KeyboardEvent): void => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -106,25 +117,12 @@ export default function BufferSwitcher() {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       runAt(selected());
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      closeModal();
     }
   };
 
   return (
-    <div
-      class="fixed inset-0 z-50 flex items-start justify-center pt-[8vh] sm:pt-[18vh] px-3 sm:px-0"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) closeModal();
-      }}
-    >
-      {/* The backdrop covers the overlay, so outside clicks target it — close from here too. */}
-      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={() => closeModal()} />
-      <div
-        class="relative w-full max-w-[min(480px,calc(100vw-1.5rem))] rounded-2xl border border-white/[0.06] bg-gray-900 shadow-2xl overflow-hidden animate-slide-down"
-        style={{ 'box-shadow': '0 25px 80px rgba(0,0,0,0.5)' }}
-      >
+    <Modal open onClose={closeModal} width="480px" class="animate-slide-down">
+      <>
         {/* Search */}
         <div class="flex items-center gap-3 px-4 py-4 sm:py-3.5 border-b border-white/[0.04]">
           <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="text-gray-600 shrink-0 sm:w-4 sm:h-4" aria-hidden="true">
@@ -132,7 +130,6 @@ export default function BufferSwitcher() {
             <path d="M10 10l4 4" />
           </svg>
           <input
-            ref={(el) => (inputRef = el)}
             type="text"
             role="combobox"
             aria-expanded="true"
@@ -166,15 +163,17 @@ export default function BufferSwitcher() {
                     const index = () => view().indexOf.get(cmd.id) ?? -1;
                     const isActive = () => index() === selected();
                     return (
-                      <button
-                        type="button"
+                      // A role=option div, not a <button>: listbox rows are
+                      // driven by the input's roving aria-activedescendant and
+                      // must never be tab stops. As buttons they would be caught
+                      // by the Modal shell's focus-trap scan and let Tab escape.
+                      <div
                         role="option"
                         id={optionId(index())}
                         aria-selected={isActive()}
-                        tabindex={-1}
                         onClick={() => run(cmd)}
                         onMouseEnter={() => setSelected(index())}
-                        class="w-full text-left px-4 py-3.5 sm:py-2.5 flex items-center gap-3 text-[15px] sm:text-[13px] transition-colors"
+                        class="w-full text-left px-4 py-3.5 sm:py-2.5 flex items-center gap-3 text-[15px] sm:text-[13px] transition-colors cursor-pointer"
                         classList={{
                           'bg-[var(--custom-accent,#818cf8)]/10 text-gray-100': isActive(),
                           'text-gray-400 hover:bg-white/[0.02]': !isActive(),
@@ -193,7 +192,7 @@ export default function BufferSwitcher() {
                         <Show when={cmd.group === 'actions' && cmd.subtitle}>
                           <span class="text-[11px] sm:text-[10px] text-gray-600 font-mono truncate max-w-[45%] text-right">{cmd.subtitle}</span>
                         </Show>
-                      </button>
+                      </div>
                     );
                   }}
                 </For>
@@ -201,7 +200,7 @@ export default function BufferSwitcher() {
             )}
           </For>
         </div>
-      </div>
-    </div>
+      </>
+    </Modal>
   );
 }
