@@ -20,12 +20,33 @@ export function parseIrcv3Tags(tags: string[]): Map<string, string> {
 	return map;
 }
 
-/** Decode IRCv3 tag value escape sequences */
+/**
+ * Decode IRCv3 tag value escape sequences in a SINGLE left-to-right pass.
+ *
+ * Chained `.replace()` re-scans decoded output and mis-decodes an escaped
+ * backslash followed by an escape char (wire `\\s` → "\ " instead of "\s").
+ * Scanning once, each backslash consumes exactly the next char. Unknown escape
+ * → the literal char; a lone trailing backslash is dropped.
+ */
 function decodeTagValue(v: string): string {
-	return v
-		.replace(/\\:/g, ';')
-		.replace(/\\s/g, ' ')
-		.replace(/\\\\/g, '\\')
-		.replace(/\\r/g, '\r')
-		.replace(/\\n/g, '\n');
+	let out = '';
+	for (let i = 0; i < v.length; i++) {
+		const c = v[i]!;
+		if (c !== '\\') {
+			out += c;
+			continue;
+		}
+		const next = v[i + 1];
+		if (next === undefined) break;
+		i++;
+		switch (next) {
+			case ':': out += ';'; break;
+			case 's': out += ' '; break;
+			case 'r': out += '\r'; break;
+			case 'n': out += '\n'; break;
+			case '\\': out += '\\'; break;
+			default: out += next; break;
+		}
+	}
+	return out;
 }

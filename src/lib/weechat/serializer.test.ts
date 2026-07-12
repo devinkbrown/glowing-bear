@@ -105,6 +105,45 @@ describe('inputCmd', () => {
 	it('accepts a pointer as the buffer reference', () => {
 		expect(inputCmd('0x1a2b3c', '/join #test')).toBe('input 0x1a2b3c /join #test\n');
 	});
+
+	// SECURITY (H1): a newline in composer content must NEVER reach the wire as a
+	// framing byte — the relay parses each `\n`-terminated line as its own
+	// command, so `foo\ninput <buf> /quit` would run an attacker-chosen verb.
+	it('splits multi-line text into one input command per line (no injection)', () => {
+		expect(inputCmd('irc.libera.#c', 'foo\ninput core.weechat /quit')).toBe(
+			'input irc.libera.#c foo\ninput irc.libera.#c input core.weechat /quit\n'
+		);
+	});
+
+	it('handles CRLF and lone CR line endings without emitting a raw break', () => {
+		const out = inputCmd('#c', 'a\r\nb\rc');
+		expect(out).toBe('input #c a\ninput #c b\ninput #c c\n');
+		// Every newline present is a command terminator, never mid-argument.
+		expect(out.split('\n').filter((l) => l !== '')).toEqual([
+			'input #c a',
+			'input #c b',
+			'input #c c',
+		]);
+	});
+
+	it('skips empty lines so no bare "input <buffer>" is sent', () => {
+		expect(inputCmd('#c', 'a\n\nb')).toBe('input #c a\ninput #c b\n');
+		expect(inputCmd('#c', '\n\n')).toBe('');
+	});
+
+	it('strips a newline smuggled into the buffer name', () => {
+		expect(inputCmd('#c\nquit', 'hi')).toBe('input #cquit hi\n');
+	});
+});
+
+describe('cmd newline stripping (injection defense)', () => {
+	it('strips CR/LF from every argument so no second command is smuggled', () => {
+		expect(cmd('', 'input', '#c', 'hi\nquit')).toBe('input #c hiquit\n');
+	});
+
+	it('strips CR/LF from the id and command verb', () => {
+		expect(cmd('a\nb', 'in\nput', 'x')).toBe('(ab) input x\n');
+	});
 });
 
 describe('nicklistCmd', () => {

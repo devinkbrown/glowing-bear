@@ -8,14 +8,28 @@
  */
 
 /**
+ * Strip CR and LF from a relay command token. The relay protocol frames each
+ * command on a bare `\n`, so any embedded newline in a token would split one
+ * command into several — an injection vector when the token is user content
+ * (buffer name or input text). Newlines are never valid inside a token, so we
+ * drop them rather than encode them.
+ */
+function stripNewlines(token: string): string {
+	return token.replace(/[\r\n]/g, '');
+}
+
+/**
  * Build a raw relay command string.
  * @param id  - correlation id, included as "(id) " prefix when non-empty
  * @param command - relay command verb
  * @param args - additional arguments, joined by spaces
+ *
+ * Every token is stripped of CR/LF so no argument can smuggle a second relay
+ * command past the `\n` framing.
  */
 export function cmd(id: string, command: string, ...args: string[]): string {
-	const prefix = id ? `(${id}) ` : '';
-	const parts = [command, ...args.filter((a) => a !== '')];
+	const prefix = id ? `(${stripNewlines(id)}) ` : '';
+	const parts = [stripNewlines(command), ...args.filter((a) => a !== '').map(stripNewlines)];
 	return prefix + parts.join(' ') + '\n';
 }
 
@@ -55,9 +69,21 @@ export function desyncCmd(buffers?: string[]): string {
 
 /**
  * Send text input to a WeeChat buffer (same as typing in WeeChat).
+ *
+ * Multi-line input is split into one `input` command per line, exactly as if
+ * the user had typed each line and pressed Enter. This preserves multi-line
+ * messages while ensuring a newline in the composer content can never reach the
+ * wire as a raw framing byte — otherwise `foo\ninput <buf> /quit` would send a
+ * second, attacker-chosen relay command. Empty lines are skipped so we never
+ * emit a bare `input <buffer>` with no text.
  */
 export function inputCmd(buffer: string, text: string): string {
-	return cmd('', 'input', buffer, text);
+	const safeBuffer = stripNewlines(buffer);
+	return text
+		.split(/\r\n|\r|\n/)
+		.filter((line) => line !== '')
+		.map((line) => cmd('', 'input', safeBuffer, line))
+		.join('');
 }
 
 /**

@@ -173,6 +173,13 @@ export function buildMultilineLines(
   makeRef: () => string = nextBatchRef,
   firstLineTags: Record<string, string> = {},
 ): MultilineSendPlan {
+  // Strip CR/LF from every interpolated token: one frame carries one IRC
+  // message with no embedded newline, so a stray `\r`/`\n` in the target or a
+  // fragment would split the frame and inject an extra command. Line splitting
+  // already removed `\n` from fragments; a lone `\r` (or a hostile fragment)
+  // must not survive into the raw line.
+  const stripBreaks = (s: string): string => s.replace(/[\r\n]/g, '');
+  const safeTarget = stripBreaks(target);
   const lines: string[] = [];
   batches.forEach((batch, batchIdx) => {
     const ref = makeRef();
@@ -182,10 +189,10 @@ export function buildMultilineLines(
             .map(([k, v]) => (v ? `${k}=${v}` : k))
             .join(';')
         : '';
-    lines.push(`${tagStr ? `@${tagStr} ` : ''}BATCH +${ref} draft/multiline ${target}\r\n`);
+    lines.push(`${tagStr ? `@${tagStr} ` : ''}BATCH +${ref} draft/multiline ${safeTarget}\r\n`);
     for (const part of batch) {
       const tags = part.concat ? `@batch=${ref};draft/multiline-concat` : `@batch=${ref}`;
-      lines.push(`${tags} PRIVMSG ${target} :${part.text}\r\n`);
+      lines.push(`${tags} PRIVMSG ${safeTarget} :${stripBreaks(part.text)}\r\n`);
     }
     lines.push(`BATCH -${ref}\r\n`);
   });

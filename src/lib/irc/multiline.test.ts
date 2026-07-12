@@ -121,6 +121,23 @@ describe('buildMultilineLines', () => {
     ]);
   });
 
+  // SECURITY (M4): a stray CR/LF in a fragment or the target must not split the
+  // frame and inject an extra IRC command.
+  it('strips embedded CR/LF from fragment text and target', () => {
+    const batches: MultilineBatch[] = [[{ text: 'hi\r\nJOIN #evil', concat: false }]];
+    const plan = buildMultilineLines('#c\r\nQUIT', batches, refFactory('r1'));
+    expect(plan.lines).toEqual([
+      'BATCH +r1 draft/multiline #cQUIT\r\n',
+      '@batch=r1 PRIVMSG #cQUIT :hiJOIN #evil\r\n',
+      'BATCH -r1\r\n',
+    ]);
+    // Each raw line has exactly one message: only its terminating CRLF.
+    for (const line of plan.lines) {
+      expect(line.slice(0, -2).includes('\n')).toBe(false);
+      expect(line.slice(0, -2).includes('\r')).toBe(false);
+    }
+  });
+
   it('tags continuation parts with draft/multiline-concat', () => {
     const batches: MultilineBatch[] = [
       [

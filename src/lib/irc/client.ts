@@ -41,6 +41,21 @@ export interface IRCClientOptions {
 
 const RECONNECT_BASE = 2000;
 
+/**
+ * Length-independent, data-independent string compare for SCRAM server-signature
+ * verification. Avoids the early-exit timing of `===` so a near-miss signature
+ * cannot be probed byte-by-byte. Unequal lengths still fold every char into the
+ * accumulator before returning false.
+ */
+function constantTimeEqual(a: string, b: string): boolean {
+  const len = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < len; i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+}
+
 /** Escape a tag value per IRCv3 spec (inverse of parser's unescapeTagValue). */
 function escapeTagValue(val: string): string {
   return val
@@ -81,6 +96,13 @@ export class IRCClient {
   private _saslMech: SaslMechanism | null = null;
   /** SCRAM state between challenge/response steps */
   private _scramState: { clientFirstMsgBare: string; nonce: string; hash: 'SHA-256'; bits: number } | null = null;
+  /**
+   * Base64 ServerSignature the client computed at client-final time. Non-null
+   * once we've sent the client proof and are awaiting the server-final `v=`.
+   * Its presence also routes the next AUTHENTICATE to the verification step
+   * (mutual auth), distinct from the earlier server-first challenge.
+   */
+  private _scramServerSig: string | null = null;
   /** How many times we've appended _ to nick during registration */
   private _nickRetries = 0;
   /** SASL auth timeout guard */
@@ -176,6 +198,7 @@ export class IRCClient {
     this._saslMechs = [];
     this._saslMech = null;
     this._scramState = null;
+    this._scramServerSig = null;
     this._nickRetries = 0;
     this.negotiatedCaps = new Set();
     this.capValues = new Map();
@@ -267,8 +290,12 @@ export class IRCClient {
   }
 
   tagmsg(target: string, tags: Record<string, string>) {
+    // escapeTagValue already encodes CR/LF in values as \r/\n escapes; the
+    // target is interpolated raw, so strip any embedded newline to keep this
+    // one frame = one IRC message (no injected second command).
+    const safeTarget = target.replace(/[\r\n]/g, '');
     const tagStr = Object.entries(tags).map(([k, v]) => v ? `${k}=${escapeTagValue(v)}` : k).join(';');
-    this.send(`@${tagStr} TAGMSG ${target}\r\n`);
+    this.send(`@${tagStr} TAGMSG ${safeTarget}\r\n`);
   }
 
   part(channel: string, reason = 'Leaving') {
@@ -555,11 +582,15 @@ export class IRCClient {
         } else if (this._saslMech === 'EXTERNAL') {
           if (param === '+') this.sendRaw('AUTHENTICATE', '+');
         } else if (this._saslMech === 'SCRAM-SHA-256') {
-          if (param === '+') {
+          if (this._scramServerSig !== null) {
+            // We already sent the client proof — this is the server-final
+            // message carrying `v=ServerSignature`. Verify it (mutual auth).
+            this._verifyScramServerFinal(param);
+          } else if (param === '+') {
             // Server ready — send client-first-message
             this._scramClientFirst();
           } else {
-            // Server challenge — process it
+            // Server-first challenge — compute + send the client proof.
             this._scramClientFinal(param).catch(e => {
               this.opts.onError?.(`SCRAM error: ${e}`);
               this._saslPending = false;
@@ -582,6 +613,7 @@ export class IRCClient {
           this._loggedIn = true;
           this._saslMech = null;
           this._scramState = null;
+          this._scramServerSig = null;
           // NOTE: SESSION RESUME / SESSION TOKEN are deliberately NOT sent here.
           // Orochi's SESSION command requires a registered connection (it checks
           // session.account() and lives in the post-registration command path),
@@ -598,6 +630,7 @@ export class IRCClient {
           this._saslPending = false;
           this._saslMech = null;
           this._scramState = null;
+          this._scramServerSig = null;
           this._finishCapIfReady();
         }
         break;
@@ -847,10 +880,70 @@ export class IRCClient {
     const clientSig = await hmac(storedKey, enc.encode(authMessage));
     const clientProof = clientKey.map((b, i) => b ^ clientSig[i]!);
 
+    // Precompute the ServerSignature we expect in the server-final `v=`:
+    //   ServerKey       = HMAC(SaltedPassword, "Server Key")
+    //   ServerSignature = HMAC(ServerKey, AuthMessage)
+    // Storing it now (before nulling _scramState) lets the next AUTHENTICATE be
+    // verified for mutual auth — the whole point of SCRAM.
+    const serverKey = await hmac(saltedPass, enc.encode('Server Key'));
+    const serverSig = await hmac(serverKey, enc.encode(authMessage));
+    this._scramServerSig = btoa(String.fromCharCode(...serverSig));
+
     const proofB64 = btoa(String.fromCharCode(...clientProof));
     const clientFinal = `${clientFinalWithoutProof},p=${proofB64}`;
     this.sendRaw('AUTHENTICATE', btoa(clientFinal));
     this._scramState = null;
+  }
+
+  /**
+   * Verify the server-final `AUTHENTICATE <base64(v=ServerSignature)>` against
+   * the ServerSignature we precomputed at client-final time. On match we send
+   * the trailing `AUTHENTICATE +` and let 903 complete login; on mismatch the
+   * server does not hold the stored key (an impostor) — abort SASL and drop the
+   * connection rather than trust the TLS endpoint alone.
+   */
+  private _verifyScramServerFinal(param: string) {
+    const expected = this._scramServerSig;
+    this._scramServerSig = null;
+    if (expected === null) return;
+
+    let serverFinal: string;
+    try {
+      serverFinal = atob(param);
+    } catch {
+      this._abortScram('SCRAM: invalid server-final encoding');
+      return;
+    }
+
+    // server-final-message = "v=<base64 ServerSignature>" (may carry extras).
+    let received: string | null = null;
+    for (const seg of serverFinal.split(',')) {
+      if (seg.startsWith('v=')) { received = seg.slice(2); break; }
+      if (seg.startsWith('e=')) { // server signalled an error
+        this._abortScram(`SCRAM: server error: ${seg.slice(2)}`);
+        return;
+      }
+    }
+    if (received === null || !constantTimeEqual(received, expected)) {
+      this._abortScram('SCRAM: server signature mismatch');
+      return;
+    }
+
+    // Mutual auth confirmed — acknowledge and await 903.
+    this.sendRaw('AUTHENTICATE', '+');
+  }
+
+  /** Tear down an in-flight SCRAM exchange after a fatal verification failure. */
+  private _abortScram(reason: string) {
+    this.opts.onError?.(reason);
+    if (this._saslTimer) { clearTimeout(this._saslTimer); this._saslTimer = null; }
+    this._saslPending = false;
+    this._saslMech = null;
+    this._scramState = null;
+    this._scramServerSig = null;
+    // A failed mutual auth means the peer may be impersonating the server;
+    // refuse the connection. The store owns the (bounded) reconnect decision.
+    try { this.ws?.close(4003, 'SCRAM mutual authentication failed'); } catch { /* closing */ }
   }
 
   private _parseISUPPORT(params: string[]) {

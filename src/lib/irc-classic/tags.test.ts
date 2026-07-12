@@ -57,6 +57,14 @@ describe('parseIrcv3Tags', () => {
     expect(tags.get('crlf')).toBe('x\r\ny');
   });
 
+  it('decodes an escaped backslash before an escape char in a single pass (M1)', () => {
+    // Wire `\\s` must decode to "\s", not the chained-replace bug's "\ ".
+    const tags = parseIrcv3Tags(['k=\\\\s', 'j=abc\\', 'u=a\\qb']);
+    expect(tags.get('k')).toBe('\\s');
+    expect(tags.get('j')).toBe('abc'); // lone trailing backslash dropped
+    expect(tags.get('u')).toBe('aqb'); // unknown escape → literal char
+  });
+
   it('returns an empty map for an empty tags_array', () => {
     expect(parseIrcv3Tags([]).size).toBe(0);
   });

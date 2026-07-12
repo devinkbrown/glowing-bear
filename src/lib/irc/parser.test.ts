@@ -69,6 +69,25 @@ describe('parseIRCMessage', () => {
     expect(msg.tags['flag']).toBe('');
   });
 
+  it('decodes an escaped backslash before an escape char in a single pass (M1)', () => {
+    // Wire `\\s` = escaped-backslash + literal `s` → must decode to "\s", NOT
+    // the chained-replace bug's "\ " (backslash + SPACE). This is the exact
+    // encode→decode round-trip that failed before the single-pass rewrite.
+    const msg = parseIRCMessage('@k=\\\\s;j=\\\\: PRIVMSG #c :x');
+    expect(msg.tags['k']).toBe('\\s');
+    expect(msg.tags['j']).toBe('\\:');
+  });
+
+  it('drops a lone trailing backslash per spec', () => {
+    const msg = parseIRCMessage('@k=abc\\ PRIVMSG #c :x');
+    expect(msg.tags['k']).toBe('abc');
+  });
+
+  it('maps an unknown escape to the literal char (backslash dropped)', () => {
+    const msg = parseIRCMessage('@k=a\\qb PRIVMSG #c :x');
+    expect(msg.tags['k']).toBe('aqb');
+  });
+
   it('treats a dotted prefix without user/host as a server name', () => {
     const msg = parseIRCMessage(':eshmaki.me 001 dbtA3950 :Welcome');
 
@@ -129,6 +148,20 @@ describe('formatIRCLine', () => {
   it('emits the bare command when there are no params', () => {
     expect(formatIRCLine('QUIT')).toBe('QUIT\r\n');
   });
+
+  // SECURITY (M4): a CR/LF pasted into a param must not split the frame and
+  // inject a second command on our own connection.
+  it('strips embedded CR/LF from the trailing param (no self-injection)', () => {
+    const line = formatIRCLine('PRIVMSG', '#c', 'hi\r\nJOIN #evil');
+    expect(line).toBe('PRIVMSG #c :hiJOIN #evil\r\n');
+    // Exactly one message: only the terminating CRLF, none embedded.
+    expect(line.slice(0, -2).includes('\n')).toBe(false);
+    expect(line.slice(0, -2).includes('\r')).toBe(false);
+  });
+
+  it('strips CR/LF from a middle param and the command', () => {
+    expect(formatIRCLine('KICK', '#c\r\nQUIT', 'n', 'bye')).toBe('KICK #cQUIT n bye\r\n');
+  });
 });
 
 describe('ISUPPORT parsing (005 from the live capture)', () => {
@@ -156,6 +189,16 @@ describe('ISUPPORT parsing (005 from the live capture)', () => {
     const { modeToPrefix, prefixToMode } = parsePREFIX(prefixValue!);
     expect(modeToPrefix).toEqual({ Y: '*', Q: '!', q: '.', o: '@', v: '+' });
     expect(prefixToMode).toEqual({ '*': 'Y', '!': 'Q', '.': 'q', '@': 'o', '+': 'v' });
+  });
+
+  it('does not key "undefined" when the prefix run is shorter than modes (L3)', () => {
+    // Malformed 005 where two mode letters share no prefix char.
+    const { modeToPrefix, prefixToMode } = parsePREFIX('(qov)@+');
+    // Reverse map only holds real prefix chars — never the literal "undefined".
+    expect(prefixToMode).toEqual({ '@': 'q', '+': 'o' });
+    expect('undefined' in prefixToMode).toBe(false);
+    // Forward map still records every mode, with '' for the missing prefix.
+    expect(modeToPrefix).toEqual({ q: '@', o: '+', v: '' });
   });
 
   it('advertises a non-empty base64url VAPID key', () => {

@@ -97,24 +97,61 @@ export function parseIRCMessage(raw: string): IRCMessage {
   return { tags, prefix, nick, host, command, params, raw: line };
 }
 
-/** Unescape IRCv3 tag value escape sequences */
+/**
+ * Unescape IRCv3 tag value escape sequences in a SINGLE left-to-right pass.
+ *
+ * A chained `.replace()` is order-dependent and wrong: it re-scans already-
+ * decoded output, so wire `\\s` (escaped backslash + literal `s`) decodes to
+ * "\ " (backslash + SPACE) instead of the correct "\s". Scanning once, on each
+ * backslash we consume exactly the next char and map it, so an escaped
+ * backslash can never combine with the following escape char. Per spec an
+ * unknown escape yields the escaped char itself (backslash dropped) and a lone
+ * trailing backslash is dropped.
+ */
 function unescapeTagValue(val: string): string {
-  return val
-    .replace(/\\:/g, ';')
-    .replace(/\\s/g, ' ')
-    .replace(/\\\\/g, '\\')
-    .replace(/\\r/g, '\r')
-    .replace(/\\n/g, '\n');
+  let out = '';
+  for (let i = 0; i < val.length; i++) {
+    const c = val[i]!;
+    if (c !== '\\') {
+      out += c;
+      continue;
+    }
+    const next = val[i + 1];
+    if (next === undefined) break; // lone trailing backslash → dropped
+    i++;
+    switch (next) {
+      case ':': out += ';'; break;
+      case 's': out += ' '; break;
+      case 'r': out += '\r'; break;
+      case 'n': out += '\n'; break;
+      case '\\': out += '\\'; break;
+      default: out += next; break; // unknown escape → the literal char
+    }
+  }
+  return out;
+}
+
+/**
+ * Strip CR and LF from an outbound IRC token. One frame carries one IRC message
+ * with NO embedded newline; a `\r` or `\n` in a param (pasted/crafted text)
+ * would split the frame and inject a second command on our own connection
+ * (`hi\r\nJOIN #evil`). Newlines are never valid inside a single message, so we
+ * drop them.
+ */
+function stripLineBreaks(token: string): string {
+  return token.replace(/[\r\n]/g, '');
 }
 
 /**
  * Format a raw IRC line to send.
- * Appends \r\n.
+ * Appends \r\n. Every token (command + params) is stripped of embedded CR/LF so
+ * no param can smuggle a second command past the single-message framing.
  */
 export function formatIRCLine(command: string, ...params: string[]): string {
-  const parts = [command, ...params.slice(0, -1)];
-  if (params.length > 0) {
-    const last = params[params.length - 1]!;
+  const clean = params.map(stripLineBreaks);
+  const parts = [stripLineBreaks(command), ...clean.slice(0, -1)];
+  if (clean.length > 0) {
+    const last = clean[clean.length - 1]!;
     // Prefix trailing param with ':' if it contains a space or starts with ':'
     if (last === '' || last.includes(' ') || last.startsWith(':')) {
       parts.push(':' + last);
@@ -162,8 +199,11 @@ export function parsePREFIX(value: string): {
   const modes = match[1]!;
   const prefixes = match[2]!;
   for (let i = 0; i < modes.length; i++) {
-    modeToPrefix[modes[i]!] = prefixes[i] ?? '';
-    prefixToMode[prefixes[i]!] = modes[i]!;
+    const prefix = prefixes[i];
+    modeToPrefix[modes[i]!] = prefix ?? '';
+    // Guard the reverse map: when the prefix run is shorter than the mode run
+    // `prefixes[i]` is undefined and would key the literal string "undefined".
+    if (prefix !== undefined) prefixToMode[prefix] = modes[i]!;
   }
   return { modeToPrefix, prefixToMode };
 }
