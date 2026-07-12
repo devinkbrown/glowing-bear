@@ -194,6 +194,35 @@ describe('formatText — inline annotations', () => {
   });
 });
 
+describe('formatText — text helper edge cases', () => {
+  it('wraps only syntactically valid channel refs and leaves similar text alone', () => {
+    expect(formatText('join #darkbear, skip email#ops and #12g')).toBe(
+      'join <button class="irc-chan-ref" data-channel="#darkbear">#darkbear</button>, skip email#ops and #12g',
+    );
+  });
+
+  it('keeps hostile markup inert inside inline code spans', () => {
+    const out = formatText('run `<img src=x onerror=alert(1)>`');
+
+    expect(out).toContain('<code class="irc-code">&lt;img src=x onerror=alert(1)&gt;</code>');
+    expect(out).not.toContain('<img');
+    expect(out).not.toContain('src=x onerror=alert(1)>');
+  });
+
+  it('terminates URL linkification before control bytes and never includes them in hrefs', () => {
+    const out = formatText('go https://example.com/a\x01b now');
+
+    expect(out).toContain('href="https://example.com/a"');
+    expect(out).not.toContain('href="https://example.com/ab"');
+    expect(out).not.toContain('\x01');
+    expect(out).toContain('</a>b now');
+  });
+
+  it('ignores malformed ANSI RGB colours without emitting a style attribute', () => {
+    expect(formatText('\x1b[38;2;999;0;0mred')).toBe('red');
+  });
+});
+
 describe('extractEmbeds', () => {
   it('extracts a youtube embed with an h/m/s start offset', () => {
     expect(extractEmbeds('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1h2m3s')).toEqual([
@@ -244,6 +273,10 @@ describe('extractEmbeds', () => {
   it('returns an empty array when no media URLs are present', () => {
     expect(extractEmbeds('nothing to see here')).toEqual([]);
     expect(extractEmbeds('plain link https://example.com/page')).toEqual([]);
+  });
+
+  it('rejects malformed media-looking URLs without partial hostile ids', () => {
+    expect(extractEmbeds('bad https://youtu.be/not<script> https://clips.twitch.tv/<img>')).toEqual([]);
   });
 });
 
