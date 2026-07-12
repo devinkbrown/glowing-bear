@@ -7,6 +7,20 @@ import { createStore, reconcile, unwrap } from 'solid-js/store';
 import type { AppSettings, RelaySettings, RelayProfile, ThemeId, CustomColors } from '@/types';
 import { DEFAULT_SETTINGS, DEFAULT_RELAY, DEFAULT_CUSTOM_COLORS, DEFAULT_BRIDGE } from '@/types';
 
+// WCAG 2.2.2 (Pause, Stop, Hide) requires a user-OPERABLE mechanism to stop
+// motion, not merely honoring the OS media query. `sceneMotion === 'reduced'`
+// forces the decorative SMIL scenes (AstronautBear, ThemeBg) off regardless of
+// the OS prefers-reduced-motion state. Declared optional by augmenting the shared
+// AppSettings, so the canonical DEFAULT_SETTINGS literal in types.ts stays valid
+// without editing it; freshDefaults() below supplies the concrete 'auto' default.
+declare module '@/types' {
+  interface AppSettings {
+    sceneMotion?: 'auto' | 'reduced';
+  }
+}
+
+type SceneMotion = 'auto' | 'reduced';
+
 const STORAGE_KEY = 'darkbear_settings_v2';
 const V1_STORAGE_KEY = 'darkbear_settings_v1';
 const SAVE_DEBOUNCE_MS = 500;
@@ -19,6 +33,7 @@ function freshDefaults(): AppSettings {
     bridge: { ...DEFAULT_BRIDGE },
     profiles: [],
     highlightWords: [],
+    sceneMotion: 'auto',
   };
 }
 
@@ -98,6 +113,8 @@ function normalizeSettings(input: unknown): AppSettings {
 
   merged.customCSS = sanitizeCustomCss(merged.customCSS);
   if (!merged.uploadUrl) merged.uploadUrl = DEFAULT_SETTINGS.uploadUrl;
+  // Coerce any untrusted/unknown value to a valid mode; 'auto' is the default.
+  merged.sceneMotion = merged.sceneMotion === 'reduced' ? 'reduced' : 'auto';
   return merged;
 }
 
@@ -134,7 +151,8 @@ function migrateV1(raw: string): AppSettings {
   if (data['bgBlur'] !== undefined) migrated.bgBlur = data['bgBlur'] as number;
   if (data['bgTint'] !== undefined) migrated.bgTint = data['bgTint'] as string;
   if (data['bgTintOpacity'] !== undefined) migrated.bgTintOpacity = data['bgTintOpacity'] as number;
-  // Final pass: sanitize CSS, clamp numerics, shape-guard arrays uniformly.
+  if (data['sceneMotion'] !== undefined) migrated.sceneMotion = data['sceneMotion'] as SceneMotion;
+  // Final pass: sanitize CSS, clamp numerics, shape-guard arrays, coerce sceneMotion.
   return normalizeSettings(migrated);
 }
 
@@ -227,6 +245,16 @@ export function applyTheme(): void {
 
 export function setCustomColors(colors: Partial<CustomColors>): void {
   setSettings('customColors', colors);
+  scheduleSave();
+}
+
+/**
+ * Set the scene-motion mode. 'reduced' is the WCAG 2.2.2 user-operable stop:
+ * it forces decorative SMIL scenes off even when the OS does not request
+ * reduced motion. 'auto' defers to the OS prefers-reduced-motion query.
+ */
+export function setSceneMotion(mode: SceneMotion): void {
+  setSettings('sceneMotion', mode);
   scheduleSave();
 }
 

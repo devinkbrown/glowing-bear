@@ -1,5 +1,6 @@
 import { createContext, Show, useContext, type Accessor, type ComponentProps, type JSX } from 'solid-js';
 import { createMediaQuery } from '@/primitives/mediaQuery';
+import { settings } from '@/state/settings';
 
 export type ThemeName =
   | 'darkbear' | 'midnight' | 'obsidian' | 'nord' | 'gruvbox' | 'rose-pine'
@@ -53,7 +54,9 @@ function AnimMotion(props: ComponentProps<'animateMotion'>) {
 
 export default function ThemeBg(props: Props) {
   const reduced = createMediaQuery('(prefers-reduced-motion: reduce)');
-  const motionOn = (): boolean => !reduced();
+  // Motion runs only when neither the OS pref NOR the in-app control asks to stop it.
+  // Both reads are tracked, so a change to either flips the gated SMIL wrappers.
+  const motionOn = (): boolean => !reduced() && settings.sceneMotion !== 'reduced';
   // Evaluated inside JSX so theme switches stay reactive in Solid.
   return (
     <MotionContext.Provider value={motionOn}>

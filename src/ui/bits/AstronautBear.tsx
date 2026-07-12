@@ -1,5 +1,6 @@
 import { createContext, mergeProps, Show, useContext, type Accessor, type ComponentProps } from 'solid-js';
 import { createMediaQuery } from '@/primitives/mediaQuery';
+import { settings } from '@/state/settings';
 import type { ThemeName } from './ThemeBg';
 
 // Whether decorative SMIL motion may run. Under prefers-reduced-motion: reduce the
@@ -33,7 +34,9 @@ function AnimTransform(props: ComponentProps<'animateTransform'>) {
 export default function AstronautBear(props: { size?: number; class?: string; accent?: string; theme?: ThemeName }) {
   const p = mergeProps({ size: 120, class: '', accent: '#818cf8', theme: 'darkbear' as ThemeName }, props);
   const reduced = createMediaQuery('(prefers-reduced-motion: reduce)');
-  const motionOn = (): boolean => !reduced();
+  // Motion runs only when neither the OS pref NOR the in-app control asks to stop it.
+  // Both reads are tracked, so a change to either flips the gated SMIL wrappers.
+  const motionOn = (): boolean => !reduced() && settings.sceneMotion !== 'reduced';
   return (
     <MotionContext.Provider value={motionOn}>
     <svg width={p.size} height={p.size} viewBox="0 0 200 200" class={p.class} aria-hidden="true">

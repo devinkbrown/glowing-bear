@@ -6,10 +6,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import AstronautBear from './AstronautBear';
+import { setSceneMotion } from '@/state/settings';
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  // Reset the module-level settings singleton so suites stay isolated.
+  setSceneMotion('auto');
 });
 
 // jsdom has no matchMedia; createMediaQuery needs it. `reduce` decides whether
@@ -50,6 +53,29 @@ describe('AstronautBear reduced-motion SMIL gate', () => {
     // is gated out — CSS cannot stop SMIL, so absence is the only guarantee.
     expect(container.querySelector('svg')).toBeTruthy();
     expect(smilNodes(container).length).toBe(0);
+  });
+
+  it('renders NO SMIL nodes when the user sets sceneMotion=reduced, even if the OS query does NOT match', () => {
+    // OS reports NO reduced-motion preference...
+    stubMatchMedia(false);
+    // ...but the in-app WCAG 2.2.2 control asks to stop motion.
+    setSceneMotion('reduced');
+    const { container } = render(() => <AstronautBear />);
+
+    expect(container.querySelector('svg')).toBeTruthy();
+    expect(smilNodes(container).length).toBe(0);
+  });
+
+  it('restores SMIL nodes when the user returns sceneMotion to auto (OS not reduced)', () => {
+    stubMatchMedia(false);
+    setSceneMotion('reduced');
+    const first = render(() => <AstronautBear />);
+    expect(smilNodes(first.container).length).toBe(0);
+    cleanup();
+
+    setSceneMotion('auto');
+    const { container } = render(() => <AstronautBear />);
+    expect(smilNodes(container).length).toBeGreaterThan(0);
   });
 
   it('gates SMIL across accessory-heavy themes under reduced motion', () => {

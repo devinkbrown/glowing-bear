@@ -26,6 +26,7 @@ import {
   resetSettings,
   saveProfile,
   setCustomColors,
+  setSceneMotion,
   setTheme,
   settings,
   updateBridge,
@@ -306,6 +307,7 @@ export default function SettingsModal(props: Props) {
                 </For>
               </div>
               <Toggle label="Animated Previews" desc="Show subtle animations in theme cards" on={settings.animateThemes} onChange={(v) => updateSettings({ animateThemes: v })} />
+              <MotionControl value={settings.sceneMotion ?? 'auto'} onChange={setSceneMotion} />
             </Section>
 
             <Show when={settings.theme === 'custom'}>
@@ -663,6 +665,43 @@ function Toggle(props: { label: string; desc: string; on: boolean; onChange: (v:
           ${props.on ? 'translate-x-[18px]' : ''}`} />
       </span>
     </button>
+  );
+}
+
+/**
+ * Scene-motion control — the WCAG 2.2.2 (Pause, Stop, Hide) user-operable
+ * mechanism. A radiogroup (mutually-exclusive Auto/Reduced) with a programmatic
+ * label; 'reduced' stops the decorative SMIL scenes even when the OS does not
+ * request reduced motion. Native <button>s keep it keyboard-operable and the
+ * explicit focus-visible ring uses the app accent (SC 2.4.7 / 2.4.11).
+ */
+function MotionControl(props: { value: 'auto' | 'reduced'; onChange: (v: 'auto' | 'reduced') => void }) {
+  const options: { id: 'auto' | 'reduced'; name: string }[] = [
+    { id: 'auto', name: 'Auto' },
+    { id: 'reduced', name: 'Reduced' },
+  ];
+  return (
+    <div class="flex items-center justify-between py-3 sm:py-2.5 px-3 -mx-1">
+      <div class="min-w-0 mr-4">
+        <span id="scene-motion-label" class="text-[13px] sm:text-[12px] text-gray-100 font-bold block leading-tight">Motion</span>
+        <p class="text-[11px] sm:text-[10px] text-gray-600 leading-snug mt-1">Reduced stops animated background and mascot motion. Auto follows your system's reduced-motion setting.</p>
+      </div>
+      <div role="radiogroup" aria-labelledby="scene-motion-label" class="flex gap-1 shrink-0 bg-white/[0.04] rounded-xl p-1">
+        <For each={options}>
+          {(o) => (
+            <button type="button" role="radio" aria-checked={props.value === o.id}
+              onClick={() => props.onChange(o.id)}
+              class={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all active:scale-[0.98]
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--custom-accent,#818cf8)] focus-visible:ring-offset-2 focus-visible:ring-offset-black
+                ${props.value === o.id
+                  ? 'bg-[var(--custom-accent,#818cf8)]/15 text-gray-100 ring-1 ring-[var(--custom-accent,#818cf8)]/40 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'}`}>
+              {o.name}
+            </button>
+          )}
+        </For>
+      </div>
+    </div>
   );
 }
 
