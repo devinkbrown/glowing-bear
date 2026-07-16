@@ -66,6 +66,14 @@ describe('AstronautBear reduced-motion SMIL gate', () => {
     expect(smilNodes(container).length).toBe(0);
   });
 
+  it('supports a static illustrated mascot without changing global motion preferences', () => {
+    stubMatchMedia(false);
+    const { container } = render(() => <AstronautBear animated={false} />);
+
+    expect(container.querySelector('svg')).toBeTruthy();
+    expect(smilNodes(container).length).toBe(0);
+  });
+
   it('restores SMIL nodes when the user returns sceneMotion to auto (OS not reduced)', () => {
     stubMatchMedia(false);
     setSceneMotion('reduced');

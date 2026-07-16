@@ -138,7 +138,13 @@ export function handshakeCmd(
 	const effective = compression && canDecode;
 	const comp = effective ? SUPPORTED_COMPRESSION.join(':') : 'off';
 	const opts = `password_hash_algo=${algos},compression=${comp}`;
-	return cmd('', 'handshake', opts);
+	// The command MUST carry the `_handshake` id: WeeChat echoes the request id on
+	// the reply, and the client only routes the reply to onHandshakeReply when its
+	// id === '_handshake' (ID_HANDSHAKE). Sending an empty id makes the reply come
+	// back with no id, so it is never matched — the secure password_hash auth then
+	// never runs and the client mis-falls-through (verified against WeeChat 4.9.0:
+	// with the id the full password_hash handshake authenticates in ~0.4s).
+	return cmd('_handshake', 'handshake', opts);
 }
 
 /** Parsed, validated fields from the server's `_handshake` reply. */

@@ -58,8 +58,16 @@ import {
   togglePin,
   toggleMute,
   getNotifyMode,
+  getTemporaryMuteUntil,
+  isTemporarilyMuted,
+  muteTemporarily,
+  clearTemporaryMute,
+  pruneTemporaryMutes,
+  notificationMuteSnapshot,
   setNotifyMode,
   cycleNotifyMode,
+  exportBufferPreferences,
+  applyBufferPreferences,
   addIgnore,
   removeIgnore,
 } from './buffers';
@@ -214,20 +222,20 @@ describe('buffers store', () => {
       expect(entry(A).lines).toHaveLength(1);
     });
 
-    it('drops a different-id line with identical nick+message inside the 3s window', () => {
+    it('keeps distinct repeated text even when it arrives immediately', () => {
       addLine(A, makeLine({ buffer: A, nick: 'alice', message: 'same', date: new Date(T0) }), []);
 
       addLine(A, makeLine({ buffer: A, nick: 'alice', message: 'same', date: new Date(T0 + 1000) }), []);
 
-      expect(entry(A).lines).toHaveLength(1);
+      expect(entry(A).lines).toHaveLength(2);
     });
 
-    it('keeps an identical nick+message outside the 3s window', () => {
-      addLine(A, makeLine({ buffer: A, nick: 'alice', message: 'same', date: new Date(T0) }), []);
+    it('drops a different relay id carrying the same stable msgid', () => {
+      addLine(A, makeLine({ buffer: A, id: 'first', msgid: 'stable-1', nick: 'alice', message: 'same' }), []);
 
-      addLine(A, makeLine({ buffer: A, nick: 'alice', message: 'same', date: new Date(T0 + 4000) }), []);
+      addLine(A, makeLine({ buffer: A, id: 'second', msgid: 'stable-1', nick: 'alice', message: 'same' }), []);
 
-      expect(entry(A).lines).toHaveLength(2);
+      expect(entry(A).lines).toHaveLength(1);
     });
 
     it('keeps same message from a different nick inside the window', () => {
@@ -315,18 +323,19 @@ describe('buffers store', () => {
     });
 
     it('prepends fresh history before existing lines, deduping ids and content', () => {
-      addLine(A, makeLine({ buffer: A, id: 'live-1', nick: 'alice', message: 'live msg', date: new Date(T0 + 60_000) }), []);
+      addLine(A, makeLine({ buffer: A, id: 'live-1', msgid: 'live-msgid', nick: 'alice', message: 'live msg', date: new Date(T0 + 60_000) }), []);
 
       addLines(A, [
-        makeLine({ buffer: A, id: 'h-1', nick: 'bob', message: 'old one', date: new Date(T0) }),
+        makeLine({ buffer: A, id: 'h-1', msgid: 'history-msgid', nick: 'bob', message: 'old one', date: new Date(T0) }),
         makeLine({ buffer: A, id: 'live-1', nick: 'alice', message: 'live msg', date: new Date(T0 + 60_000) }),           // id dup
-        makeLine({ buffer: A, id: 'h-dup', nick: 'alice', message: 'live msg', date: new Date(T0 + 61_000) }),            // content dup (adjacent bucket)
+        makeLine({ buffer: A, id: 'h-dup', msgid: 'live-msgid', nick: 'alice', message: 'live msg', date: new Date(T0 + 61_000) }), // stable msgid dup
         makeLine({ buffer: A, id: 'h-2', nick: 'bob', message: 'old two', date: new Date(T0 + 1000) }),
       ], true);
 
       expect(entry(A).lines.map((l) => l.id)).toEqual(['h-1', 'h-2', 'live-1']);
       expect(entry(A).lineIds['h-1']).toBe(true);
       expect(entry(A).lineIds['h-dup']).toBeUndefined();
+      expect(entry(A).msgIndex['history-msgid']?.id).toBe('h-1');
     });
 
     it('dedupes repeated ids within a single batch', () => {
@@ -361,6 +370,46 @@ describe('buffers store', () => {
       expect(entry(A).lineIds['bulk-1']).toBe(true);
     });
 
+    it('keeps a centered 5000-line window around a targeted deep-history msgid', () => {
+      const bulk: WeeChatLine[] = [];
+      for (let i = 0; i < 12_000; i++) {
+        bulk.push(makeLine({
+          buffer: A,
+          id: `deep-${i}`,
+          msgid: `msg-${i}`,
+          message: `m${i}`,
+          date: new Date(T0 + i * 10_000),
+        }));
+      }
+
+      addLines(A, bulk, true, 'msg-3000');
+
+      expect(entry(A).lines).toHaveLength(5000);
+      expect(entry(A).lines[0]?.id).toBe('deep-500');
+      expect(entry(A).lines[4999]?.id).toBe('deep-5499');
+      expect(entry(A).msgIndex['msg-3000']?.id).toBe('deep-3000');
+      expect(entry(A).lineIds['deep-3000']).toBe(true);
+      expect(entry(A).lineIds['deep-11']).toBeUndefined();
+    });
+
+    it('keeps newest history when a targeted msgid is absent from the response', () => {
+      const bulk: WeeChatLine[] = [];
+      for (let i = 0; i < 5001; i++) {
+        bulk.push(makeLine({
+          buffer: A,
+          id: `miss-${i}`,
+          msgid: `miss-msg-${i}`,
+          message: `m${i}`,
+          date: new Date(T0 + i * 10_000),
+        }));
+      }
+
+      addLines(A, bulk, true, 'not-in-this-page');
+
+      expect(entry(A).lines[0]?.id).toBe('miss-1');
+      expect(entry(A).lines[4999]?.id).toBe('miss-5000');
+    });
+
     it('addLine also trims past MAX_LINES and rebuilds lineIds', () => {
       const bulk: WeeChatLine[] = [];
       for (let i = 0; i < 5000; i++) {
@@ -380,14 +429,15 @@ describe('buffers store', () => {
   describe('addLineBatch (coalesced live burst)', () => {
     // A mixed burst exercising every addLine code path in one array: a normal
     // line, an optimistic echo + its confirmation, an id duplicate, a content
-    // duplicate, and a highlight-word hit — all on an INACTIVE buffer.
+    // duplicate, repeated authored content, and a highlight-word hit — all on
+    // an INACTIVE buffer.
     function burst(target: string): WeeChatLine[] {
       return [
         makeLine({ buffer: target, id: 'n1', nick: 'alice', message: 'first', date: new Date(T0) }),
         makeLine({ buffer: target, id: '_opt_1', nick: 'kain', message: 'mine', isSelf: true, date: new Date(T0 + 100) }),
         makeLine({ buffer: target, id: 'r1', nick: 'kain', message: 'mine', isSelf: true, date: new Date(T0 + 200) }),
         makeLine({ buffer: target, id: 'n1', nick: 'alice', message: 'dupe-id', date: new Date(T0 + 300) }), // id dup
-        makeLine({ buffer: target, id: 'c1', nick: 'alice', message: 'first', date: new Date(T0 + 1000) }),  // content dup
+        makeLine({ buffer: target, id: 'c1', nick: 'alice', message: 'first', date: new Date(T0 + 1000) }),  // legitimate repeat
         makeLine({ buffer: target, id: 'h1', nick: 'bob', message: 'ping KAIN there', date: new Date(T0 + 2000) }),
       ];
     }
@@ -411,18 +461,19 @@ describe('buffers store', () => {
       const a = entry(A);
       const b = entry(B);
 
-      // Same surviving lines, in the same order (opt replaced, dups dropped).
-      expect(a.lines.map((l) => l.id)).toEqual(['n1', 'r1', 'h1']);
+      // Same surviving lines, in the same order (opt replaced, id dup dropped,
+      // repeated authored content retained).
+      expect(a.lines.map((l) => l.id)).toEqual(['n1', 'r1', 'c1', 'h1']);
       expect(a.lines.map((l) => l.id)).toEqual(b.lines.map((l) => l.id));
 
       // Same unread/highlight fold on the inactive buffer.
       expect(a.unread).toBe(b.unread);
       expect(a.highlighted).toBe(b.highlighted);
-      expect(a.unread).toBe(3); // n1 + r1 + h1 (opt/id-dup/content-dup excluded)
+      expect(a.unread).toBe(4); // n1 + r1 + c1 + h1 (opt/id-dup excluded)
       expect(a.highlighted).toBe(1); // only the highlight-word hit
 
       // Same lineIds index (optimistic id never indexed).
-      expect(Object.keys(a.lineIds).sort()).toEqual(['h1', 'n1', 'r1']);
+      expect(Object.keys(a.lineIds).sort()).toEqual(['c1', 'h1', 'n1', 'r1']);
       expect(Object.keys(a.lineIds).sort()).toEqual(Object.keys(b.lineIds).sort());
 
       // Highlight-word marking survived the fold.
@@ -836,6 +887,32 @@ describe('buffers store', () => {
       expect(getNotifyMode('no-such-ptr')).toBe('mentions');
     });
 
+    it('exports and atomically applies the stable-name sync allowlist', () => {
+      togglePin(A);
+      setNotifyMode(A, 'all');
+      setNotifyMode(B, 'mute');
+
+      expect(exportBufferPreferences()).toEqual({
+        [`irc.esh.${A}`]: { pinned: true, notify: 'all' },
+        [`irc.esh.${B}`]: { pinned: false, notify: 'mute' },
+      });
+
+      applyBufferPreferences({
+        'irc.remote.#one': { pinned: true, notify: 'mentions' },
+        'irc.remote.#two': { pinned: false, notify: 'all' },
+      });
+      expect(exportBufferPreferences()).toEqual({
+        'irc.remote.#one': { pinned: true, notify: 'mentions' },
+        'irc.remote.#two': { pinned: false, notify: 'all' },
+      });
+      expect(JSON.parse(localStorage.getItem('db-pinned') ?? '[]')).toEqual(['irc.remote.#one']);
+      expect(JSON.parse(localStorage.getItem('db-muted') ?? '[]')).toEqual([]);
+      expect(JSON.parse(localStorage.getItem('db-notify-modes') ?? '{}')).toEqual({
+        'irc.remote.#two': 'all',
+      });
+      applyBufferPreferences({});
+    });
+
     it('setNotifyMode("all") persists the non-default tier to db-notify-modes, not db-muted', () => {
       setNotifyMode(A, 'all');
 
@@ -892,6 +969,52 @@ describe('buffers store', () => {
       expect(() => setNotifyMode('no-such-ptr', 'mute')).not.toThrow();
       expect(cycleNotifyMode('no-such-ptr')).toBe('mentions');
       expect(JSON.parse(localStorage.getItem('db-muted') ?? '[]')).not.toContain('irc.esh.no-such-ptr');
+    });
+
+    it('persists a bounded temporary mute without changing the underlying tier', () => {
+      const now = T0;
+      const until = muteTemporarily(A, 60 * 60 * 1000, now);
+
+      expect(until).toBe(now + 60 * 60 * 1000);
+      expect(isTemporarilyMuted(A, now)).toBe(true);
+      expect(getTemporaryMuteUntil(A, now)).toBe(until);
+      expect(getNotifyMode(A)).toBe('mentions');
+      expect(JSON.parse(localStorage.getItem('db-temporary-mutes') ?? '{}'))
+        .toEqual({ [`irc.esh.${A}`]: until });
+
+      clearTemporaryMute(A);
+      expect(isTemporarilyMuted(A, now)).toBe(false);
+    });
+
+    it('prunes expired mutes and explicit tier changes clear a temporary mute', () => {
+      const now = T0;
+      muteTemporarily(A, 100, now);
+      pruneTemporaryMutes(now + 101);
+      expect(isTemporarilyMuted(A, now + 101)).toBe(false);
+      expect(JSON.parse(localStorage.getItem('db-temporary-mutes') ?? '{}')).toEqual({});
+
+      muteTemporarily(A, 100, now);
+      setNotifyMode(A, 'all');
+      expect(isTemporarilyMuted(A, now)).toBe(false);
+    });
+
+    it('exports full-name and short-name aliases for closed-tab push policy', () => {
+      upsertBuffer(makeBuffer(A, {
+        name: 'irc.esh.alice',
+        fullName: 'irc.esh.alice',
+        shortName: 'Alice',
+        localVars: { type: 'private', channel: 'Alice' },
+      }));
+      const now = T0;
+      muteTemporarily(A, 60_000, now);
+
+      expect(notificationMuteSnapshot(now)).toEqual({
+        mutedTargets: [],
+        temporaryMutes: {
+          alice: now + 60_000,
+          'irc.esh.alice': now + 60_000,
+        },
+      });
     });
   });
 

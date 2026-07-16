@@ -12,16 +12,28 @@ import {
   clearDraft,
   pushHistory,
   flushDrafts,
+  composerDraftRestoration,
   complete,
   cycleCompletion,
   resetCompletion,
   sendInput,
   settings,
+  completedUploadsForBuffer,
+  draftedUploadsForBuffer,
+  enqueueUploads,
+  markUploadDrafted,
+  markUploadInserted,
+  messageContainsUploadUrl,
 } from '@/state';
-import type { BridgeSettings, BufferEntry } from '@/state';
-import { sendTyping, canE2ee, sendE2eeDm } from '@/state/bridge';
+import type { BufferEntry } from '@/state';
+import { canE2ee, dmSecurityFor, sendE2eeDm, sendTyping } from '@/state/bridge';
+import { pendingReplyFor, clearPendingReply } from '@/state/threads';
+import { sendReply } from '@/core/bridge';
 import { bufferKind } from '@/lib/bufferKind';
-import { uploadFile, UploadError } from '@/lib/upload/upload';
+import { UploadError, validateUploadFile } from '@/lib/upload/upload';
+import UploadQueue from './UploadQueue';
+import { formatNumber, t } from '@/lib/i18n';
+import { isImeComposing } from '@/primitives/ime';
 // GifPicker is only mounted when the user opens the picker (Show gate below), so
 // defer its chunk off the first-paint fetch — the static import pulled the
 // ~28kB gif-picker chunk eagerly on boot even though it is on-demand UI.
@@ -47,28 +59,23 @@ interface PastePreview {
 function inputPlaceholder(entry: BufferEntry | undefined): string {
   if (!entry) return '';
   switch (bufferKind(entry.buffer)) {
-    case 'raw': return 'Raw log (read-only)';
-    case 'fset': return '/fset filter or command...';
-    case 'core': return 'WeeChat command...';
-    case 'plugin': return 'Command...';
-    default: return 'Message...';
+    case 'raw': return t('composer.rawReadOnly');
+    case 'fset': return t('composer.filterCommand');
+    case 'core': return t('composer.weechatCommand');
+    case 'plugin': return t('composer.command');
+    default: return t('composer.placeholder');
   }
 }
 
-/**
- * The e2eeDms preference is added to BridgeSettings by the bridge module;
- * read it defensively so this component is valid against the base type too.
- */
 function e2eeDmsEnabled(): boolean {
-  const bridge = settings.bridge as BridgeSettings & { e2eeDms?: boolean };
-  return bridge.e2eeDms === true;
+  return settings.bridge.e2eeDms;
 }
 
 export default function InputBar() {
   const [text, setText] = createSignal('');
   const [historyIdx, setHistoryIdx] = createSignal(-1);
   const [showGif, setShowGif] = createSignal(false);
-  const [uploading, setUploading] = createSignal(false);
+  const [submitting, setSubmitting] = createSignal(false);
   const [uploadError, setUploadError] = createSignal<string | null>(null);
   const [pastePreview, setPastePreview] = createSignal<PastePreview | null>(null);
   const [focused, setFocused] = createSignal(false);
@@ -87,6 +94,18 @@ export default function InputBar() {
   };
   const hasText = () => text().trim().length > 0;
 
+  /** The active buffer's pending reply target (reactive store read), if any. */
+  const replyTarget = () => {
+    const ptr = activeBuffer();
+    return ptr ? pendingReplyFor(ptr) : undefined;
+  };
+
+  const cancelReply = () => {
+    const ptr = activeBuffer();
+    if (ptr) clearPendingReply(ptr);
+    inputEl?.focus();
+  };
+
   /**
    * Stable per-buffer draft key. Drafts persist by buffer NAME (not the WeeChat
    * pointer, which changes across reconnect/reload) so an unsent draft survives
@@ -95,6 +114,37 @@ export default function InputBar() {
   const draftKeyFor = (entry: BufferEntry | undefined): string | null =>
     entry ? (entry.buffer.fullName || entry.buffer.name) : null;
   const activeDraftKey = (): string | null => draftKeyFor(activeEntry());
+
+  // Completed queue items are claimed only by their original stable buffer
+  // key. Switching buffers while a request runs cannot leak its URL into the
+  // currently visible draft; reconnect pointer changes are harmless.
+  createEffect(() => {
+    const key = activeDraftKey();
+    const completed = key ? completedUploadsForBuffer(key) : [];
+    if (!key || completed.length === 0) return;
+    untrack(() => {
+      const urls = completed.flatMap((item) => item.result?.url ? [item.result.url] : []);
+      if (urls.length === 0) return;
+      const current = text();
+      const next = `${current}${current && !current.endsWith('\n') ? '\n' : ''}${urls.join('\n')}`;
+      setText(next);
+      setDraft(key, next);
+      for (const item of completed) markUploadDrafted(item.id);
+    });
+  });
+
+  // Failed notification inline replies are restored through the draft store.
+  // Reflect the persisted recovery immediately when it targets this composer;
+  // inactive buffers pick it up through the normal buffer-switch path.
+  createEffect(() => {
+    const restoration = composerDraftRestoration();
+    const key = activeDraftKey();
+    if (!restoration || restoration.key !== key) return;
+    untrack(() => {
+      setText(restoration.text);
+      setHistoryIdx(-1);
+    });
+  });
 
   // -------------------------------------------------------------------------
   // Typing notifications (bridge no-ops when it is off)
@@ -207,62 +257,108 @@ export default function InputBar() {
   // Message delivery — E2EE path for query buffers, relay otherwise
   // -------------------------------------------------------------------------
 
-  async function deliver(message: string, pointer: string): Promise<void> {
+  async function deliver(message: string, pointer: string): Promise<boolean> {
     if (!message.startsWith('/')) {
       const entry = buffersState.buffers[pointer];
       if (entry && bufferKind(entry.buffer) === 'query' && e2eeDmsEnabled()) {
         const peer = entry.buffer.localVars['channel'] || entry.buffer.shortName;
+        if (peer) {
+          const security = dmSecurityFor(peer);
+          if (security.status === 'changed') {
+            setUploadError(`Sending blocked: ${peer}'s verified device key changed. Compare and re-trust the new fingerprint first.`);
+            return false;
+          }
+          if (settings.bridge.e2eePolicy === 'verified' && security.status !== 'verified') {
+            // This also requests a missing key, but the required policy never
+            // permits the message to fall through to plaintext.
+            if (!canE2ee(peer)) void sendE2eeDm(peer, message);
+            setUploadError(`Sending blocked: verified encryption is required for ${peer}. Verify their fingerprint first.`);
+            return false;
+          }
+        }
         if (peer && canE2ee(peer)) {
           try {
-            if (await sendE2eeDm(peer, message)) return;
+            if (await sendE2eeDm(peer, message)) return true;
           } catch {
-            // E2EE send failed — fall back to the relay path below.
+            // A known encryption path must never silently downgrade.
           }
+          setUploadError(`Sending blocked: encryption for ${peer} failed. Nothing was sent.`);
+          return false;
         }
       }
     }
-    sendInput(message, pointer);
+    const accepted = sendInput(message, pointer);
+    if (!accepted) setUploadError(t('composer.relayUnavailable'));
+    return accepted;
   }
 
-  const submit = () => {
+  async function selectGifUrl(url: string): Promise<void> {
+    const ptr = activeBuffer();
+    if (!ptr) return;
+    if (!await deliver(url, ptr)) {
+      // Read the latest composer value after asynchronous E2EE work so text
+      // typed while sealing is never overwritten by the recovery path.
+      const current = untrack(() => text());
+      const next = `${current}${current && !current.endsWith('\n') ? '\n' : ''}${url}`;
+      setText(next);
+      const entry = buffersState.buffers[ptr];
+      const key = entry ? (entry.buffer.fullName || entry.buffer.name) : null;
+      if (key) setDraft(key, next);
+    }
+    closeGif();
+  }
+
+  const submit = () => { void submitMessage(); };
+
+  const submitMessage = async () => {
     const trimmed = text().trim();
     const ptr = activeBuffer();
-    if (!trimmed || !ptr) return;
+    if (!trimmed || !ptr || submitting()) return;
+    const entry = buffersState.buffers[ptr];
+    const key = entry ? (entry.buffer.fullName || entry.buffer.name) : null;
     const now = Date.now();
     if (now - lastSubmitTime < SUBMIT_DEBOUNCE_MS) return;
+    setSubmitting(true);
+    setUploadError(null);
+    // A pending reply threads the message via the direct bridge with a
+    // +draft/reply tag; if that path is unavailable (no bridge / non-channel /
+    // slash command) fall back to the plain relay send, which cannot carry it.
+    const isCommand = trimmed.startsWith('/');
+    const reply = pendingReplyFor(ptr);
+    const linked = reply !== undefined && !isCommand && sendReply(ptr, trimmed, reply.msgid);
+    const delivered = linked || await deliver(trimmed, ptr);
+    if (!delivered) {
+      setSubmitting(false);
+      return;
+    }
     lastSubmitTime = now;
-    void deliver(trimmed, ptr);
+    // Clear the reply only when a content message was sent; a slash command
+    // leaves the chip up so the pending reply survives an interleaved command.
+    if (reply && !isCommand) clearPendingReply(ptr);
     pushHistory(trimmed);
     setHistoryIdx(-1);
     setText('');
-    const key = activeDraftKey();
+    if (key) {
+      for (const item of draftedUploadsForBuffer(key)) {
+        const url = item.result?.url;
+        if (url && messageContainsUploadUrl(trimmed, url)) markUploadInserted(item.id);
+      }
+    }
     if (key) clearDraft(key);
     resetCompletion();
     stopTyping('done');
+    setSubmitting(false);
   };
 
   // -------------------------------------------------------------------------
   // Uploads
   // -------------------------------------------------------------------------
 
-  async function handleFileUpload(file: File): Promise<void> {
-    const ptr = activeBuffer();
-    if (!ptr) return;
-    setUploading(true);
+  function queueFiles(files: Iterable<File>): void {
+    const key = activeDraftKey();
+    if (!key) return;
     setUploadError(null);
-    try {
-      // settings.uploadUrl wins when set; the lib falls back to
-      // VITE_MEDIA_URL / same-origin '/upload' otherwise.
-      const { url } = await uploadFile(file, {
-        mediaUrl: settings.uploadUrl.trim() || undefined,
-      });
-      await deliver(url, ptr);
-    } catch (err) {
-      if (err instanceof UploadError) setUploadError(err.message);
-      else setUploadError(`Upload failed: ${err instanceof Error ? err.message : 'network error'}`);
-    } finally {
-      setUploading(false);
-    }
+    enqueueUploads(files, key);
   }
 
   const onPaste = (e: ClipboardEvent) => {
@@ -274,6 +370,12 @@ export default function InputBar() {
         e.preventDefault();
         const file = item.getAsFile();
         if (!file) return;
+        try {
+          validateUploadFile(file);
+        } catch (error) {
+          setUploadError(error instanceof UploadError ? error.message : t('composer.pastedNotAllowed'));
+          return;
+        }
         const reader = new FileReader();
         reader.onload = () => setPastePreview({ file, dataUrl: String(reader.result) });
         reader.readAsDataURL(file);
@@ -282,10 +384,10 @@ export default function InputBar() {
     }
   };
 
-  const confirmPasteUpload = async () => {
+  const confirmPasteUpload = () => {
     const preview = pastePreview();
     if (!preview) return;
-    await handleFileUpload(preview.file);
+    queueFiles([preview.file]);
     setPastePreview(null);
   };
 
@@ -294,6 +396,7 @@ export default function InputBar() {
   // -------------------------------------------------------------------------
 
   const onKeyDown = (e: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) => {
+    if (isImeComposing(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       submit();
@@ -395,27 +498,26 @@ export default function InputBar() {
             <div class="flex items-start gap-3">
               <img
                 src={preview().dataUrl}
-                alt="Paste preview"
+                alt={t('composer.pastePreview')}
                 class="max-h-[80px] sm:max-h-[120px] max-w-[140px] sm:max-w-[200px] rounded-lg border border-white/[0.06]"
               />
               <div class="flex-1 min-w-0">
-                <p class="text-[12px] text-gray-300 mb-1">Upload pasted image?</p>
+                <p class="text-[12px] text-gray-300 mb-1">{t('composer.pastePrompt')}</p>
                 <p class="text-[11px] text-gray-500 mb-2 sm:mb-3 truncate">
-                  {preview().file.name} ({(preview().file.size / 1024).toFixed(0)} KB)
+                  {preview().file.name} ({formatNumber(Math.round(preview().file.size / 1024))} KB)
                 </p>
                 <div class="flex gap-2">
                   <button
-                    onClick={() => void confirmPasteUpload()}
-                    disabled={uploading()}
+                    onClick={confirmPasteUpload}
                     class="px-4 py-2 sm:px-3 sm:py-1 rounded-lg text-[12px] sm:text-[11px] font-medium bg-[var(--custom-accent,#818cf8)] text-white hover:opacity-85 active:opacity-70 disabled:opacity-40 transition-all"
                   >
-                    {uploading() ? 'Uploading...' : 'Upload'}
+                    {t('composer.addQueue')}
                   </button>
                   <button
                     onClick={() => setPastePreview(null)}
                     class="px-4 py-2 sm:px-3 sm:py-1 rounded-lg text-[12px] sm:text-[11px] font-medium text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
                   >
-                    Cancel
+                    {t('composer.cancel')}
                   </button>
                 </div>
               </div>
@@ -424,7 +526,9 @@ export default function InputBar() {
         )}
       </Show>
 
-      {/* Upload error toast */}
+      <UploadQueue />
+
+      {/* Upload / delivery safety error toast */}
       <Show when={uploadError()}>
         <div class="absolute bottom-full left-2 right-2 sm:left-3 sm:right-3 mb-1 bg-red-900/80 border border-red-500/20 rounded-xl px-3 py-2 shadow-xl animate-slide-down flex items-center gap-2">
           <span class="text-[12px] text-red-200 flex-1">{uploadError()}</span>
@@ -432,7 +536,7 @@ export default function InputBar() {
             onClick={() => setUploadError(null)}
             class="text-red-400 hover:text-red-200 shrink-0 text-[11px] font-medium"
           >
-            Dismiss
+            {t('composer.dismiss')}
           </button>
         </div>
       </Show>
@@ -442,10 +546,7 @@ export default function InputBar() {
         <Suspense fallback={null}>
           <GifPicker
             apiKey={settings.tenorApiKey}
-            onSelect={(url) => {
-              const ptr = activeBuffer();
-              if (ptr) void deliver(url, ptr);
-            }}
+            onSelect={selectGifUrl}
             onClose={closeGif}
           />
         </Suspense>
@@ -453,8 +554,33 @@ export default function InputBar() {
 
       {/* Input row */}
       <div class="px-2 sm:px-3 pt-2 pb-1.5">
+        {/* Reply chip — shown while a pending reply target is set for this buffer */}
+        <Show when={replyTarget()}>
+          {(reply) => (
+            <div class="flex items-center gap-2 mb-1.5 pl-2.5 pr-1.5 py-1.5 rounded-lg bg-white/[0.03] border-l-2 border-[var(--custom-accent,#818cf8)]">
+              <svg class="w-3.5 h-3.5 shrink-0 text-[var(--custom-accent,#818cf8)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 4 2 8l4 4M2 8h7a5 5 0 0 1 5 5v0" />
+              </svg>
+              <div class="flex-1 min-w-0 leading-tight">
+                <span class="text-[11px] font-medium text-[var(--custom-accent,#818cf8)]">
+                  {t('composer.replyingTo', { target: reply().nick || t('composer.message') })}
+                </span>
+                <span class="block text-[12px] text-gray-400 truncate">{reply().preview}</span>
+              </div>
+              <button
+                onClick={cancelReply}
+                aria-label={t('composer.cancelReply')}
+                class="w-7 h-7 shrink-0 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:scale-90 transition-[color,background-color,transform] duration-150"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </Show>
         <div
-          class="flex items-end gap-1.5 rounded-2xl sm:rounded-xl border px-2 sm:px-3 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+          class="composer-shell flex items-end gap-1.5 rounded-2xl sm:rounded-xl border px-2 sm:px-3 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
           classList={{
             'bg-white/[0.05] border-[var(--custom-accent,#818cf8)]/40 ring-1 ring-[var(--custom-accent,#818cf8)]/25 shadow-lg shadow-black/25': focused(),
             'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.03] hover:border-white/[0.1]': !focused(),
@@ -484,7 +610,7 @@ export default function InputBar() {
             autocomplete="off"
             autocorrect="on"
             spellcheck
-            class="flex-1 bg-transparent text-[15px] sm:text-[14px] text-gray-200 py-2 outline-none resize-none placeholder:text-gray-500 disabled:opacity-20 leading-[1.45]"
+            class="composer-textarea flex-1 bg-transparent text-[15px] sm:text-[14px] text-gray-200 py-2 outline-none resize-none placeholder:text-gray-500 disabled:opacity-20 leading-[1.45]"
             style={{ 'min-height': `${MIN_INPUT_HEIGHT}px`, 'max-height': `${MAX_INPUT_HEIGHT}px` }}
           />
 
@@ -495,8 +621,8 @@ export default function InputBar() {
               onClick={() => fileEl?.click()}
               disabled={!activeBuffer()}
               class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.1] active:scale-90 transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] disabled:opacity-20 disabled:cursor-default disabled:hover:bg-transparent disabled:active:scale-100"
-              title="Upload file"
-              aria-label="Upload file"
+              title={t('composer.upload')}
+              aria-label={t('composer.upload')}
             >
               <svg class="w-[17px] h-[17px] sm:w-[15px] sm:h-[15px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M14 10v2.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5V10" />
@@ -506,11 +632,13 @@ export default function InputBar() {
             <input
               ref={(el) => (fileEl = el)}
               type="file"
-              accept="image/*,video/*,audio/*,.pdf,.txt,.zip"
+              aria-label={t('composer.chooseFiles')}
+              accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,audio/mpeg,audio/mp4,audio/ogg,audio/wav,application/pdf,text/plain,application/zip,.jpg,.jpeg,.png,.webp,.mp4,.webm,.mp3,.m4a,.ogg,.wav,.pdf,.txt,.zip"
+              multiple
               class="hidden"
               onChange={(e) => {
-                const file = e.currentTarget.files?.[0];
-                if (file) void handleFileUpload(file);
+                const files = e.currentTarget.files;
+                if (files && files.length > 0) queueFiles(files);
                 e.currentTarget.value = '';
               }}
             />
@@ -525,14 +653,14 @@ export default function InputBar() {
                 'text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.1]': !showGif(),
               }}
               title="GIF"
-              aria-label="GIF picker"
+              aria-label={t('composer.gif')}
             >
               <span class="text-[11px] sm:text-[10px] font-bold tracking-tight">GIF</span>
             </button>
 
             {/* Send / uploading */}
             <Show
-              when={!uploading()}
+              when={!submitting()}
               fallback={
                 <div class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center">
                   <span class="w-4 h-4 border-2 border-gray-600 border-t-[var(--custom-accent,#818cf8)] rounded-full animate-spin" />
@@ -541,13 +669,13 @@ export default function InputBar() {
             >
               <button
                 onClick={submit}
-                disabled={!hasText() || !activeBuffer()}
+                disabled={!hasText() || !activeBuffer() || submitting()}
                 class="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl sm:rounded-lg transition-[opacity,transform,box-shadow,background-color,filter] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
                 classList={{
                   'bg-[var(--custom-accent,#818cf8)] text-white hover:brightness-110 active:scale-90 shadow-md shadow-[var(--custom-accent,#818cf8)]/30': hasText(),
                   'bg-white/[0.03] text-gray-600 cursor-default': !hasText(),
                 }}
-                aria-label="Send"
+                aria-label={t('composer.send')}
               >
                 <svg class="w-[17px] h-[17px] sm:w-[15px] sm:h-[15px]" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M1.7 1.4a.8.8 0 0 1 .9-.1l11.5 6a.8.8 0 0 1 0 1.4l-11.5 6a.8.8 0 0 1-1.1-.9L3.1 9H7a.8.8 0 0 0 0-1.6H3.1L1.5 2.3a.8.8 0 0 1 .2-.9z" />

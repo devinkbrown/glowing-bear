@@ -776,7 +776,7 @@ export function formatText(text: string, inlineImages: boolean = false): string 
 			const escapedUrl = escapeHtml(token.value);
 			const escapedDisplay = escapeHtml(token.display ?? token.value);
 			if (inlineImages) {
-				result += `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" class="irc-link irc-image-link"><img src="${escapedUrl}" alt="${escapedDisplay}" class="irc-inline-image" loading="lazy" /></a>`;
+				result += `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" class="irc-link irc-image-link"><img src="${escapedUrl}" alt="${escapedDisplay}" class="irc-inline-image" loading="lazy" referrerpolicy="no-referrer" /></a>`;
 			} else {
 				result += `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" class="irc-link">${escapedDisplay}</a>`;
 			}

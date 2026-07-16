@@ -2,6 +2,7 @@
 // their debounced persistence, the reload round-trip, and the growth bounds.
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { BufferEntry } from '@/types';
 
 // Node 22+ defines an experimental localStorage global that is undefined
 // without --localstorage-file and shadows any jsdom implementation. Install a
@@ -29,6 +30,8 @@ import {
   _resetDrafts,
   HISTORY_LIMIT,
   MAX_DRAFTS,
+  composerDraftRestoration,
+  restoreComposerDraft,
 } from './drafts';
 
 const DRAFTS_KEY = 'darkbear:drafts:v1';
@@ -70,6 +73,25 @@ describe('drafts store', () => {
     const raw = localStorage.getItem(DRAFTS_KEY);
     expect(raw).toBeTruthy();
     expect(JSON.parse(raw as string)).toEqual({ '#chan': 'persist me' });
+  });
+
+  it('restores external text without replacing a draft and persists immediately', () => {
+    const entry = {
+      buffer: { fullName: 'irc.test.#darkbear', name: 'irc.test.#darkbear' },
+    } as BufferEntry;
+    setDraft('irc.test.#darkbear', 'existing draft');
+
+    expect(restoreComposerDraft(entry, 'failed inline reply')).toBe(true);
+
+    const expected = 'existing draft\nfailed inline reply';
+    expect(getDraft('irc.test.#darkbear')).toBe(expected);
+    expect(composerDraftRestoration()).toMatchObject({
+      key: 'irc.test.#darkbear',
+      text: expected,
+    });
+    expect(JSON.parse(localStorage.getItem(DRAFTS_KEY) as string)).toEqual({
+      'irc.test.#darkbear': expected,
+    });
   });
 
   it('a draft round-trips across a simulated reload', async () => {

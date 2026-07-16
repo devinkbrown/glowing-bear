@@ -83,6 +83,8 @@ export interface ParsedEventFeed {
   source?: string;
   target?: string;
   category: string;
+  subscription?: string;
+  severity?: string;
   verb?: string;
   channel?: string;
   subject?: string;
@@ -263,7 +265,13 @@ function attrsFrom(parts: string[]): { attrs: Record<string, string>; rest: stri
   return { attrs, rest };
 }
 
-function parseEventParams(params: string[], raw: string, source?: string): ParsedEventFeed | null {
+function parseEventParams(
+  params: string[],
+  raw: string,
+  source?: string,
+  severity?: string,
+  subscription?: string,
+): ParsedEventFeed | null {
   if (params.length < 2) return null;
   const target = params[0];
   const category = params[1]?.toUpperCase();
@@ -280,6 +288,8 @@ function parseEventParams(params: string[], raw: string, source?: string): Parse
       source,
       target,
       category,
+      subscription,
+      severity,
       verb: action?.toUpperCase(),
       subject,
       detail: rest.join(' ') || undefined,
@@ -299,7 +309,30 @@ function parseEventParams(params: string[], raw: string, source?: string): Parse
       source,
       target,
       category,
+      subscription,
+      severity,
       verb,
+      channel,
+      subject,
+      detail: rest.join(' ') || undefined,
+      attrs,
+    };
+  }
+
+  if (category === 'MEMBER' && params[3]?.match(/^[#&]/)) {
+    const channel = params[3];
+    const subject = params[4];
+    const { attrs, rest } = attrsFrom(params.slice(5));
+    return {
+      type: 'event_feed',
+      kind: 'event',
+      raw,
+      source,
+      target,
+      category,
+      subscription,
+      severity,
+      verb: params[2]?.toUpperCase(),
       channel,
       subject,
       detail: rest.join(' ') || undefined,
@@ -317,6 +350,8 @@ function parseEventParams(params: string[], raw: string, source?: string): Parse
     source,
     target,
     category,
+    subscription,
+    severity,
     verb,
     subject,
     detail: rest.join(' ') || undefined,
@@ -324,7 +359,13 @@ function parseEventParams(params: string[], raw: string, source?: string): Parse
   };
 }
 
-function parseNoteEventParams(params: string[], raw: string, source?: string): ParsedEventFeed | null {
+function parseNoteEventParams(
+  params: string[],
+  raw: string,
+  source?: string,
+  severity?: string,
+  subscription?: string,
+): ParsedEventFeed | null {
   if ((params[0] ?? '').toUpperCase() !== 'EVENT') return null;
   const category = params[1]?.toUpperCase();
   if (!category) return null;
@@ -336,6 +377,8 @@ function parseNoteEventParams(params: string[], raw: string, source?: string): P
     raw,
     source,
     category,
+    subscription,
+    severity,
     sender: senderSplit?.[1]?.trim() || undefined,
     detail: senderSplit ? senderSplit[2]?.trim() || undefined : body || undefined,
     attrs: {},
@@ -351,8 +394,10 @@ export function parseEventFeedText(text: string): ParsedEventFeed | null {
 
   if (plain[0] === '@' || plain[0] === ':') {
     const msg = parseIRCMessage(plain);
-    if (msg.command === 'EVENT') return parseEventParams(msg.params, plain, msg.prefix ?? undefined);
-    if (msg.command === 'NOTE') return parseNoteEventParams(msg.params, plain, msg.prefix ?? undefined);
+    const severity = msg.tags['orochi.io/severity']?.toLocaleLowerCase();
+    const subscription = msg.tags['orochi.io/category']?.toLocaleUpperCase();
+    if (msg.command === 'EVENT') return parseEventParams(msg.params, plain, msg.prefix ?? undefined, severity, subscription);
+    if (msg.command === 'NOTE') return parseNoteEventParams(msg.params, plain, msg.prefix ?? undefined, severity, subscription);
   }
 
   const parts = tokenizeIrcish(plain);

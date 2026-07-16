@@ -6,11 +6,19 @@
 export * from './settings';
 export * from './buffers';
 export * from './connection';
+export * from './connectivity';
 export * from './ircx';
 export * from './completion';
 export * from './ui';
 export * from './bridge';
 export * from './drafts';
+export * from './threads';
+export * from './activity';
+export * from './preferenceSync';
+export * from './notificationActions';
+export * from './userActions';
+export * from './operatorIncidents';
+export * from './uploads';
 
 // Media exports are re-exported by name: `toggleMute()` (media) collides with
 // buffers' `toggleMute(pointer)`, so the facade aliases it to `toggleMicMute`.
@@ -21,6 +29,9 @@ export {
   leaveRoom,
   startCall,
   acceptCall,
+  requestRoomJoin,
+  requestStartCall,
+  requestAcceptCall,
   rejectCall,
   hangup,
   toggleMute as toggleMicMute,
@@ -28,6 +39,7 @@ export {
   toggleCamera,
   toggleScreenShare,
   setMinimized,
+  setTranscriptOpen,
   setSpotlight,
   sendRoomReaction,
   peerStream,

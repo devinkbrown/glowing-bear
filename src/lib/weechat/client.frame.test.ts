@@ -260,20 +260,44 @@ afterEach(() => {
 // ── connection & authentication ──────────────────────────────────────────────
 
 describe('WeeRelayClient connection and authentication', () => {
+	it('reports whether relay input reached an authenticated open socket', async () => {
+		expect(client.sendInput('0x123', '/quote IDENTIFY secret')).toBe(false);
+
+		const ws = connectOpen();
+		expect(client.state).toBe(ConnectionState.AUTHENTICATING);
+		expect(client.sendInput('0x123', '/quote IDENTIFY secret')).toBe(false);
+
+		ws.message(versionFrame());
+		await flushAsync();
+		expect(client.state).toBe(ConnectionState.CONNECTED);
+		expect(client.sendInput('0x123', '/quote LOGOUT')).toBe(true);
+		expect(ws.sent.at(-1)).toBe('input 0x123 /quote LOGOUT\n');
+
+		ws.readyState = FakeWebSocket.CLOSING;
+		expect(client.sendInput('0x123', '/quote ACCOUNTINFO')).toBe(false);
+	});
+
 	it('opens a ws:// socket and sends handshake first (no plaintext password)', () => {
 		client.connect();
 		const ws = FakeWebSocket.instances[0]!;
 		expect(client.state).toBe(ConnectionState.CONNECTING);
+		expect(client.diagnostics()).toMatchObject({
+			phase: 'opening-socket',
+			transport: 'ws',
+			protocolMode: 'pending',
+			reconnectReason: 'none',
+		});
 		expect(ws.url).toBe('ws://relay.test:9001/weechat');
 		expect(ws.binaryType).toBe('arraybuffer');
 
 		ws.open();
 
 		expect(client.state).toBe(ConnectionState.AUTHENTICATING);
+		expect(client.diagnostics().phase).toBe('negotiating-handshake');
 		// New auth flow is handshake-first: the plaintext password must NOT appear
 		// until/unless we fall back to legacy init (covered in client.handshake.test.ts).
 		expect(ws.sent[0]).toBe(
-			'handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
+			'(_handshake) handshake password_hash_algo=pbkdf2+sha512:pbkdf2+sha256:sha512:sha256,compression=off\n',
 		);
 		expect(ws.sent.join('')).not.toContain('password=hunter2');
 	});
@@ -293,12 +317,17 @@ describe('WeeRelayClient connection and authentication', () => {
 
 		ws.message(versionFrame());
 		await flushAsync();
+		expect(client.diagnostics().phase).toBe('synchronizing');
 
 		const sent = ws.sent.join('');
 		expect(sent).toContain('(_buffers) hdata buffer:gui_buffers(*)');
 		expect(sent).toContain('(_hotlist) hdata hotlist:gui_hotlist(*)');
 		expect(sent).toContain('(_history) hdata buffer:gui_buffers(*)/own_lines/last_line(-50)/data');
 		expect(sent).toContain('sync *\n');
+
+		ws.message(buffersFrame());
+		await flushAsync();
+		expect(client.diagnostics().phase).toBe('ready');
 	});
 });
 

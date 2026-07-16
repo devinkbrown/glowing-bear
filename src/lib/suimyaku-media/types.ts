@@ -33,6 +33,23 @@ export interface SuimyakuTranscriptEntry {
 /** 0 = excellent  1 = good  2 = fair  3 = poor */
 export type NetworkQualityTier = 0 | 1 | 2 | 3;
 
+export type CallHealthStatus = 'idle' | 'healthy' | 'degraded' | 'reconnecting';
+
+export interface SuimyakuCallHealth {
+  status: CallHealthStatus;
+  transportConnected: boolean;
+  tier: NetworkQualityTier;
+  suggestedBps: number;
+  jitterMs: number;
+  lossRate: number;
+  roundTripMs: number;
+  /** Encode duration divided by the video frame budget; 1 means fully saturated. */
+  encodePressure: number;
+  roomStats: SuimyakuRoomStats | null;
+  reconnectAttempt: number;
+  updatedAt: number;
+}
+
 export interface SuimyakuChannelInfo {
   voiceCount: number;
   voiceMax:   number;
@@ -53,6 +70,7 @@ export interface SuimyakuMediaCallbacks {
   onAudioLevel?:     (nick: string, level: number) => void;
   onPresence?:       (nick: string, available: boolean) => void;
   onNetworkQuality?: (tier: NetworkQualityTier, suggestedBps: number) => void;
+  onCallHealth?:     (health: SuimyakuCallHealth) => void;
   onReaction?:       (nick: string, emoji: string) => void;
   onHand?:           (nick: string, raised: boolean) => void;
   onCaption?:        (entry: SuimyakuTranscriptEntry, live: boolean) => void;

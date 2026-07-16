@@ -5,23 +5,38 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 5173 --host",
+    "dev:desktop": "vite --mode desktop --port 5173 --host",
     "build": "vite build",
+    "build:desktop": "vite build --mode desktop --outDir desktop-out",
+    "desktop": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "desktop:verify-package": "node scripts/verify-desktop-package.mjs",
     "preview": "vite preview",
     "lint": "eslint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "perf:assets": "node scripts/check-performance-budgets.mjs",
+    "perf:browser": "playwright test tests/e2e/performance-budgets.spec.ts --project=chromium --project=mobile-chromium",
+    "perf": "pnpm build && pnpm perf:assets && pnpm perf:browser"
   },
   "dependencies": {
     "@tanstack/solid-virtual": "^3.13.32",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-deep-link": "^2.4.9",
+    "@tauri-apps/plugin-notification": "^2.3.3",
     "solid-js": "^1.9.5"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@axe-core/playwright": "^4.12.1",
+    "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.50.0",
     "@solidjs/testing-library": "^0.8.10",
     "@tailwindcss/vite": "^4.1.7",
+    "@tauri-apps/cli": "^2.11.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@types/node": "^22.15.0",
     "eslint": "^9",
@@ -34,10 +49,5 @@
     "vite": "^7.1.0",
     "vite-plugin-solid": "^2.11.6",
     "vitest": "^4.1.7"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }

@@ -96,4 +96,17 @@ describe('PeerRegistry', () => {
     expect(registry.get('overflow-video')).toBeUndefined();
     expect(onPeerStateChanged).toHaveBeenCalledTimes(64);
   });
+
+  it('keeps arrival clocks per peer and resets aggregate jitter on clear', () => {
+    const registry = createRegistry();
+    const alice = registry.getOrCreate('alice', '#root', 'voice');
+    const bob = registry.getOrCreate('bob', '#root', 'voice');
+    alice.lastAudioDecodeAt = 100;
+    bob.lastAudioDecodeAt = 200;
+    registry.lastJitterMs = 18;
+
+    expect(alice.lastAudioDecodeAt).not.toBe(bob.lastAudioDecodeAt);
+    registry.clear();
+    expect(registry.lastJitterMs).toBe(0);
+  });
 });

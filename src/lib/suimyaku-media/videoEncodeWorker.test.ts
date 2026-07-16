@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildEncoder, tierDimensions } from './videoEncodeWorker';
+import { buildEncoder, tierDimensions } from './videoEncoderProfile';
 import type { OpcodecWasm, KaguraVisEncoder } from './OpcodecWasm';
 
 // Covers the encoder fallback ladder added so worker video encoding keeps

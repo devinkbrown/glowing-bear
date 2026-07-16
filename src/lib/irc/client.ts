@@ -22,9 +22,12 @@ export interface ChannelListRow {
 export interface IRCClientOptions {
   url: string;           // e.g. wss://eshmaki.me:8080
   nick: string;
+  /** SASL authcid when the account differs from the visible registration nick. */
+  account?: string;
   realname?: string;
   username?: string;
   password?: string;     // SASL PLAIN password
+  saslSessionToken?: string; // Orochi sst_ account re-entry credential
   sessionToken?: string; // Orochi SESSION RESUME token (local node)
   meshToken?: string;    // Orochi mesh-sealed reclaim token (any node)
   hasClientCert?: boolean;
@@ -33,9 +36,12 @@ export interface IRCClientOptions {
   /** called for every inbound binary WebSocket frame (browser media datagrams) */
   onBinary?: (data: Uint8Array) => void;
   onRaw?: RawHandler;
-  onConnected?: () => void;
+  /** Called on registration with the exact server-authored 001 welcome. */
+  onConnected?: (welcome: IRCMessage) => void;
   onDisconnected?: (reason: string) => void;
   onError?: (err: string) => void;
+  /** Called only when Orochi rejects the token; true means password fallback starts. */
+  onSaslSessionTokenRejected?: (willRetryWithPassword: boolean) => void;
   onNickChanged?: (newNick: string) => void;
   /**
    * Called for an inbound IRCv3 `draft/read-marker` MARKREAD. `timestamp` is the
@@ -84,12 +90,10 @@ function escapeTagValue(val: string): string {
 export class IRCClient {
   private ws: WebSocket | null = null;
   private opts: IRCClientOptions;
-  /**
-   * The nick passed to the constructor — never mutated even when the server
-   * sends 433 and we fall back to kain_. Used as the SASL authcid so PLAIN
-   * and SCRAM always identify against the original nick/account.
-   */
-  private _authNick: string;
+  /** Registration nick before any collision fallback. */
+  private readonly _canonicalNick: string;
+  /** Account-bound SASL authcid; may intentionally differ from the nick. */
+  private readonly _authcid: string;
   private reconnectDelay = RECONNECT_BASE;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -180,8 +184,11 @@ export class IRCClient {
 
   constructor(opts: IRCClientOptions) {
     this.opts = opts;
-    // Save before any nick mutations (433 collision appends '_')
-    this._authNick = opts.nick;
+    // Save before any nick mutations (433 collision appends '_'). Authentication
+    // uses the explicit account when supplied; reconnect still retries the
+    // user's original display nick rather than overwriting it with the authcid.
+    this._canonicalNick = opts.nick;
+    this._authcid = opts.account?.trim() || opts.nick;
   }
 
   connect() {
@@ -201,7 +208,7 @@ export class IRCClient {
     // fallback mutates opts.nick to an alias (e.g. "kain_"); without this reset
     // each reconnect would re-register under the alias forever and never
     // reclaim the real nick.
-    this.opts.nick = this._authNick;
+    this.opts.nick = this._canonicalNick;
     this._registered = false;
     this._loggedIn = false;
     this._saslPending = false;
@@ -251,19 +258,21 @@ export class IRCClient {
     }
   }
 
-  send(line: string) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+  send(line: string): boolean {
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+    try {
+      this.ws.send(line);
       this.opts.onRaw?.(line.replace(/\r\n$/, ''), 'out');
-      try {
-        this.ws.send(line);
-      } catch {
-        // WebSocket state raced — let _onClose handle the disconnect
-      }
+      return true;
+    } catch {
+      // WebSocket state raced — let _onClose handle the disconnect. Reporting
+      // false lets composers retain text instead of treating the no-op as sent.
+      return false;
     }
   }
 
-  sendRaw(command: string, ...params: string[]) {
-    this.send(formatIRCLine(command, ...params));
+  sendRaw(command: string, ...params: string[]): boolean {
+    return this.send(formatIRCLine(command, ...params));
   }
 
   /**
@@ -286,6 +295,16 @@ export class IRCClient {
     return this.opts.nick;
   }
 
+  /** True only after SASL success; account-scoped features must gate on this. */
+  get loggedIn(): boolean {
+    return this._loggedIn;
+  }
+
+  /** Use a freshly issued Orochi re-entry credential on the next reconnect. */
+  setSaslSessionToken(token: string | undefined): void {
+    this.opts.saslSessionToken = token;
+  }
+
   /** Send a media datagram as a binary WebSocket frame (browser media plane). */
   sendBinary(bytes: Uint8Array) {
     if (this.ws?.readyState !== WebSocket.OPEN) return;
@@ -304,21 +323,21 @@ export class IRCClient {
     this.sendRaw('JOIN', channel, ...(key ? [key] : []));
   }
 
-  tagmsg(target: string, tags: Record<string, string>) {
+  tagmsg(target: string, tags: Record<string, string>): boolean {
     // escapeTagValue already encodes CR/LF in values as \r/\n escapes; the
     // target is interpolated raw, so strip any embedded newline to keep this
     // one frame = one IRC message (no injected second command).
     const safeTarget = target.replace(/[\r\n]/g, '');
     const tagStr = Object.entries(tags).map(([k, v]) => v ? `${k}=${escapeTagValue(v)}` : k).join(';');
-    this.send(`@${tagStr} TAGMSG ${safeTarget}\r\n`);
+    return this.send(`@${tagStr} TAGMSG ${safeTarget}\r\n`);
   }
 
   part(channel: string, reason = 'Leaving') {
     this.sendRaw('PART', channel, reason);
   }
 
-  privmsg(target: string, text: string) {
-    this.sendRaw('PRIVMSG', target, text);
+  privmsg(target: string, text: string): boolean {
+    return this.sendRaw('PRIVMSG', target, text);
   }
 
   notice(target: string, text: string) {
@@ -439,13 +458,19 @@ export class IRCClient {
   private _onMessage(ev: MessageEvent) {
     // Binary frames carry browser media datagrams, not IRC lines.
     if (ev.data instanceof ArrayBuffer) {
-      if (ev.data.byteLength) {
-        const bytes = new Uint8Array(ev.data);
-        this.opts.onBinary?.(bytes);
-        for (const h of this.binaryHandlers) {
-          try { h(bytes); } catch { /* a subscriber must not break the socket */ }
-        }
-      }
+      this._dispatchBinary(new Uint8Array(ev.data));
+      return;
+    }
+    // Some WebSocket shims and older WebKit builds still surface a Blob even
+    // after binaryType='arraybuffer'. Convert it without ever treating bytes as
+    // an IRC line; preserve the connection generation across the async read.
+    if (typeof Blob !== 'undefined' && ev.data instanceof Blob) {
+      const source = this.ws;
+      void ev.data.arrayBuffer()
+        .then((buffer) => {
+          if (this.ws === source) this._dispatchBinary(new Uint8Array(buffer));
+        })
+        .catch(() => { /* malformed/closed binary message is one dropped media datagram */ });
       return;
     }
     const data = typeof ev.data === 'string' ? ev.data : '';
@@ -475,15 +500,23 @@ export class IRCClient {
         this._handleMessage(msg);
       } catch (e) {
         // A malformed line must not abort processing of the rest of the frame.
-        console.warn('[nexus] failed to handle IRC line:', line, e);
+        console.warn('[orochi] failed to handle IRC line:', line, e);
       }
+    }
+  }
+
+  private _dispatchBinary(bytes: Uint8Array): void {
+    if (!bytes.byteLength) return;
+    this.opts.onBinary?.(bytes);
+    for (const handler of this.binaryHandlers) {
+      try { handler(bytes); } catch { /* a subscriber must not break the socket */ }
     }
   }
 
   private _onClose(ev: CloseEvent) {
     this._clearPingTimers();
     const reason = ev.reason || `code ${ev.code}`;
-    console.error('[nexus] ws closed — code:', ev.code, 'reason:', ev.reason || '(none)', 'wasClean:', ev.wasClean);
+    console.warn('[orochi] ws closed — code:', ev.code, 'reason:', ev.reason || '(none)', 'wasClean:', ev.wasClean);
     this.opts.onDisconnected?.(reason);
     // Reconnect is owned exclusively by the store (bounded attempts, gated on
     // autoReconnect, with the UI countdown). The client must NOT also schedule
@@ -492,7 +525,7 @@ export class IRCClient {
   }
 
   private _onError(ev: Event) {
-    console.error('[nexus] ws error:', ev);
+    console.error('[orochi] ws error:', ev);
     this.opts.onError?.('WebSocket error');
   }
 
@@ -542,27 +575,21 @@ export class IRCClient {
             }
             if (caps.length > 0) this.onCapChange?.();
             if (this._capReqPending > 0) this._capReqPending--;
-            if (caps.includes('sasl') && (this.opts.password || this.opts.hasClientCert)) {
-              this._saslPending = true;
+            if (caps.includes('sasl') && (
+              this.opts.saslSessionToken || this.opts.password || this.opts.hasClientCert
+            )) {
               const mech = selectSaslMechanism(this._saslMechs, {
                 hasPassword: Boolean(this.opts.password),
                 hasClientCert: Boolean(this.opts.hasClientCert),
+                hasSessionToken: Boolean(this.opts.saslSessionToken),
               });
               if (mech) {
-                this._saslMech = mech;
-                this.sendRaw('AUTHENTICATE', mech);
+                this._startSasl(mech);
               } else {
                 this.opts.onError?.(`No supported SASL mechanism offered (${this._saslMechs.join(', ') || 'none'})`);
                 this.ws?.close(4003, 'Unsupported SASL mechanism');
                 return;
               }
-              // Guard against server never responding to AUTHENTICATE
-              this._saslTimer = setTimeout(() => {
-                this.opts.onError?.('SASL authentication timed out');
-                this._saslPending = false;
-                this._saslMech = null;
-                this._finishCap();
-              }, 15_000);
             } else {
               this._finishCapIfReady();
             }
@@ -613,10 +640,14 @@ export class IRCClient {
 
       case 'AUTHENTICATE': {
         const param = msg.params[0] ?? '';
-        if (this._saslMech === 'PLAIN') {
+        if (this._saslMech === 'SESSION-TOKEN') {
+          if (param === '+' && this.opts.saslSessionToken) {
+            this.sendRaw('AUTHENTICATE', btoa(`${this._authcid}\0${this.opts.saslSessionToken}`));
+          }
+        } else if (this._saslMech === 'PLAIN') {
           if (param === '+') {
-            // Use _authNick for the same reason — post-433, opts.nick is the alias.
-            const nick = this._authNick;
+            // Use the stable account identity, not a post-433 nick alias.
+            const nick = this._authcid;
             const pass = this.opts.password ?? '';
             const plain = btoa(`\0${nick}\0${pass}`);
             this.sendRaw('AUTHENTICATE', plain);
@@ -669,10 +700,17 @@ export class IRCClient {
       case '905':
         if (this._saslPending || this._saslMech) {
           if (this._saslTimer) { clearTimeout(this._saslTimer); this._saslTimer = null; }
+          const rejectedSessionToken = this._saslMech === 'SESSION-TOKEN';
+          if (this._retryAfterSaslSessionTokenFailure(true)) break;
           this._saslPending = false;
           this._saslMech = null;
           this._scramState = null;
           this._scramServerSig = null;
+          if (rejectedSessionToken) {
+            this.opts.onError?.('Orochi session token was rejected; enter the account password to reconnect.');
+            this.ws?.close(4003, 'SASL session token rejected');
+            break;
+          }
           this._finishCapIfReady();
         }
         break;
@@ -733,7 +771,7 @@ export class IRCClient {
           }
           this.sendRaw('SESSION', 'TOKEN');
         }
-        this.opts.onConnected?.();
+        this.opts.onConnected?.(msg);
         break;
 
       case '005':
@@ -790,6 +828,46 @@ export class IRCClient {
     }
   }
 
+  private _startSasl(mechanism: SaslMechanism): void {
+    if (this._saslTimer) clearTimeout(this._saslTimer);
+    this._saslPending = true;
+    this._saslMech = mechanism;
+    this._scramState = null;
+    this._scramServerSig = null;
+    this.sendRaw('AUTHENTICATE', mechanism);
+    this._saslTimer = setTimeout(() => {
+      this._saslTimer = null;
+      const sessionTokenAttempt = this._saslMech === 'SESSION-TOKEN';
+      // A stalled token exchange may be a transient server problem, so retry
+      // with the password for this connection without deleting the token.
+      if (this._retryAfterSaslSessionTokenFailure(false)) return;
+      this.opts.onError?.('SASL authentication timed out');
+      this._saslPending = false;
+      this._saslMech = null;
+      if (sessionTokenAttempt) {
+        this.ws?.close(4003, 'SASL session token timed out');
+        return;
+      }
+      this._finishCap();
+    }, 15_000);
+  }
+
+  private _retryAfterSaslSessionTokenFailure(clearStoredToken: boolean): boolean {
+    if (this._saslMech !== 'SESSION-TOKEN') return false;
+    const fallback = selectSaslMechanism(this._saslMechs, {
+      hasPassword: Boolean(this.opts.password),
+      hasClientCert: Boolean(this.opts.hasClientCert),
+      hasSessionToken: false,
+    });
+    if (clearStoredToken) {
+      this.opts.saslSessionToken = undefined;
+      try { this.opts.onSaslSessionTokenRejected?.(fallback !== null); } catch { /* storage callback */ }
+    }
+    if (!fallback) return false;
+    this._startSasl(fallback);
+    return true;
+  }
+
   private _requestCaps(caps: string[]) {
     const uniqueCaps = [...new Set(caps)]
       .filter(c => !this.negotiatedCaps.has(c))
@@ -822,15 +900,17 @@ export class IRCClient {
   private _wantedCaps(caps: string[]) {
     return [...new Set(caps)].filter(cap => {
       // ── Always-off caps ──────────────────────────────────────────────────
-      // STARTTLS upgrade: Ocean already uses WSS; requesting this is wrong.
+      // STARTTLS upgrade: DarkBear already uses WSS; requesting this is wrong.
       if (cap === 'tls') return false;
       // sts (Strict Transport Security): an informational cap whose value is the
       // transport policy. It is advertised, not negotiated — Orochi NAKs a REQ
       // for it. The TLS upgrade is already implicit in the wss:// endpoint.
       if (cap === 'sts') return false;
       // SASL: only request when we have credentials to send.
-      if (cap === 'sasl') return Boolean(this.opts.password || this.opts.hasClientCert);
-      // no-implicit-names: Ocean relies on the automatic 353 NAMREPLY on
+      if (cap === 'sasl') {
+        return Boolean(this.opts.saslSessionToken || this.opts.password || this.opts.hasClientCert);
+      }
+      // no-implicit-names: DarkBear relies on the automatic 353 NAMREPLY on
       // JOIN to populate the member list; opting in would suppress it.
       if (cap === 'no-implicit-names') return false;
 
@@ -844,15 +924,15 @@ export class IRCClient {
       // the server-side SEARCH command (results replay as a chathistory-shaped
       // batch, diverted into serverSearch.results); the MessageSearch bar
       // exposes it as "Search full history".
-      // labeled-response: no @label= request/response correlation in Ocean.
+      // labeled-response: no @label= request/response correlation in DarkBear.
       if (cap === 'labeled-response') return false;
       // draft/channel-rename: requested — the store handles the native
       // `:renamer RENAME #old #new [:reason]` line and migrates channel state
       // (messages, membership, unread, active view) under the new key.
-      // draft/file-upload: Ocean uses HTTP POST to a media server;
+      // draft/file-upload: DarkBear uses HTTP POST to a media server;
       // the IRC-level file-upload protocol is not implemented.
       if (cap === 'draft/file-upload') return false;
-      // bot: Ocean is a human client, not a bot.
+      // bot: DarkBear is a human client, not a bot.
       if (cap === 'bot') return false;
       // draft/read-marker: requested when offered — enables MARKREAD send/receive
       // so the read position (see setReadMarker/onReadMarker) syncs across this
@@ -878,7 +958,7 @@ export class IRCClient {
     const nonce = btoa(String.fromCharCode(...arr)).replace(/[+/=]/g, c =>
       c === '+' ? '-' : c === '/' ? '_' : ''
     );
-    const clientFirstMsgBare = `n=${this._authNick},r=${nonce}`;
+    const clientFirstMsgBare = `n=${this._authcid},r=${nonce}`;
     this._scramState = { clientFirstMsgBare, nonce, hash, bits };
     const msg = `n,,${clientFirstMsgBare}`;
     this.sendRaw('AUTHENTICATE', btoa(msg));

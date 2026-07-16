@@ -16,6 +16,11 @@ import type { Mock } from 'vitest';
 import { parseIRCMessage } from '@/lib/irc/parser';
 import type { IRCClientOptions, IRCEventHandler } from '@/lib/irc/client';
 import type { WeeChatBuffer, WeeChatLine } from '@/lib/weechat/model';
+import {
+  PREFERENCE_MANIFEST_KEY,
+  createPreferenceDocument,
+  encodePreferenceMetadata,
+} from '@/lib/preferences/sync';
 
 // ── fakes + capture harness ─────────────────────────────────────────────────
 
@@ -29,6 +34,10 @@ interface FakeBridgeClient {
   tagmsg: Mock;
   privmsg: Mock;
   sendRaw: Mock;
+  setSaslSessionToken: Mock;
+  negotiatedCaps: Set<string>;
+  loggedIn: boolean;
+  sessionSyncActive: boolean;
 }
 
 interface RelayObserverShape {
@@ -50,8 +59,12 @@ vi.mock('@/lib/irc/client', () => {
     destroy = vi.fn();
     join = vi.fn();
     tagmsg = vi.fn();
-    privmsg = vi.fn();
-    sendRaw = vi.fn();
+    privmsg = vi.fn(() => true);
+    sendRaw = vi.fn(() => true);
+    setSaslSessionToken = vi.fn();
+    negotiatedCaps = new Set(['draft/metadata-2']);
+    loggedIn = true;
+    sessionSyncActive = false;
     constructor(opts: IRCClientOptions) {
       this.opts = opts;
       this.currentNick = opts.nick;
@@ -72,16 +85,19 @@ vi.mock('@/state/connection', () => ({
 vi.mock('@/state/media', () => ({
   _attachBridgeClient: vi.fn(),
   _setMediaAvailable: vi.fn(),
+  _setMediaTransportConnected: vi.fn(),
   hangup: vi.fn(),
-  joinRoom: vi.fn(),
-  startCall: vi.fn(),
+  requestRoomJoin: vi.fn(),
+  requestStartCall: vi.fn(),
 }));
 
 vi.mock('@/lib/credentials', () => ({
+  clearSaslSessionToken: vi.fn(),
   loadCredentials: vi.fn(() => null),
   saveCredentials: vi.fn(),
   storeSessionToken: vi.fn(),
   storeMeshToken: vi.fn(),
+  storeSaslSessionToken: vi.fn(),
 }));
 
 vi.mock('@/lib/irc/nodes', () => ({
@@ -173,7 +189,10 @@ interface Ctx {
   deliver: (line: string) => void;
 }
 
-async function setup(): Promise<Ctx> {
+async function setup(options: {
+  sessionSyncActive?: boolean;
+  deferWelcome?: boolean;
+} = {}): Promise<Ctx> {
   // vi.resetModules() re-evaluates UNMOCKED modules only — mocked modules
   // (and the real buffers store wrapped inside the @/state/buffers mock)
   // persist across tests. Clear mock call histories and store state
@@ -185,19 +204,25 @@ async function setup(): Promise<Ctx> {
   if (typeof localStorage !== 'undefined') localStorage.clear();
 
   const settings = await import('@/state/settings');
-  settings.updateBridge({ enabled: true, wsUrl: 'wss://bridge.test.invalid' });
+  settings.updateBridge({ enabled: true, wsUrl: 'wss://bridge.test.invalid', account: 'kain' });
 
   const buffers = await import('@/state/buffers');
   buffers.clearBuffers(); // the wrapped real store persists across tests
   const bridge = await import('@/state/bridge');
   const credentials = await import('@/lib/credentials');
+  vi.mocked(credentials.loadCredentials).mockReturnValue(null);
   const media = await import('@/state/media');
   const core = await import('@/core/bridge');
   core.initBridge();
 
   const client = harness.clients[0] as FakeBridgeClient | undefined;
   if (!client) throw new Error('bridge did not dial its IRCClient');
-  client.opts.onConnected?.(); // 001 welcome
+  client.sessionSyncActive = options.sessionSyncActive ?? false;
+  if (!options.deferWelcome) {
+    client.opts.onConnected?.(
+      parseIRCMessage(`:orochi.test 001 ${client.currentNick} :Welcome to Orochi`),
+    );
+  }
 
   // Relay world: server buffer + channel buffer + DM query on an orochi server.
   buffers.upsertBuffer(
@@ -219,6 +244,44 @@ async function setup(): Promise<Ctx> {
   return { client, buffers, bridge, credentials, media, deliver };
 }
 
+describe('bridge transport guard', () => {
+  it('fails before dialing when remote WS would expose authentication or reclaim credentials', async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    harness.clients.length = 0;
+    harness.observer = null;
+    if (typeof localStorage !== 'undefined') localStorage.clear();
+    if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
+
+    const settings = await import('@/state/settings');
+    settings.updateBridge({
+      enabled: true,
+      wsUrl: 'ws://bridge.test.invalid',
+      account: 'kain',
+      password: 'not-for-plaintext',
+    });
+    const credentials = await import('@/lib/credentials');
+    vi.mocked(credentials.loadCredentials).mockReturnValue({
+      nick: 'kain',
+      server: 'ws://bridge.test.invalid',
+      saslSessionToken: 'sst_secret',
+      sessionToken: 'logical-secret',
+      meshToken: 'mesh-secret',
+      savedAt: new Date(0).toISOString(),
+    });
+    const bridge = await import('@/state/bridge');
+    const core = await import('@/core/bridge');
+
+    core.initBridge();
+
+    expect(harness.clients).toHaveLength(0);
+    expect(bridge.bridgeState).toMatchObject({
+      status: 'error',
+      error: core.INSECURE_BRIDGE_TRANSPORT_ERROR,
+    });
+  });
+});
+
 // ── welcome ──────────────────────────────────────────────────────────────────
 
 describe('bridge welcome', () => {
@@ -228,8 +291,114 @@ describe('bridge welcome', () => {
     expect(client.sendRaw).toHaveBeenCalledWith('EVENT', 'ADD', 'MEDIA', '*');
     expect(bridge.bridgeState.status).toBe('ready');
     expect(vi.mocked(media._setMediaAvailable)).toHaveBeenCalledWith(true);
+    expect(vi.mocked(media._setMediaTransportConnected)).toHaveBeenCalledWith(true);
     // The mirrored relay channel gets JOINed on this session.
     expect(client.join).toHaveBeenCalledWith('#dbtest19036');
+  });
+
+  it('lets Orochi session-sync restore channels without a competing JOIN storm', async () => {
+    const { client } = await setup({ sessionSyncActive: true });
+    expect(client.join).not.toHaveBeenCalled();
+  });
+
+  it('reports transient bridge loss and recovery to the mounted media engine', async () => {
+    const { client, media } = await setup();
+    vi.mocked(media._setMediaTransportConnected).mockClear();
+
+    client.opts.onDisconnected?.('socket lost');
+    expect(vi.mocked(media._setMediaTransportConnected)).toHaveBeenCalledWith(false);
+
+    client.opts.onConnected?.(
+      parseIRCMessage(`:orochi.test 001 ${client.currentNick} :Welcome to Orochi`),
+    );
+    expect(vi.mocked(media._setMediaTransportConnected)).toHaveBeenLastCalledWith(true);
+  });
+
+  it('stops reconnecting when a token-only account needs a password again', async () => {
+    const { client, bridge } = await setup();
+    client.opts.onSaslSessionTokenRejected?.(false);
+    client.opts.onDisconnected?.('SASL session token rejected');
+
+    expect(client.destroy).toHaveBeenCalledOnce();
+    expect(bridge.bridgeState).toMatchObject({
+      status: 'error',
+      error: 'Orochi session expired. Enter the account password to reconnect.',
+    });
+  });
+
+  it('gates account preference sync on metadata capability and applies a complete LIST', async () => {
+    const { client, deliver } = await setup();
+    expect(client.sendRaw).toHaveBeenCalledWith('METADATA', '*', 'LIST');
+
+    const remote = createPreferenceDocument({
+      appearance: { theme: 'nord' },
+      accessibility: {
+        fontFamily: 'serif', fontSize: 18, sceneMotion: 'reduced', readMarker: false,
+      },
+      notifications: { enabled: false, sound: true, readOnFocus: false },
+      buffers: { 'irc.eshmaki.#dbtest19036': { pinned: true, notify: 'all' } },
+      read: { '#dbtest19036': 1_700_000_000_000 },
+    }, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 1000, 10);
+    for (const entry of encodePreferenceMetadata(remote)) {
+      deliver(`:eshmaki.me 761 ${client.currentNick} * ${entry.key} secret :${entry.value}`);
+    }
+    deliver(`:eshmaki.me 762 ${client.currentNick} :end of metadata`);
+
+    const settings = await import('@/state/settings');
+    const preferenceSync = await import('@/state/preferenceSync');
+    expect(settings.settings.theme).toBe('nord');
+    expect(settings.settings.fontSize).toBe(18);
+    expect(preferenceSync.preferenceSyncState.status).toBe('synced');
+  });
+
+  it('publishes an initial account snapshot with secret visibility after an empty LIST', async () => {
+    const { client, deliver } = await setup();
+    deliver(`:eshmaki.me 762 ${client.currentNick} :end of metadata`);
+
+    const publish = client.sendRaw.mock.calls.find((args) =>
+      args[0] === 'METADATA' && args[1] === '*' && args[2] === 'SET' &&
+      args[3] === PREFERENCE_MANIFEST_KEY,
+    );
+    expect(publish?.[4]).toBe('secret');
+    expect(new TextEncoder().encode(String(publish?.[5] ?? '')).byteLength).toBeLessThanOrEqual(512);
+  });
+});
+
+describe('outbound delivery acknowledgement', () => {
+  it('propagates direct reply acceptance and rejection from the IRC socket', async () => {
+    const { client } = await setup();
+    (harness.observer as RelayObserverShape).onChannelBufferOpened?.('eshmaki', '#dbtest19036');
+    const { sendReply } = await import('@/core/bridge');
+
+    client.sendRaw.mockReturnValueOnce(true);
+    expect(sendReply('0xchan', 'accepted reply', 'parent-msgid')).toBe(true);
+    expect(client.sendRaw).toHaveBeenLastCalledWith(
+      '@+draft/reply=parent-msgid PRIVMSG',
+      '#dbtest19036',
+      'accepted reply',
+    );
+
+    client.sendRaw.mockReturnValueOnce(false);
+    expect(sendReply('0xchan', 'retain reply', 'parent-msgid')).toBe(false);
+  });
+
+  it('only applies a local reaction when the direct TAGMSG reaches the socket', async () => {
+    const { client, bridge, buffers } = await setup();
+    (harness.observer as RelayObserverShape).onChannelBufferOpened?.('eshmaki', '#dbtest19036');
+
+    client.tagmsg.mockReturnValueOnce(false);
+    bridge.sendReactionTag('0xchan', 'rejected-msgid', '👍');
+    expect(client.tagmsg).toHaveBeenLastCalledWith(
+      '#dbtest19036',
+      { '+draft/react': '👍', '+draft/reply': 'rejected-msgid' },
+    );
+    expect(buffers.buffersState.buffers['0xchan']?.reactions['rejected-msgid']).toBeUndefined();
+
+    client.tagmsg.mockReturnValueOnce(true);
+    bridge.sendReactionTag('0xchan', 'accepted-msgid', '🚀');
+    expect(buffers.buffersState.buffers['0xchan']?.reactions['accepted-msgid']).toEqual([
+      { emoji: '🚀', nicks: [client.currentNick] },
+    ]);
   });
 });
 
@@ -396,8 +565,19 @@ describe('METADATA peer keys', () => {
 describe('NOTE routing', () => {
   it('stores NOTE SESSION TOKEN', async () => {
     const { deliver, credentials } = await setup();
-    deliver(':eshmaki.me NOTE SESSION TOKEN :tok-abc123');
+    deliver(':orochi.test NOTE SESSION TOKEN :tok-abc123');
     expect(vi.mocked(credentials.storeSessionToken)).toHaveBeenCalledWith('tok-abc123');
+  });
+
+  it('rejects session reclaim tokens from any prefix except the authenticated server', async () => {
+    const { deliver, credentials } = await setup();
+
+    deliver(':mallory!user@host NOTE SESSION TOKEN :tok-user');
+    deliver(':unrelated.example NOTE SESSION TOKEN :tok-other-server');
+    deliver(':mallory!user@host NOTE SESSION MTOKEN :mesh-user');
+
+    expect(vi.mocked(credentials.storeSessionToken)).not.toHaveBeenCalled();
+    expect(vi.mocked(credentials.storeMeshToken)).not.toHaveBeenCalled();
   });
 
   it('passes EVENT MEDIA lines through untouched', async () => {
@@ -408,5 +588,54 @@ describe('NOTE routing', () => {
       deliver(serverLine('EVENT dbtA3950 MEDIA JOIN #dbtest19036 dbtA3950 voice'));
     }).not.toThrow();
     expect(vi.mocked(credentials.storeSessionToken)).not.toHaveBeenCalled();
+  });
+});
+
+describe('SASL SESSION-TOKEN routing', () => {
+  it('accepts the pre-001 token after authenticated SASL-success protocol evidence', async () => {
+    const { deliver, client, credentials } = await setup({ deferWelcome: true });
+    const token = 'sst_0123456789abcdef0123456789abcdef';
+
+    deliver(`:mallory!user@evil.example NOTICE ${client.currentNick} :SESSIONTOKEN kain ${token} expires=1784217600`);
+    expect(client.setSaslSessionToken).not.toHaveBeenCalled();
+    expect(vi.mocked(credentials.storeSaslSessionToken)).not.toHaveBeenCalled();
+
+    // IRCClient marks loggedIn before fanning the real 903 out to the bridge.
+    deliver(`:orochi.test 903 ${client.currentNick} :SASL authentication successful`);
+    deliver(`:orochi.test NOTICE ${client.currentNick} :SESSIONTOKEN kain ${token} expires=1784217600`);
+
+    expect(client.setSaslSessionToken).toHaveBeenCalledWith(token);
+    expect(vi.mocked(credentials.storeSaslSessionToken)).toHaveBeenCalledWith(
+      token,
+      1_784_217_600,
+      'kain',
+    );
+  });
+
+  it('stores a bounded credential only from the exact server identity learned from 001', async () => {
+    const { deliver, client, credentials } = await setup();
+    const token = 'sst_0123456789abcdef0123456789abcdef';
+    deliver(`:orochi.test NOTICE ${client.currentNick} :SESSIONTOKEN kain ${token} expires=1784217600`);
+
+    expect(client.setSaslSessionToken).toHaveBeenCalledWith(token);
+    expect(vi.mocked(credentials.storeSaslSessionToken)).toHaveBeenCalledWith(
+      token,
+      1_784_217_600,
+      'kain',
+    );
+  });
+
+  it('rejects matching token text from user and unrelated server prefixes', async () => {
+    const { deliver, client, credentials } = await setup();
+    const token = 'sst_0123456789abcdef0123456789abcdef';
+    const text = `SESSIONTOKEN kain ${token} expires=1784217600`;
+
+    deliver(`:mallory!user@evil.example NOTICE ${client.currentNick} :${text}`);
+    deliver(`:orochi.test!user@evil.example NOTICE ${client.currentNick} :${text}`);
+    deliver(`:orochi.test.evil NOTICE ${client.currentNick} :${text}`);
+    deliver(`:orochi.test NOTICE somebody-else :${text}`);
+
+    expect(client.setSaslSessionToken).not.toHaveBeenCalled();
+    expect(vi.mocked(credentials.storeSaslSessionToken)).not.toHaveBeenCalled();
   });
 });

@@ -29,11 +29,15 @@ vi.mock('@/state/media', () => ({
     spotlightNick: null,
     error: null,
     mediaAvailable: true,
+    preflight: { open: false },
   },
   joinRoom: vi.fn(),
   leaveRoom: vi.fn(),
   startCall: vi.fn(),
   acceptCall: vi.fn(),
+  requestRoomJoin: vi.fn(),
+  requestStartCall: vi.fn(),
+  requestAcceptCall: vi.fn(),
   rejectCall: vi.fn(),
   hangup: vi.fn(),
   toggleMute: vi.fn(),
@@ -149,5 +153,19 @@ describe('UserList', () => {
     expect(getByText('voice1')).toBeInTheDocument();
     expect(queryByText('op1')).toBeNull();
     expect(queryByText('reg1')).toBeNull();
+  });
+
+  it('does not clear the user filter when IME composition emits Escape', () => {
+    const { getByPlaceholderText, getByText } = render(() => <UserList />);
+    const input = getByPlaceholderText('Search users...');
+    fireEvent.input(input, { target: { value: 'voice' } });
+
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true });
+    expect(input).toHaveValue('voice');
+    expect(getByText('voice1')).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(input).toHaveValue('');
+    expect(getByText('op1')).toBeInTheDocument();
   });
 });

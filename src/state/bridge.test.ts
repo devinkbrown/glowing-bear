@@ -9,12 +9,16 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   canE2ee,
+  dmSecurityFor,
+  forgetPeerDmTrust,
   decryptedFor,
   markRead,
   sendReactionTag,
   sendTyping,
   sendE2eeDm,
+  verifyPeerDmKey,
   _setBridgeBackend,
+  _setBridgeCryptoScope,
   _setBridgeState,
   _setPeerDmKey,
   _ingestEncryptedDm,
@@ -41,9 +45,9 @@ function makeBackend(over: Partial<BridgeBackend> = {}): BridgeBackend & { [K in
     ready: vi.fn(() => true),
     ownNick: vi.fn(() => 'me'),
     targetForBuffer: vi.fn((ptr: string) => (ptr === '0xchan' ? '#room' : null)),
-    sendTagmsg: vi.fn(),
-    sendPrivmsg: vi.fn(),
-    sendRaw: vi.fn(),
+    sendTagmsg: vi.fn(() => true),
+    sendPrivmsg: vi.fn(() => true),
+    sendRaw: vi.fn(() => true),
     requestPeerDmKey: vi.fn(),
     ensureReady: vi.fn(),
     ...over,
@@ -101,6 +105,16 @@ describe('typing / reactions / read markers', () => {
     expect(buffersState.buffers['0xchan']?.reactions['MID1']).toEqual([{ emoji: '👍', nicks: ['me'] }]);
   });
 
+  it('does not add an optimistic reaction when the socket rejects the TAGMSG', () => {
+    const be = makeBackend({ sendTagmsg: vi.fn(() => false) });
+    _setBridgeBackend(be);
+
+    sendReactionTag('0xchan', 'MID1', '👍');
+
+    expect(be.sendTagmsg).toHaveBeenCalledWith('#room', { '+draft/react': '👍', '+draft/reply': 'MID1' });
+    expect(buffersState.buffers['0xchan']?.reactions['MID1']).toBeUndefined();
+  });
+
   it('markRead sends MARKREAD with an ISO timestamp', () => {
     const be = makeBackend();
     _setBridgeBackend(be);
@@ -147,6 +161,51 @@ describe('canE2ee', () => {
     _setPeerDmKey('trev', 'BSomeKeyB64');
     _setPeerDmKey('trev', null);
     expect(canE2ee('trev')).toBe(false);
+  });
+});
+
+describe('peer key verification', () => {
+  it('pins a valid peer key and detects a later rotation without trusting it', async () => {
+    const scope = `wss://trust-${Date.now()}.example/irc\nme`;
+    _setBridgeCryptoScope(scope);
+    const first = await deviceKeys();
+    expect(first).not.toBeNull();
+    _setPeerDmKey('alice', first!.publicB64);
+
+    for (let index = 0; index < 20 && dmSecurityFor('alice').status === 'loading'; index++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(dmSecurityFor('alice').status).toBe('unverified');
+    expect(await verifyPeerDmKey('alice')).toBe(true);
+    expect(dmSecurityFor('alice').status).toBe('verified');
+
+    const rotatedRaw = new Uint8Array(65);
+    rotatedRaw[0] = 0x04;
+    crypto.getRandomValues(rotatedRaw.subarray(1));
+    const rotated = btoa(String.fromCharCode(...rotatedRaw))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    _setPeerDmKey('ALICE', rotated);
+    for (let index = 0; index < 20 && dmSecurityFor('alice').status === 'loading'; index++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    expect(dmSecurityFor('alice').status).toBe('changed');
+    expect(dmSecurityFor('alice').currentFingerprint)
+      .not.toBe(dmSecurityFor('alice').pinnedFingerprint);
+  });
+
+  it('can remove a verification without deleting the observed peer key', async () => {
+    const scope = `wss://forget-${Date.now()}.example/irc\nme`;
+    _setBridgeCryptoScope(scope);
+    const key = await deviceKeys();
+    _setPeerDmKey('bob', key!.publicB64);
+    expect(await verifyPeerDmKey('bob')).toBe(true);
+    expect(await forgetPeerDmTrust('bob')).toBe(true);
+    for (let index = 0; index < 20 && dmSecurityFor('bob').status === 'loading'; index++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(dmSecurityFor('bob').status).toBe('unverified');
+    expect(canE2ee('bob')).toBe(true);
   });
 });
 
@@ -247,7 +306,10 @@ describe('E2EE DM round-trip (real cipher, fake-indexeddb)', () => {
     const sent: Array<[string, string]> = [];
     const be = makeBackend({
       ready: vi.fn(() => true),
-      sendPrivmsg: vi.fn((target: string, text: string) => sent.push([target, text])),
+      sendPrivmsg: vi.fn((target: string, text: string) => {
+        sent.push([target, text]);
+        return true;
+      }),
     });
     _setBridgeBackend(be);
     _setPeerDmKey('peer', peerPub);
@@ -315,5 +377,18 @@ describe('E2EE DM round-trip (real cipher, fake-indexeddb)', () => {
     const be = makeBackend();
     _setBridgeBackend(be);
     expect(await sendE2eeDm('peer', 'hi')).toBe(false);
+  });
+
+  it('retains E2EE plaintext responsibility when the socket rejects the envelope', async () => {
+    updateBridge({ enabled: true, e2eeDms: true });
+    const dev = await deviceKeys();
+    _setPeerDmKey('peer', dev!.publicB64);
+    const be = makeBackend({ sendPrivmsg: vi.fn(() => false) });
+    _setBridgeBackend(be);
+
+    expect(await sendE2eeDm('peer', 'keep this secret')).toBe(false);
+    const envelope = vi.mocked(be.sendPrivmsg).mock.calls[0]?.[1];
+    expect(envelope).toMatch(/^TSUMUGI1 /);
+    expect(decryptedFor(undefined, envelope!)).toBeNull();
   });
 });

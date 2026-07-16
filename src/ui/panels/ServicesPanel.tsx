@@ -12,37 +12,88 @@
 //   CHANNEL REGISTER|INFO|AKICK|DROP <#chan> … (SET/ACCESS/TRANSFER via raw row)
 //   TEGAMI LIST|CLEAR|SEND <account> :<msg>
 
-import { createSignal, For, Show } from 'solid-js';
+import { createSignal, createUniqueId, For, Show } from 'solid-js';
 import type { JSX } from 'solid-js';
-import { buffersState, ircxState, sendTo } from '@/state';
+import {
+  buffersState,
+  clearServiceFeedback,
+  ircxState,
+  recordServiceFeedback,
+  sendTo,
+} from '@/state';
+import { formatNumber, t } from '@/lib/i18n';
+import { isImeComposing } from '@/primitives/ime';
 import Modal from '@/ui/bits/Modal';
 
 type ServicesTab = 'account' | 'channel' | 'memo';
+const SERVICES_TABS: readonly ServicesTab[] = ['account', 'channel', 'memo'];
+const MAX_SERVICE_COMMAND_LENGTH = 2_048;
 
 /**
  * Send a raw command (via /quote) to the server buffer of the active buffer.
  * Mirrors the state layer's internal server-buffer routing.
  */
-function sendRaw(cmd: string): void {
+function sendRaw(cmd: string): boolean {
   const active = buffersState.activeBuffer;
-  if (!active) return;
+  if (!active) return false;
   const entry = buffersState.buffers[active];
-  if (!entry) return;
+  if (!entry) return false;
+  const serverName = entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
+  const command = cmd.trim();
+  const invalid = command.length > MAX_SERVICE_COMMAND_LENGTH || /[\u0000-\u001f\u007f]/.test(command);
+  if (!command || invalid) {
+    if (serverName && invalid) {
+      const verb = /^[a-z][a-z\d-]{0,31}/i.exec(command)?.[0]?.toUpperCase() ?? 'SERVICES';
+      recordServiceFeedback(serverName, {
+        kind: 'error',
+        command: verb,
+        code: 'CLIENT_INVALID_INPUT',
+        message: command.length > MAX_SERVICE_COMMAND_LENGTH
+          ? t('services.commandTooLong', { count: formatNumber(MAX_SERVICE_COMMAND_LENGTH) })
+          : t('services.commandControls'),
+      });
+    }
+    return false;
+  }
+
+  const dispatch = (bufferPointer: string): boolean => {
+    if (sendTo(bufferPointer, `/quote ${command}`)) return true;
+    if (serverName) {
+      const verb = /^[a-z][a-z\d-]{0,31}/i.exec(command)?.[0]?.toUpperCase() ?? 'SERVICES';
+      recordServiceFeedback(serverName, {
+        kind: 'error',
+        command: verb,
+        code: 'CLIENT_NOT_CONNECTED',
+        message: t('services.clientNotConnected'),
+      });
+    }
+    return false;
+  };
 
   if (entry.buffer.localVars['type'] === 'server') {
-    sendTo(entry.buffer.id, `/quote ${cmd}`);
-    return;
+    return dispatch(entry.buffer.id);
   }
-  const serverName = entry.buffer.localVars['server'] ?? '';
   for (const e of Object.values(buffersState.buffers)) {
     if (e.buffer.localVars['type'] === 'server') {
       const sn = e.buffer.localVars['server'] ?? e.buffer.localVars['network'] ?? '';
       if (sn === serverName) {
-        sendTo(e.buffer.id, `/quote ${cmd}`);
-        return;
+        return dispatch(e.buffer.id);
       }
     }
   }
+  return false;
+}
+
+function memoLine(text: string): string {
+  return text.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function activeServerName(): string {
+  const active = buffersState.activeBuffer;
+  if (!active) return '';
+  const entry = buffersState.buffers[active];
+  if (!entry) return '';
+  return entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
 }
 
 interface Props {
@@ -56,23 +107,160 @@ export default function ServicesPanel(props: Props) {
     : ircxState.servicesPanel === 'memo' ? 'memo'
     : 'account';
   const [tab, setTab] = createSignal<ServicesTab>(initial);
+  const tabGroupId = createUniqueId();
+  const tabRefs: Partial<Record<ServicesTab, HTMLButtonElement>> = {};
+  let scrollRegion: HTMLDivElement | undefined;
+
+  const tabId = (value: ServicesTab): string => `${tabGroupId}-tab-${value}`;
+  const panelId = (value: ServicesTab): string => `${tabGroupId}-panel-${value}`;
+  const selectTab = (value: ServicesTab, focus = false): void => {
+    setTab(value);
+    queueMicrotask(() => {
+      scrollRegion?.scrollTo?.({ top: 0 });
+      if (focus) tabRefs[value]?.focus();
+    });
+  };
+  const onTabKeyDown = (
+    current: ServicesTab,
+    event: KeyboardEvent & { currentTarget: HTMLButtonElement },
+  ): void => {
+    if (isImeComposing(event)) return;
+    const index = SERVICES_TABS.indexOf(current);
+    const rtl = getComputedStyle(event.currentTarget).direction === 'rtl' || document.documentElement.dir === 'rtl';
+    let nextIndex: number | undefined;
+    if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = SERVICES_TABS.length - 1;
+    else if (event.key === 'ArrowLeft') nextIndex = index + (rtl ? 1 : -1);
+    else if (event.key === 'ArrowRight') nextIndex = index + (rtl ? -1 : 1);
+    if (nextIndex === undefined) return;
+    event.preventDefault();
+    const wrapped = (nextIndex + SERVICES_TABS.length) % SERVICES_TABS.length;
+    selectTab(SERVICES_TABS[wrapped]!, true);
+  };
 
   return (
-    <Modal open={props.open ?? true} onClose={props.onClose} title="Services" wide>
-      <div>
-        <div class="flex border-b border-white/[0.06] mb-4">
-          <TabBtn active={tab() === 'account'} onClick={() => setTab('account')}>Account</TabBtn>
-          <TabBtn active={tab() === 'channel'} onClick={() => setTab('channel')}>Channel</TabBtn>
-          <TabBtn active={tab() === 'memo'} onClick={() => setTab('memo')}>Memo</TabBtn>
+    <Modal open={props.open ?? true} onClose={props.onClose} title={t('services.title')} wide>
+      <div
+        ref={(element) => (scrollRegion = element)}
+        data-testid="services-scroll-region"
+        class="max-h-[calc(85dvh-57px)] overflow-y-auto overflow-x-hidden overscroll-contain"
+      >
+        <div
+          role="tablist"
+          aria-label={t('services.title')}
+          aria-orientation="horizontal"
+          class="sticky top-0 z-10 flex max-w-full overflow-x-auto border-b border-white/[0.06] bg-gray-900"
+        >
+          <TabBtn
+            ref={(element) => { tabRefs.account = element; }}
+            id={tabId('account')}
+            controls={panelId('account')}
+            active={tab() === 'account'}
+            onClick={() => selectTab('account')}
+            onKeyDown={(event) => onTabKeyDown('account', event)}
+          >
+            {t('services.account')}
+          </TabBtn>
+          <TabBtn
+            ref={(element) => { tabRefs.channel = element; }}
+            id={tabId('channel')}
+            controls={panelId('channel')}
+            active={tab() === 'channel'}
+            onClick={() => selectTab('channel')}
+            onKeyDown={(event) => onTabKeyDown('channel', event)}
+          >
+            {t('services.channel')}
+          </TabBtn>
+          <TabBtn
+            ref={(element) => { tabRefs.memo = element; }}
+            id={tabId('memo')}
+            controls={panelId('memo')}
+            active={tab() === 'memo'}
+            onClick={() => selectTab('memo')}
+            onKeyDown={(event) => onTabKeyDown('memo', event)}
+          >
+            {t('services.memo')}
+          </TabBtn>
         </div>
 
-        <div class="px-4 sm:px-5 pb-4">
-          <Show when={tab() === 'account'}><AccountTab /></Show>
-          <Show when={tab() === 'channel'}><ChannelTab /></Show>
-          <Show when={tab() === 'memo'}><MemoTab /></Show>
+        <div class="px-4 pt-4 sm:px-5">
+          <ServiceReplyLog serverName={activeServerName()} />
         </div>
+        <section
+          id={panelId('account')}
+          role="tabpanel"
+          aria-labelledby={tabId('account')}
+          hidden={tab() !== 'account'}
+          class="min-w-0 px-4 pb-4 sm:px-5"
+        >
+          <AccountTab />
+        </section>
+        <section
+          id={panelId('channel')}
+          role="tabpanel"
+          aria-labelledby={tabId('channel')}
+          hidden={tab() !== 'channel'}
+          class="min-w-0 px-4 pb-4 sm:px-5"
+        >
+          <ChannelTab />
+        </section>
+        <section
+          id={panelId('memo')}
+          role="tabpanel"
+          aria-labelledby={tabId('memo')}
+          hidden={tab() !== 'memo'}
+          class="min-w-0 px-4 pb-4 sm:px-5"
+        >
+          <MemoTab />
+        </section>
       </div>
     </Modal>
+  );
+}
+
+function ServiceReplyLog(props: { serverName: string }): JSX.Element {
+  const replies = () => ircxState.serviceFeedback
+    .filter((entry) => entry.serverName === props.serverName)
+    .slice(-4)
+    .reverse();
+
+  return (
+    <Show when={replies().length > 0}>
+      <section
+        aria-label={t('services.recentRepliesLabel')}
+        role="log"
+        aria-live="polite"
+        class="mb-4 rounded-xl border border-white/[0.07] bg-white/[0.02] overflow-hidden"
+      >
+        <div class="flex items-center justify-between px-3 py-2 border-b border-white/[0.05]">
+          <h4 class="text-[10px] font-bold uppercase tracking-wider text-gray-400">{t('services.recentReplies')}</h4>
+          <button
+            type="button"
+            onClick={() => clearServiceFeedback(props.serverName)}
+            class="text-[10px] text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {t('services.clear')}
+          </button>
+        </div>
+        <div class="divide-y divide-white/[0.04]">
+          <For each={replies()}>
+            {(reply) => (
+              <div
+                class={`flex items-start gap-2 px-3 py-2 text-[11px] ${
+                  reply.kind === 'error' ? 'text-red-300'
+                    : reply.kind === 'warning' ? 'text-amber-300'
+                      : reply.kind === 'success' ? 'text-emerald-300'
+                        : 'text-gray-300'
+                }`}
+              >
+                <span class="font-mono font-semibold shrink-0">{reply.command}</span>
+                <span class="text-gray-400 break-words min-w-0">{reply.message}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </section>
+    </Show>
   );
 }
 
@@ -110,139 +298,164 @@ function AccountTab(): JSX.Element {
 
   return (
     <div class="space-y-4">
-      <Section title="Register">
+      <Section title={t('services.register')}>
         <div class="space-y-2">
-          <Input placeholder="Account name" value={regAccount()} onChange={setRegAccount} />
-          <Input placeholder="Email (blank = none)" value={regEmail()} onChange={setRegEmail} />
+          <Input placeholder={t('services.accountName')} value={regAccount()} onChange={setRegAccount} />
+          <Input placeholder={t('services.emailOptional')} value={regEmail()} onChange={setRegEmail} />
           <div class="flex gap-2">
-            <Input placeholder="Password" type="password" value={regPass()} onChange={setRegPass} flex />
+            <Input placeholder={t('services.password')} type="password" autocomplete="new-password" value={regPass()} onChange={setRegPass} flex />
             <Btn
-              label="Register"
+              label={t('services.register')}
               disabled={!regAccount() || !regPass()}
-              onClick={() => sendRaw(`REGISTER ${regAccount()} ${regEmail().trim() || '*'} ${regPass()}`)}
+              onClick={() => {
+                if (sendRaw(`REGISTER ${regAccount()} ${regEmail().trim() || '*'} ${regPass()}`)) setRegPass('');
+              }}
             />
           </div>
           <div class="flex gap-2">
-            <Input placeholder="Verification token" value={verifyToken()} onChange={setVerifyToken} flex />
-            <Btn label="Verify" disabled={!verifyToken()} onClick={() => { sendRaw(`VERIFY ${verifyToken()}`); setVerifyToken(''); }} />
+            <Input placeholder={t('services.verificationToken')} autocomplete="one-time-code" value={verifyToken()} onChange={setVerifyToken} flex />
+            <Btn label={t('services.verify')} disabled={!verifyToken()} onClick={() => {
+              if (sendRaw(`VERIFY ${verifyToken()}`)) setVerifyToken('');
+            }} />
           </div>
         </div>
       </Section>
 
-      <Section title="Identify">
+      <Section title={t('services.identify')}>
         <div class="space-y-2">
-          <Input placeholder="Account (blank = current nick)" value={identAccount()} onChange={setIdentAccount} />
+          <Input placeholder={t('services.accountCurrentNick')} value={identAccount()} onChange={setIdentAccount} />
           <div class="flex gap-2">
-            <Input placeholder="Password" type="password" value={identPass()} onChange={setIdentPass} flex />
+            <Input placeholder={t('services.password')} type="password" autocomplete="current-password" value={identPass()} onChange={setIdentPass} flex />
             <Btn
-              label="Identify"
+              label={t('services.identify')}
               disabled={!identPass()}
-              onClick={() => sendRaw(identAccount() ? `IDENTIFY ${identAccount()} ${identPass()}` : `IDENTIFY ${identPass()}`)}
+              onClick={() => {
+                const sent = sendRaw(identAccount() ? `IDENTIFY ${identAccount()} ${identPass()}` : `IDENTIFY ${identPass()}`);
+                if (sent) setIdentPass('');
+              }}
             />
           </div>
           <div class="flex flex-wrap gap-2">
-            <SmallBtn label="Logout" onClick={() => sendRaw('LOGOUT')} />
-            <SmallBtn label="SASL Info" onClick={() => sendRaw('SASLINFO')} />
+            <SmallBtn label={t('services.logout')} onClick={() => sendRaw('LOGOUT')} />
+            <SmallBtn label={t('services.saslInfo')} onClick={() => sendRaw('SASLINFO')} />
           </div>
         </div>
       </Section>
 
-      <Section title="Info">
+      <Section title={t('services.info')}>
         <div class="flex gap-2">
-          <Input placeholder="Account (blank = self)" value={infoAccount()} onChange={setInfoAccount} flex />
-          <Btn label="Info" onClick={() => sendRaw(infoAccount() ? `ACCOUNTINFO ${infoAccount()}` : 'ACCOUNTINFO')} />
+          <Input placeholder={t('services.accountSelf')} value={infoAccount()} onChange={setInfoAccount} flex />
+          <Btn label={t('services.info')} onClick={() => sendRaw(infoAccount() ? `ACCOUNTINFO ${infoAccount()}` : 'ACCOUNTINFO')} />
         </div>
       </Section>
 
-      <Section title="Account Settings">
+      <Section title={t('services.accountSettings')}>
         <div class="space-y-2">
           <div class="flex gap-2">
-            <Input placeholder="Account" value={setAccount()} onChange={setSetAccount} flex />
-            <Input placeholder="Password" type="password" value={setPass()} onChange={setSetPass} flex />
+            <Input placeholder={t('services.accountField')} value={setAccount()} onChange={setSetAccount} flex />
+            <Input placeholder={t('services.password')} type="password" autocomplete="current-password" value={setPass()} onChange={setSetPass} flex />
           </div>
           <div class="flex gap-2">
             <select
+              aria-label={t('services.accountSetting')}
               value={setKey()}
               onChange={(e) => setSetKey(e.currentTarget.value)}
               class="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-md text-[12px] text-gray-200 px-2.5 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/40 transition-colors"
             >
-              <option value="">Select setting...</option>
+              <option value="">{t('services.selectSetting')}</option>
               <For each={[...ACCOUNTSET_KEYS]}>
                 {(k) => <option value={k}>{k}</option>}
               </For>
             </select>
-            <Input placeholder="Value" value={setVal()} onChange={setSetVal} flex />
+            <Input placeholder={t('services.value')} value={setVal()} onChange={setSetVal} flex />
           </div>
           <Btn
-            label="Set"
+            label={t('services.set')}
             disabled={!setAccount() || !setPass() || !setKey() || !setVal()}
-            onClick={() => sendRaw(`ACCOUNTSET ${setAccount()} ${setPass()} ${setKey()} ${setVal()}`)}
+            onClick={() => {
+              if (sendRaw(`ACCOUNTSET ${setAccount()} ${setPass()} ${setKey()} ${setVal()}`)) setSetPass('');
+            }}
           />
-          <p class="text-[10px] text-gray-500 px-1">secure on = only recognized via identify · enforce on = nick protection</p>
+          <p class="text-[10px] text-gray-400 px-1">{t('services.accountSettingsHint')}</p>
         </div>
       </Section>
 
-      <Section title="Nick Tools">
+      <Section title={t('services.nickTools')}>
         <div class="space-y-2">
           <div class="flex flex-wrap gap-2">
-            <SmallBtn label="Ghost" active={expanded() === 'ghost'} onClick={() => toggle('ghost')} />
-            <SmallBtn label="Recover" active={expanded() === 'recover'} onClick={() => toggle('recover')} />
-            <SmallBtn label="Release" active={expanded() === 'release'} onClick={() => toggle('release')} />
-            <SmallBtn label="Group" onClick={() => sendRaw('GROUP')} />
+            <SmallBtn label={t('services.ghost')} active={expanded() === 'ghost'} onClick={() => toggle('ghost')} />
+            <SmallBtn label={t('services.recover')} active={expanded() === 'recover'} onClick={() => toggle('recover')} />
+            <SmallBtn label={t('services.release')} active={expanded() === 'release'} onClick={() => toggle('release')} />
+            <SmallBtn label={t('services.group')} onClick={() => sendRaw('GROUP')} />
           </div>
 
           <Show when={expanded() === 'ghost'}>
             <InlineForm onCancel={() => { setExpanded(null); setGhostNick(''); setGhostPass(''); }}>
-              <Input placeholder="Nick to ghost" value={ghostNick()} onChange={setGhostNick} flex />
-              <Input placeholder="Password" type="password" value={ghostPass()} onChange={setGhostPass} flex />
+              <Input placeholder={t('services.nickToGhost')} value={ghostNick()} onChange={setGhostNick} flex />
+              <Input placeholder={t('services.password')} type="password" autocomplete="current-password" value={ghostPass()} onChange={setGhostPass} flex />
               <Btn
-                label="Ghost"
+                label={t('services.ghost')}
                 disabled={!ghostNick() || !ghostPass()}
-                onClick={() => { sendRaw(`GHOST ${ghostNick()} ${ghostPass()}`); setGhostNick(''); setGhostPass(''); setExpanded(null); }}
+                onClick={() => {
+                  if (sendRaw(`GHOST ${ghostNick()} ${ghostPass()}`)) {
+                    setGhostNick(''); setGhostPass(''); setExpanded(null);
+                  }
+                }}
               />
             </InlineForm>
           </Show>
 
           <Show when={expanded() === 'recover'}>
             <InlineForm onCancel={() => { setExpanded(null); setRecoverNick(''); }}>
-              <Input placeholder="Nick to recover" value={recoverNick()} onChange={setRecoverNick} flex />
+              <Input placeholder={t('services.nickToRecover')} value={recoverNick()} onChange={setRecoverNick} flex />
               <Btn
-                label="Recover"
+                label={t('services.recover')}
                 disabled={!recoverNick()}
-                onClick={() => { sendRaw(`RECOVER ${recoverNick()}`); setRecoverNick(''); setExpanded(null); }}
+                onClick={() => {
+                  if (sendRaw(`RECOVER ${recoverNick()}`)) {
+                    setRecoverNick(''); setExpanded(null);
+                  }
+                }}
               />
             </InlineForm>
           </Show>
 
           <Show when={expanded() === 'release'}>
             <InlineForm onCancel={() => { setExpanded(null); setRecoverNick(''); }}>
-              <Input placeholder="Nick to release" value={recoverNick()} onChange={setRecoverNick} flex />
+              <Input placeholder={t('services.nickToRelease')} value={recoverNick()} onChange={setRecoverNick} flex />
               <Btn
-                label="Release"
+                label={t('services.release')}
                 disabled={!recoverNick()}
-                onClick={() => { sendRaw(`RELEASE ${recoverNick()}`); setRecoverNick(''); setExpanded(null); }}
+                onClick={() => {
+                  if (sendRaw(`RELEASE ${recoverNick()}`)) {
+                    setRecoverNick(''); setExpanded(null);
+                  }
+                }}
               />
             </InlineForm>
           </Show>
         </div>
       </Section>
 
-      <Section title="Certificates (SASL EXTERNAL)">
+      <Section title={t('services.certificates')}>
         <div class="space-y-2">
           <div class="flex flex-wrap gap-2">
-            <SmallBtn label="Add Current Cert" onClick={() => sendRaw('CERTADD')} />
-            <SmallBtn label="List Certs" onClick={() => sendRaw('CERTLIST')} />
+            <SmallBtn label={t('services.addCurrentCert')} onClick={() => sendRaw('CERTADD')} />
+            <SmallBtn label={t('services.listCerts')} onClick={() => sendRaw('CERTLIST')} />
           </div>
           <div class="flex gap-2">
-            <Input placeholder="Fingerprint to remove" value={certFp()} onChange={setCertFp} flex />
-            <DangerBtn label="Remove" disabled={!certFp()} onClick={() => { sendRaw(`CERTDEL ${certFp()}`); setCertFp(''); }} />
+            <Input placeholder={t('services.fingerprintRemove')} value={certFp()} onChange={setCertFp} flex />
+            <DangerBtn label={t('services.remove')} disabled={!certFp()} onClick={() => {
+              if (sendRaw(`CERTDEL ${certFp()}`)) setCertFp('');
+            }} />
           </div>
         </div>
       </Section>
 
-      <Section title="VHost">
+      <Section title={t('services.vhost')}>
         <div class="flex gap-2">
           <select
+            aria-label={t('services.vhostAction')}
             value={vhostSub()}
             onChange={(e) => setVhostSub(e.currentTarget.value)}
             class="bg-white/[0.04] border border-white/[0.08] rounded-md text-[12px] text-gray-200 px-2.5 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/40 transition-colors"
@@ -251,50 +464,56 @@ function AccountTab(): JSX.Element {
               {(s) => <option value={s}>{s}</option>}
             </For>
           </select>
-          <Input placeholder="Host (if required)" value={vhostArg()} onChange={setVhostArg} flex />
+          <Input placeholder={t('services.hostOptional')} value={vhostArg()} onChange={setVhostArg} flex />
           <Btn
-            label="Send"
+            label={t('services.send')}
             onClick={() => sendRaw(vhostArg().trim() ? `VHOST ${vhostSub()} ${vhostArg().trim()}` : `VHOST ${vhostSub()}`)}
           />
         </div>
       </Section>
 
-      <Section title="Two-Factor (TOTP)">
+      <Section title={t('services.twoFactor')}>
         <div class="space-y-2">
           <div class="flex flex-wrap gap-2">
-            <SmallBtn label="Enroll" onClick={() => sendRaw('TOTP ENROLL')} />
-            <SmallBtn label="Status" onClick={() => sendRaw('TOTP STATUS')} />
-            <SmallBtn label="Disable" danger active={expanded() === 'totp-disable'} onClick={() => toggle('totp-disable')} />
+            <SmallBtn label={t('services.enroll')} onClick={() => sendRaw('TOTP ENROLL')} />
+            <SmallBtn label={t('services.status')} onClick={() => sendRaw('TOTP STATUS')} />
+            <SmallBtn label={t('services.disable')} danger active={expanded() === 'totp-disable'} onClick={() => toggle('totp-disable')} />
           </div>
           <div class="flex gap-2">
-            <Input placeholder="6-digit code" value={totpCode()} onChange={setTotpCode} flex />
-            <Btn label="Confirm" disabled={!totpCode()} onClick={() => { sendRaw(`TOTP CONFIRM ${totpCode()}`); setTotpCode(''); }} />
+            <Input placeholder={t('services.totpCode')} autocomplete="one-time-code" inputmode="numeric" value={totpCode()} onChange={setTotpCode} flex />
+            <Btn label={t('services.confirm')} disabled={!totpCode()} onClick={() => {
+              if (sendRaw(`TOTP CONFIRM ${totpCode()}`)) setTotpCode('');
+            }} />
           </div>
           <Show when={expanded() === 'totp-disable'}>
             <ConfirmForm
-              message="Disable two-factor authentication?"
-              onConfirm={() => { sendRaw('TOTP DISABLE'); setExpanded(null); }}
+              message={t('services.disableTotpConfirm')}
+              onConfirm={() => { if (sendRaw('TOTP DISABLE')) setExpanded(null); }}
               onCancel={() => setExpanded(null)}
             />
           </Show>
         </div>
       </Section>
 
-      <Section title="Danger Zone">
+      <Section title={t('services.dangerZone')}>
         <div class="space-y-2">
           <div class="flex flex-wrap gap-2">
-            <SmallBtn label="Drop Account" danger active={expanded() === 'drop'} onClick={() => toggle('drop')} />
+            <SmallBtn label={t('services.dropAccount')} danger active={expanded() === 'drop'} onClick={() => toggle('drop')} />
           </div>
           <Show when={expanded() === 'drop'}>
             <div class="space-y-2">
               <div class="flex gap-2">
-                <Input placeholder="Account" value={dropAccount()} onChange={setDropAccount} flex />
-                <Input placeholder="Password" type="password" value={dropPass()} onChange={setDropPass} flex />
+                <Input placeholder={t('services.accountField')} value={dropAccount()} onChange={setDropAccount} flex />
+                <Input placeholder={t('services.password')} type="password" autocomplete="current-password" value={dropPass()} onChange={setDropPass} flex />
               </div>
               <ConfirmForm
-                message={`Permanently delete account ${dropAccount() || '...'}?`}
+                message={t('services.deleteAccountConfirm', { account: dropAccount() || '...' })}
                 confirmDisabled={!dropAccount() || !dropPass()}
-                onConfirm={() => { sendRaw(`DROP ${dropAccount()} ${dropPass()}`); setDropAccount(''); setDropPass(''); setExpanded(null); }}
+                onConfirm={() => {
+                  if (sendRaw(`DROP ${dropAccount()} ${dropPass()}`)) {
+                    setDropAccount(''); setDropPass(''); setExpanded(null);
+                  }
+                }}
                 onCancel={() => setExpanded(null)}
               />
             </div>
@@ -323,25 +542,26 @@ function ChannelTab(): JSX.Element {
 
   return (
     <div class="space-y-4">
-      <Section title="Register Channel">
+      <Section title={t('services.registerChannel')}>
         <div class="flex gap-2">
-          <Input placeholder="#channel" value={regChan()} onChange={setRegChan} flex />
-          <Btn label="Register" disabled={!regChan()} onClick={() => sendRaw(`CHANNEL REGISTER ${regChan()}`)} />
+          <Input placeholder={t('services.channelField')} value={regChan()} onChange={setRegChan} flex />
+          <Btn label={t('services.register')} disabled={!regChan()} onClick={() => sendRaw(`CHANNEL REGISTER ${regChan()}`)} />
         </div>
       </Section>
 
-      <Section title="Channel Info">
+      <Section title={t('services.channelInfo')}>
         <div class="flex gap-2">
-          <Input placeholder="#channel" value={infoChan()} onChange={setInfoChan} flex />
-          <Btn label="Info" disabled={!infoChan()} onClick={() => sendRaw(`CHANNEL INFO ${infoChan()}`)} />
+          <Input placeholder={t('services.channelField')} value={infoChan()} onChange={setInfoChan} flex />
+          <Btn label={t('services.info')} disabled={!infoChan()} onClick={() => sendRaw(`CHANNEL INFO ${infoChan()}`)} />
         </div>
       </Section>
 
-      <Section title="Auto-Kick (AKICK)">
+      <Section title={t('services.autoKick')}>
         <div class="space-y-2">
           <div class="flex gap-2">
-            <Input placeholder="#channel" value={akickChan()} onChange={setAkickChan} flex />
+            <Input placeholder={t('services.channelField')} value={akickChan()} onChange={setAkickChan} flex />
             <select
+              aria-label={t('services.autoKickAction')}
               value={akickAction()}
               onChange={(e) => setAkickAction(e.currentTarget.value)}
               class="bg-white/[0.04] border border-white/[0.08] rounded-md text-[12px] text-gray-200 px-2.5 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/40 transition-colors"
@@ -352,9 +572,9 @@ function ChannelTab(): JSX.Element {
             </select>
           </div>
           <div class="flex gap-2">
-            <Input placeholder="Mask (for ADD/DEL)" value={akickMask()} onChange={setAkickMask} flex />
+            <Input placeholder={t('services.maskAddDelete')} value={akickMask()} onChange={setAkickMask} flex />
             <Btn
-              label="Send"
+              label={t('services.send')}
               disabled={!akickChan() || (akickAction() !== 'LIST' && !akickMask())}
               onClick={() => {
                 const suffix = akickAction() === 'LIST' ? '' : ` ${akickMask().trim()}`;
@@ -365,30 +585,34 @@ function ChannelTab(): JSX.Element {
         </div>
       </Section>
 
-      <Section title="Raw CHANNEL Command">
+      <Section title={t('services.rawChannel')}>
         <div class="space-y-2">
-          <p class="text-[10px] text-gray-500 px-1">
-            For SET MLOCK / ACCESS / TRANSFER — arguments are sent verbatim after <span class="font-mono">CHANNEL</span>.
-          </p>
+          <p class="text-[10px] text-gray-400 px-1">{t('services.rawChannelHint')}</p>
           <div class="flex gap-2">
-            <Input placeholder="SET MLOCK #chan +nt" value={rawArgs()} onChange={setRawArgs} flex />
-            <Btn label="Send" disabled={!rawArgs().trim()} onClick={() => { sendRaw(`CHANNEL ${rawArgs().trim()}`); setRawArgs(''); }} />
+            <Input placeholder={t('services.rawChannelPlaceholder')} value={rawArgs()} onChange={setRawArgs} flex />
+            <Btn label={t('services.send')} disabled={!rawArgs().trim()} onClick={() => {
+              if (sendRaw(`CHANNEL ${rawArgs().trim()}`)) setRawArgs('');
+            }} />
           </div>
         </div>
       </Section>
 
-      <Section title="Danger Zone">
+      <Section title={t('services.dangerZone')}>
         <div class="space-y-2">
           <div class="flex flex-wrap gap-2">
-            <SmallBtn label="Drop Channel" danger active={expanded() === 'drop'} onClick={() => toggle('drop')} />
+            <SmallBtn label={t('services.dropChannel')} danger active={expanded() === 'drop'} onClick={() => toggle('drop')} />
           </div>
           <Show when={expanded() === 'drop'}>
             <div class="space-y-2">
-              <Input placeholder="#channel to drop" value={dropChan()} onChange={setDropChan} />
+              <Input placeholder={t('services.channelToDrop')} value={dropChan()} onChange={setDropChan} />
               <ConfirmForm
-                message={`Drop registration for ${dropChan() || '...'}?`}
+                message={t('services.dropChannelConfirm', { channel: dropChan() || '...' })}
                 confirmDisabled={!dropChan()}
-                onConfirm={() => { sendRaw(`CHANNEL DROP ${dropChan()}`); setDropChan(''); setExpanded(null); }}
+                onConfirm={() => {
+                  if (sendRaw(`CHANNEL DROP ${dropChan()}`)) {
+                    setDropChan(''); setExpanded(null);
+                  }
+                }}
                 onCancel={() => setExpanded(null)}
               />
             </div>
@@ -410,35 +634,39 @@ function MemoTab(): JSX.Element {
 
   return (
     <div class="space-y-4">
-      <Section title="Send Memo">
+      <Section title={t('services.sendMemo')}>
         <div class="space-y-2">
-          <Input placeholder="Recipient account" value={sendTarget()} onChange={setSendTarget} />
+          <Input placeholder={t('services.recipientAccount')} value={sendTarget()} onChange={setSendTarget} />
           <textarea
+            aria-label={t('services.memoMessage')}
             value={sendText()}
             onInput={(e) => setSendText(e.currentTarget.value)}
-            placeholder="Message..."
+            placeholder={t('services.memoMessage')}
             rows={3}
             class="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg text-[12px] text-gray-200 px-3 py-2 outline-none focus:border-[var(--custom-accent,#818cf8)]/40 placeholder-gray-600 resize-none"
           />
           <Btn
-            label="Send"
+            label={t('services.send')}
             disabled={!sendTarget() || !sendText()}
-            onClick={() => { sendRaw(`TEGAMI SEND ${sendTarget()} :${sendText()}`); setSendText(''); }}
+            onClick={() => {
+              const message = memoLine(sendText());
+              if (message && sendRaw(`TEGAMI SEND ${sendTarget()} :${message}`)) setSendText('');
+            }}
           />
-          <p class="text-[10px] text-gray-500 px-1">Memos are delivered when the recipient next logs in.</p>
+          <p class="text-[10px] text-gray-400 px-1">{t('services.memoDeliveryHint')}</p>
         </div>
       </Section>
 
-      <Section title="Inbox">
+      <Section title={t('services.inbox')}>
         <div class="space-y-2">
           <div class="flex flex-wrap gap-2">
-            <SmallBtn label="List" onClick={() => sendRaw('TEGAMI LIST')} />
-            <SmallBtn label="Clear All" danger active={confirmClear()} onClick={() => setConfirmClear(!confirmClear())} />
+            <SmallBtn label={t('services.list')} onClick={() => sendRaw('TEGAMI LIST')} />
+            <SmallBtn label={t('services.clearAll')} danger active={confirmClear()} onClick={() => setConfirmClear(!confirmClear())} />
           </div>
           <Show when={confirmClear()}>
             <ConfirmForm
-              message="Delete all memos in your inbox?"
-              onConfirm={() => { sendRaw('TEGAMI CLEAR'); setConfirmClear(false); }}
+              message={t('services.clearMemosConfirm')}
+              onConfirm={() => { if (sendRaw('TEGAMI CLEAR')) setConfirmClear(false); }}
               onCancel={() => setConfirmClear(false)}
             />
           </Show>
@@ -455,14 +683,21 @@ function MemoTab(): JSX.Element {
 function Section(props: { title: string; children: JSX.Element }): JSX.Element {
   return (
     <div class="bg-white/[0.01] border border-white/[0.04] rounded-xl p-3">
-      <h4 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2.5">{props.title}</h4>
+      <h4 class="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2.5">{props.title}</h4>
       {props.children}
     </div>
   );
 }
 
 function Input(props: {
-  placeholder: string; value: string; onChange: (v: string) => void; type?: string; flex?: boolean;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  flex?: boolean;
+  autocomplete?: string;
+  inputmode?: JSX.InputHTMLAttributes<HTMLInputElement>['inputmode'];
+  ariaLabel?: string;
 }): JSX.Element {
   return (
     <input
@@ -470,7 +705,9 @@ function Input(props: {
       value={props.value}
       onInput={(e) => props.onChange(e.currentTarget.value)}
       placeholder={props.placeholder}
-      autocomplete="off"
+      autocomplete={props.autocomplete ?? 'off'}
+      inputmode={props.inputmode}
+      aria-label={props.ariaLabel ?? props.placeholder}
       class={`${props.flex ? 'flex-1 min-w-0' : 'w-full'} bg-white/[0.04] border border-white/[0.08] rounded-md text-[12px] text-gray-200 px-2.5 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/40 placeholder-gray-600 transition-colors`}
     />
   );
@@ -479,6 +716,7 @@ function Input(props: {
 function Btn(props: { label: string; onClick: () => void; disabled?: boolean }): JSX.Element {
   return (
     <button
+      type="button"
       onClick={() => props.onClick()}
       disabled={props.disabled}
       class="text-[11px] font-medium bg-[var(--custom-accent,#818cf8)]/[0.1] text-[var(--custom-accent,#818cf8)] hover:bg-[var(--custom-accent,#818cf8)]/[0.2] px-4 py-1.5 rounded-md transition-colors shrink-0 disabled:opacity-30 disabled:pointer-events-none"
@@ -491,6 +729,7 @@ function Btn(props: { label: string; onClick: () => void; disabled?: boolean }):
 function DangerBtn(props: { label: string; onClick: () => void; disabled?: boolean }): JSX.Element {
   return (
     <button
+      type="button"
       onClick={() => props.onClick()}
       disabled={props.disabled}
       class="text-[11px] font-medium bg-red-500/10 text-red-400 hover:bg-red-500/20 px-4 py-1.5 rounded-md transition-colors shrink-0 disabled:opacity-30 disabled:pointer-events-none"
@@ -503,6 +742,7 @@ function DangerBtn(props: { label: string; onClick: () => void; disabled?: boole
 function SmallBtn(props: { label: string; onClick: () => void; danger?: boolean; active?: boolean }): JSX.Element {
   return (
     <button
+      type="button"
       onClick={() => props.onClick()}
       class={`text-[11px] font-medium px-3 py-1.5 rounded-lg transition-colors
         ${props.danger
@@ -518,7 +758,7 @@ function InlineForm(props: { children: JSX.Element; onCancel: () => void }): JSX
   return (
     <div class="flex items-center gap-2 bg-white/[0.02] rounded-lg px-3 py-2 border border-white/[0.06]">
       {props.children}
-      <button onClick={() => props.onCancel()} class="text-[10px] text-gray-500 hover:text-gray-300 px-1.5 shrink-0">Cancel</button>
+      <button type="button" onClick={() => props.onCancel()} class="text-[10px] text-gray-400 hover:text-gray-200 px-1.5 shrink-0">{t('services.cancel')}</button>
     </div>
   );
 }
@@ -530,25 +770,42 @@ function ConfirmForm(props: {
     <div class="flex items-center gap-3 bg-red-500/[0.04] rounded-lg px-3 py-2.5 border border-red-500/[0.12]">
       <span class="text-[11px] text-gray-300 flex-1">{props.message}</span>
       <button
+        type="button"
         onClick={() => props.onConfirm()}
         disabled={props.confirmDisabled}
         class="text-[11px] font-medium text-red-400 hover:text-red-300 px-2 shrink-0 disabled:opacity-30 disabled:pointer-events-none"
       >
-        Confirm
+        {t('services.confirm')}
       </button>
-      <button onClick={() => props.onCancel()} class="text-[11px] text-gray-500 hover:text-gray-300 px-1.5 shrink-0">Cancel</button>
+      <button type="button" onClick={() => props.onCancel()} class="text-[11px] text-gray-400 hover:text-gray-200 px-1.5 shrink-0">{t('services.cancel')}</button>
     </div>
   );
 }
 
-function TabBtn(props: { active: boolean; onClick: () => void; children: JSX.Element }): JSX.Element {
+function TabBtn(props: {
+  ref: (element: HTMLButtonElement) => void;
+  id: string;
+  controls: string;
+  active: boolean;
+  onClick: () => void;
+  onKeyDown: (event: KeyboardEvent & { currentTarget: HTMLButtonElement }) => void;
+  children: JSX.Element;
+}): JSX.Element {
   return (
     <button
+      ref={props.ref}
+      id={props.id}
+      type="button"
+      role="tab"
+      aria-selected={props.active}
+      aria-controls={props.controls}
+      tabindex={props.active ? 0 : -1}
       onClick={() => props.onClick()}
-      class={`px-4 py-2.5 text-[12px] font-medium transition-all border-b-2 -mb-px
+      onKeyDown={(event) => props.onKeyDown(event)}
+      class={`shrink-0 whitespace-nowrap px-4 py-2.5 text-[12px] font-medium transition-all border-b-2 -mb-px
         ${props.active
           ? 'text-gray-100 border-[var(--custom-accent,#818cf8)]'
-          : 'text-gray-500 border-transparent hover:text-gray-300 hover:border-white/[0.06]'}`}
+          : 'text-gray-400 border-transparent hover:text-gray-200 hover:border-white/[0.06]'}`}
     >
       {props.children}
     </button>

@@ -19,12 +19,29 @@ import {
   closeUserProfile,
   closeServicesPanel,
   applyTheme,
+  activityState,
+  applyNotificationAction,
+  queueNotificationAction,
+  flushPendingNotificationAction,
+  notificationActionFromUrl,
+  clearNotificationActionUrl,
+  notificationMuteSnapshot,
+  activeUserActionId,
+  setupBrowserConnectivity,
 } from '@/state';
 import { connectModalAction } from '@/state/connectModalPolicy';
 import { mediaState } from '@/state/media';
 import { markRead } from '@/state/bridge';
+import { threadsState } from '@/state/threads';
 import { initBridge } from '@/core/bridge';
-import { updateTitle } from '@/lib/notifications';
+import { syncNotificationPolicy, updateTitle } from '@/lib/notifications';
+import { notificationActionMessage } from '@/lib/notificationPolicy';
+import { isDesktopBuild, setupDesktopDeepLinks } from '@/lib/desktop';
+import { hydrateDesktopCredentialPasswords } from '@/lib/credentials';
+import { hydrateDesktopSettingsSecrets } from '@/state/settings';
+import { applyLocalePreference, t } from '@/lib/i18n';
+import { currentPerformanceTier } from '@/lib/performance';
+import { isImeComposing } from '@/primitives/ime';
 
 import { createMediaQuery } from '@/primitives/mediaQuery';
 import { setupViewportHeight } from '@/primitives/viewportHeight';
@@ -32,10 +49,10 @@ import { setupKeyboardShortcuts } from '@/primitives/keyboard';
 import { setupFaviconBadge } from '@/primitives/faviconBadge';
 import { createSwipeGesture } from '@/primitives/swipe';
 
-import StarfieldBg from '@/ui/bits/StarfieldBg';
 import Sidebar from '@/ui/layout/Sidebar';
 import Header from '@/ui/layout/Header';
 import MobileDock from '@/ui/layout/MobileDock';
+import ConnectivityStatus from '@/ui/layout/ConnectivityStatus';
 import MessageView from '@/ui/chat/MessageView';
 import TypingIndicator from '@/ui/chat/TypingIndicator';
 import InputBar from '@/ui/input/InputBar';
@@ -48,11 +65,15 @@ import type { ThemeName } from '@/ui/bits/ThemeBg';
 // <Suspense> boundaries below keep a still-loading overlay from blanking the
 // main UI (a null fallback renders nothing until the chunk resolves).
 const ThemeBg = lazy(() => import('@/ui/bits/ThemeBg'));
+const StarfieldBg = lazy(() => import('@/ui/bits/StarfieldBg'));
 // The 816-line mascot stays out of the entry chunk: it only ever renders in the
 // disconnected empty state, so its import fires the first time that state shows.
 const AstronautBear = lazy(() => import('@/ui/bits/AstronautBear'));
 const VideoRoom = lazy(() => import('@/ui/media/VideoRoom'));
+const MediaPreflight = lazy(() => import('@/ui/media/MediaPreflight'));
 const UserList = lazy(() => import('@/ui/panels/UserList'));
+const ThreadPanel = lazy(() => import('@/ui/panels/ThreadPanel'));
+const ActivityPanel = lazy(() => import('@/ui/panels/ActivityPanel'));
 const ChannelInfoPanel = lazy(() => import('@/ui/panels/ChannelInfoPanel'));
 const ServicesPanel = lazy(() => import('@/ui/panels/ServicesPanel'));
 const UserProfileCard = lazy(() => import('@/ui/panels/UserProfileCard'));
@@ -63,6 +84,7 @@ const SettingsModal = lazy(() => import('@/ui/modals/SettingsModal'));
 const HelpModal = lazy(() => import('@/ui/modals/HelpModal'));
 const AboutModal = lazy(() => import('@/ui/modals/AboutModal'));
 const BufferSwitcher = lazy(() => import('@/ui/modals/BufferSwitcher'));
+const UserActionModal = lazy(() => import('@/ui/modals/UserActionModal'));
 
 const CUSTOM_COLOR_VARS: Array<[keyof typeof import('@/types').DEFAULT_CUSTOM_COLORS, string]> = [
   ['gray950', '--color-gray-950'],
@@ -108,6 +130,7 @@ function activateSheetDialog(panel: HTMLElement, close: () => void): () => void 
   (initial[0] ?? panel).focus();
 
   const onKeydown = (e: KeyboardEvent): void => {
+    if (isImeComposing(e)) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       close();
@@ -139,9 +162,21 @@ function activateSheetDialog(panel: HTMLElement, close: () => void): () => void 
 }
 
 function setupServiceWorkerRefresh(): () => void {
-  if (!('serviceWorker' in navigator)) return () => undefined;
+  // A dev server has no production cache contract and WebKit rejects the
+  // generated worker load there. It also causes controller-change reloads to
+  // race HMR and connected browser tests. Production builds retain the
+  // deploy-version-aware registration below.
+  if (import.meta.env.DEV || isDesktopBuild || !('serviceWorker' in navigator)) return () => undefined;
+  const holder = document.getElementById('db-asset-version')?.textContent ?? '';
+  const deployVersion = /'([^']+)'/.exec(holder)?.[1] ?? '';
+  const announceVersion = (worker: ServiceWorker | null): void => {
+    if (worker && deployVersion) {
+      worker.postMessage({ type: 'darkbear-client-version', version: deployVersion });
+    }
+  };
   let reloaded = false;
   const onControllerChange = () => {
+    announceVersion(navigator.serviceWorker.controller);
     if (reloaded) return;
     reloaded = true;
     window.location.reload();
@@ -150,14 +185,19 @@ function setupServiceWorkerRefresh(): () => void {
   navigator.serviceWorker
     .register('/darkbear/sw.js', { scope: '/darkbear/' })
     .then((reg) => {
+      announceVersion(reg.active);
       void reg.update();
     })
     .catch(() => undefined);
+  void navigator.serviceWorker.ready.then((reg) => announceVersion(reg.active)).catch(() => undefined);
   return () => navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
 }
 
 export default function App() {
   const isDesktop = createMediaQuery('(min-width: 1024px)');
+  const prefersReducedMotion = createMediaQuery('(prefers-reduced-motion: reduce)');
+  const lowDecorativeQuality = currentPerformanceTier() === 'low';
+  createEffect(() => applyLocalePreference(settings.locale));
   // The reading surface + sidebar are translucent via the shared `.db-surface`
   // / `.darkbear-sidebar` contract in global.css: the theme's --surface-veil +
   // backdrop-blur let the animated ThemeBg scene + the mascot read THROUGH,
@@ -166,6 +206,32 @@ export default function App() {
   // surface in CSS (no per-component JS media listener, and forced-colors is
   // reachable — which an inline style could not honour).
   let sheetDrag: { startY: number; currentY: number; sheet: HTMLElement } | null = null;
+  let pendingDesktopBufferTarget: string | null = null;
+
+  const openBufferTarget = (target: string): boolean => {
+    const direct = buffersState.buffers[target];
+    const matched = direct ?? Object.values(buffersState.buffers).find((entry) =>
+      entry.buffer.fullName === target || entry.buffer.name === target,
+    );
+    if (!matched) return false;
+    setActive(matched.buffer.id);
+    return true;
+  };
+
+  createEffect(() => {
+    const mutePolicy = notificationMuteSnapshot();
+    void syncNotificationPolicy({
+      enabled: settings.notifications,
+      snoozedUntil: settings.notificationsSnoozedUntil,
+      quietHours: {
+        enabled: settings.quietHoursEnabled,
+        start: settings.quietHoursStart,
+        end: settings.quietHoursEnd,
+        timeZone: settings.quietHoursTimezone,
+      },
+      ...mutePolicy,
+    });
+  });
 
   // Refs for the mobile dialog wiring: <main> is the region behind an open
   // sheet (made inert so AT/focus can't reach it); the sheets themselves get
@@ -204,19 +270,42 @@ export default function App() {
 
   onMount(() => {
     applyTheme();
-    initBridge();
+    let alive = true;
+    void Promise.all([
+      hydrateDesktopCredentialPasswords(),
+      hydrateDesktopSettingsSecrets(),
+    ]).finally(() => {
+      if (alive) initBridge();
+    });
+    onCleanup(() => { alive = false; });
     onCleanup(setupViewportHeight());
     onCleanup(setupKeyboardShortcuts());
     onCleanup(setupFaviconBadge(() => getTotalHighlights()));
+    onCleanup(setupBrowserConnectivity());
     onCleanup(setupServiceWorkerRefresh());
 
     // Notification click → jump to the originating buffer.
     const onJump = (ev: Event) => {
       const ptr = (ev as CustomEvent<string>).detail;
-      if (ptr && buffersState.buffers[ptr]) setActive(ptr);
+      if (!ptr) return;
+      if (!openBufferTarget(ptr)) pendingDesktopBufferTarget = ptr;
     };
     window.addEventListener('jump-to-buffer', onJump);
     onCleanup(() => window.removeEventListener('jump-to-buffer', onJump));
+    onCleanup(setupDesktopDeepLinks());
+
+    const initialAction = notificationActionFromUrl(window.location.href);
+    if (initialAction) {
+      if (!applyNotificationAction(initialAction)) queueNotificationAction(initialAction);
+      clearNotificationActionUrl();
+    }
+    const onNotificationMessage = (event: MessageEvent<unknown>) => {
+      const action = notificationActionMessage(event.data);
+      if (!action) return;
+      if (!applyNotificationAction(action)) queueNotificationAction(action);
+    };
+    navigator.serviceWorker?.addEventListener('message', onNotificationMessage);
+    onCleanup(() => navigator.serviceWorker?.removeEventListener('message', onNotificationMessage));
 
     // Mark active buffer read when the window regains focus.
     const onFocus = () => {
@@ -230,6 +319,17 @@ export default function App() {
     };
     window.addEventListener('focus', onFocus);
     onCleanup(() => window.removeEventListener('focus', onFocus));
+  });
+
+  // An action may arrive before relay buffers hydrate. Re-attempt it whenever
+  // the buffer key set changes. Reply plaintext stays only in exact-tab memory;
+  // sessionStorage retains open-only intent.
+  createEffect(() => {
+    Object.keys(buffersState.buffers);
+    flushPendingNotificationAction();
+    if (pendingDesktopBufferTarget && openBufferTarget(pendingDesktopBufferTarget)) {
+      pendingDesktopBufferTarget = null;
+    }
   });
 
   // Mobile swipe: right opens sidebar / closes user list; left closes sidebar / opens user list.
@@ -341,7 +441,7 @@ export default function App() {
     <ErrorBoundary
       fallback={(err, reset) => (
         <div class="flex h-screen w-full flex-col items-center justify-center gap-4 bg-gray-950 text-gray-200">
-          <div class="text-lg font-semibold">Something went wrong</div>
+          <div class="text-lg font-semibold">{t('app.somethingWrong')}</div>
           <pre class="max-w-xl overflow-auto rounded bg-gray-900 p-4 text-xs text-red-400">{String(err)}</pre>
           <button class="rounded bg-gray-800 px-4 py-2 hover:bg-gray-700" onClick={reset}>
             Try again
@@ -350,13 +450,24 @@ export default function App() {
       )}
     >
       <div class="relative flex h-[var(--vh,100dvh)] w-full overflow-hidden bg-gray-950 text-gray-200">
+        <ConnectivityStatus />
         {/* Theme background layers */}
-        <Show when={settings.animateThemes && settings.theme !== 'custom' && !settings.bgImage}>
-          <Suspense>
-            <Show when={settings.theme === 'starfield'} fallback={<ThemeBg theme={settings.theme as ThemeName} />}>
-              <StarfieldBg />
-            </Show>
-          </Suspense>
+        <Show when={
+          !lowDecorativeQuality &&
+          uiState.activeModal !== 'connect' &&
+          !prefersReducedMotion() &&
+          settings.animateThemes &&
+          settings.sceneMotion !== 'reduced' &&
+          settings.theme !== 'custom' &&
+          !settings.bgImage
+        }>
+          <div data-testid="decorative-theme-background" class="darkbear-decorative-scene">
+            <Suspense>
+              <Show when={settings.theme === 'starfield'} fallback={<ThemeBg theme={settings.theme as ThemeName} />}>
+                <StarfieldBg />
+              </Show>
+            </Suspense>
+          </div>
         </Show>
         <Show when={settings.bgImage}>
           <div
@@ -387,7 +498,7 @@ export default function App() {
                 ref={(el) => (bufferSheetRef = el)}
                 role={uiState.sidebarOpen ? 'dialog' : undefined}
                 aria-modal={uiState.sidebarOpen ? 'true' : undefined}
-                aria-label="Buffers"
+                aria-label={t('app.buffers')}
                 tabindex="-1"
                 class="mobile-sheet mobile-buffer-sheet fixed bottom-0 left-0 right-0 z-50 flex h-[min(84vh,780px)] transform flex-col overflow-hidden rounded-t-3xl border-t border-white/[0.08] transition-transform duration-200"
                 classList={{ 'translate-y-full': !uiState.sidebarOpen, 'translate-y-0': uiState.sidebarOpen }}
@@ -399,18 +510,18 @@ export default function App() {
                 <button
                   type="button"
                   class="mobile-sheet-grip"
-                  aria-label="Close buffers panel"
+                  aria-label={t('app.closeBuffers')}
                   onClick={() => setSidebarOpen(false)}
                 />
                 <div class="mobile-sheet-head">
                   <div>
-                    <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">Navigation</p>
-                    <h2 class="text-[16px] font-black tracking-tight text-gray-50">Buffers</h2>
+                    <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">{t('app.navigation')}</p>
+                    <h2 class="text-[16px] font-black tracking-tight text-gray-50">{t('app.buffers')}</h2>
                   </div>
                   <button
                     type="button"
                     class="mobile-sheet-close"
-                    aria-label="Close buffers panel"
+                    aria-label={t('app.closeBuffers')}
                     onClick={() => setSidebarOpen(false)}
                   >
                     <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -442,13 +553,19 @@ export default function App() {
                 when={activePtr()}
                 fallback={
                   <div class="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
-                    <Suspense fallback={<div class="h-[132px] w-[132px]" />}>
-                      <AstronautBear
-                        size={132}
-                        theme={settings.theme as ThemeName}
-                        class="drop-shadow-[0_10px_34px_rgba(6,6,26,0.6)]"
-                      />
-                    </Suspense>
+                    <Show when={
+                      !lowDecorativeQuality &&
+                      !prefersReducedMotion() &&
+                      settings.sceneMotion !== 'reduced'
+                    }>
+                      <Suspense fallback={<div class="h-[132px] w-[132px]" />}>
+                        <AstronautBear
+                          size={132}
+                          theme={settings.theme as ThemeName}
+                          class="drop-shadow-[0_10px_34px_rgba(6,6,26,0.6)]"
+                        />
+                      </Suspense>
+                    </Show>
                     <div class="space-y-1.5">
                       <p class="text-[10px] font-black uppercase tracking-[0.22em] text-gray-500">DarkBear</p>
                       <h2 class="text-[22px] font-semibold tracking-tight text-gray-200 sm:text-[26px]">
@@ -512,6 +629,15 @@ export default function App() {
           </Show>
         </main>
 
+        <Suspense>
+          <Show when={threadsState.activeThread !== null}>
+            <ThreadPanel />
+          </Show>
+          <Show when={activityState.panelOpen}>
+            <ActivityPanel />
+          </Show>
+        </Suspense>
+
         {/* User list — desktop drawer / mobile overlay */}
         <Suspense>
           <Show when={uiState.userListOpen}>
@@ -524,7 +650,7 @@ export default function App() {
                     ref={(el) => (userSheetRef = el)}
                     role="dialog"
                     aria-modal="true"
-                    aria-label="Users"
+                    aria-label={t('app.users')}
                     tabindex="-1"
                     class="mobile-sheet fixed bottom-0 left-0 right-0 z-50 flex h-[min(72vh,660px)] flex-col overflow-hidden rounded-t-3xl border-t border-white/[0.08]"
                     onTouchStart={beginSheetDrag}
@@ -535,18 +661,18 @@ export default function App() {
                     <button
                       type="button"
                       class="mobile-sheet-grip"
-                      aria-label="Close users panel"
+                      aria-label={t('app.closeUsers')}
                       onClick={() => setUserListOpen(false)}
                     />
                     <div class="mobile-sheet-head">
                       <div>
-                        <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">Channel</p>
-                        <h2 class="text-[16px] font-black tracking-tight text-gray-50">Users</h2>
+                        <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">{t('app.channel')}</p>
+                        <h2 class="text-[16px] font-black tracking-tight text-gray-50">{t('app.users')}</h2>
                       </div>
                       <button
                         type="button"
                         class="mobile-sheet-close"
-                        aria-label="Close users panel"
+                        aria-label={t('app.closeUsers')}
                         onClick={() => setUserListOpen(false)}
                       >
                         <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -574,6 +700,9 @@ export default function App() {
           <Show when={mediaState.callState !== 'idle'}>
             <VideoRoom />
           </Show>
+          <Show when={mediaState.preflight.open}>
+            <MediaPreflight />
+          </Show>
         </Suspense>
         <CallNotification />
 
@@ -595,6 +724,9 @@ export default function App() {
           </Show>
           <Show when={uiState.activeModal === 'bufferSwitcher'}>
             <BufferSwitcher />
+          </Show>
+          <Show when={activeUserActionId() !== null}>
+            <UserActionModal />
           </Show>
           <Show when={uiState.activeModal === 'channelList'}>
             <ChannelListModal open onClose={closeModal} />

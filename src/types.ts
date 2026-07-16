@@ -62,7 +62,25 @@ export const DEFAULT_CUSTOM_COLORS: CustomColors = {
 export interface RelayProfile {
   name: string;
   relay: RelaySettings;
+  /** Explicit opt-in to persist this profile's password across browser sessions. */
+  rememberPassword: boolean;
 }
+
+export type SafeCommandId =
+  | 'join' | 'query' | 'whois' | 'message' | 'notice'
+  | 'me' | 'away' | 'nick' | 'monitor-add' | 'monitor-del';
+
+export interface UserCommandAction {
+  id: string;
+  name: string;
+  commandId: SafeCommandId;
+  /** `global` or `profile:<saved profile name>`. */
+  scope: string;
+  /** First successful review/run has acknowledged the exact expansion. */
+  confirmed: boolean;
+}
+
+export type LocalePreference = 'system' | 'en' | 'de' | 'ar';
 
 /** Direct orochi WS session settings (voice/video, typing, reactions, E2EE). */
 export interface BridgeSettings {
@@ -74,6 +92,8 @@ export interface BridgeSettings {
   autoJoinMedia: boolean;
   /** Publish this device's E2EE key + allow encrypted DM composition. */
   e2eeDms: boolean;
+  /** Opportunistic permits plaintext only when no peer key has been observed. */
+  e2eePolicy: 'opportunistic' | 'verified';
 }
 
 export const DEFAULT_BRIDGE: BridgeSettings = {
@@ -83,13 +103,20 @@ export const DEFAULT_BRIDGE: BridgeSettings = {
   password: '',
   autoJoinMedia: false,
   e2eeDms: false,
+  e2eePolicy: 'opportunistic',
 };
 
 export interface AppSettings {
   relay: RelaySettings;
+  rememberRelayPassword: boolean;
   profiles: RelayProfile[];
+  /** Local named command-palette actions; never preference-synced. */
+  userActions: UserCommandAction[];
   bridge: BridgeSettings;
+  rememberBridgePassword: boolean;
   theme: ThemeId;
+  /** Interface locale; `system` resolves against navigator.languages. */
+  locale: LocalePreference;
   customColors: CustomColors;
   fontFamily: string;
   watermarkOpacity: number;
@@ -105,6 +132,14 @@ export interface AppSettings {
   inlineImages: boolean;
   notifications: boolean;
   notificationSound: boolean;
+  /** Device-local scheduled Do Not Disturb window. */
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  /** IANA time zone, or `system` to follow the browser. */
+  quietHoursTimezone: string;
+  /** Epoch milliseconds; zero means foreground and push alerts are not paused. */
+  notificationsSnoozedUntil: number;
   readOnFocus: boolean;
   joinPartMsgs: boolean;
   colorNicks: boolean;
@@ -117,6 +152,13 @@ export interface AppSettings {
   uploadUrl: string;
   tenorApiKey: string;
   animateThemes: boolean;
+  /** Live call caption presentation; local-only and never preference-synced. */
+  captionSize: 'small' | 'medium' | 'large';
+  captionBackground: 'solid' | 'translucent';
+  /** Optional transcript persistence. Off means IndexedDB contains no messages. */
+  archiveRetention: 'off' | '7d' | '30d' | 'custom';
+  /** Used only for custom retention; clamped before persistence. */
+  archiveMaxMiB: number;
 }
 
 export const DEFAULT_RELAY: RelaySettings = {
@@ -129,9 +171,13 @@ export const DEFAULT_RELAY: RelaySettings = {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   relay: { ...DEFAULT_RELAY },
+  rememberRelayPassword: false,
   profiles: [],
+  userActions: [],
   bridge: { ...DEFAULT_BRIDGE },
+  rememberBridgePassword: false,
   theme: 'retro',
+  locale: 'system',
   customColors: { ...DEFAULT_CUSTOM_COLORS },
   fontFamily: 'system',
   watermarkOpacity: 15,
@@ -144,9 +190,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 14,
   timestampFormat: '24h',
   compactMode: false,
-  inlineImages: true,
+  // Remote message images are privacy-sensitive network requests. Keep them
+  // opt-in for fresh profiles; an explicit stored preference is preserved.
+  inlineImages: false,
   notifications: true,
   notificationSound: false,
+  quietHoursEnabled: false,
+  quietHoursStart: '22:00',
+  quietHoursEnd: '07:00',
+  quietHoursTimezone: 'system',
+  notificationsSnoozedUntil: 0,
   readOnFocus: true,
   joinPartMsgs: true,
   colorNicks: true,
@@ -159,6 +212,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uploadUrl: 'https://eshmaki.me/upload',
   tenorApiKey: 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ',
   animateThemes: true,
+  captionSize: 'medium',
+  captionBackground: 'solid',
+  archiveRetention: 'off',
+  archiveMaxMiB: 100,
 };
 
 // ---------------------------------------------------------------------------

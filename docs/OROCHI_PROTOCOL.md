@@ -1,8 +1,8 @@
-# Orochi Protocol — Client Integration Reference (for Ocean)
+# Orochi Protocol — DarkBear Client Integration Reference
 
 Everything a client needs to talk to **Orochi**, the pure-Zig clean-room
 sovereign-mesh IRC daemon. This is the
-authoritative surface for refactoring Ocean's IRC layer (`lib/irc/`).
+authoritative surface for DarkBear's direct IRC layer (`lib/irc/`).
 
 Orochi is **modern-only**: there is **no STARTTLS**, **no WEBIRC**, **no identd /
 RFC1413**, **no DCC proxy/filehost**, **no `OPER` command** (operator status is
@@ -10,7 +10,7 @@ granted at SASL login), and **no pseudo-clients** — services are real server
 commands (`REGISTER`, `CHANNEL`, `TEGAMI`, …), never ChanServ/NickServ fake users.
 
 > Source of truth lives in the open Orochi repo under `docs/reference/` and
-> `docs/architecture/`. This file consolidates it for Ocean. When something here
+> `docs/architecture/`. This file consolidates it for DarkBear. When something here
 > conflicts with a live server, trust the server and the Orochi docs.
 
 ---
@@ -24,14 +24,14 @@ Live network is **IRCXNet**, two nodes: `eshmaki.me` and `ircx.us`. Listeners ar
 |---|---|---|
 | `6667` | Plaintext TCP | Plain IRC (dev/local only) |
 | `6697` | Implicit TLS | TLS IRC (TLS 1.3 + hardened 1.2 profile) |
-| `8080` | **Secure WebSocket (wss)** | **Browser clients — Ocean uses this** |
+| `8080` | **Secure WebSocket (wss)** | **Browser clients — DarkBear uses this** |
 | `6900` | Mesh S2S (Tsumugi PQ) | Server↔server only — **not for clients** |
 
 TLS is **1.3 plus a hardened 1.2 profile** (AEAD/ECDHE-only; no RSA key exchange,
 CBC, compression, or renegotiation). There is no plaintext→TLS upgrade; pick a TLS
 port up front.
 
-### 1.1 WebSocket framing (CRITICAL — this bit Ocean before)
+### 1.1 WebSocket framing (CRITICAL — this bit DarkBear before)
 
 Orochi's wss listener sends **one IRC message per WebSocket frame, with NO trailing
 CRLF** (per the IRCv3 WebSocket sub-protocol). A frame is exactly
@@ -139,7 +139,7 @@ sts=<runtime policy>   (only if STS configured)
 orochi/session-sync    orochi/bouncer        (vendor — see §6)
 ```
 
-Notes for Ocean:
+Notes for DarkBear:
 - **`draft/event-playback`** — when negotiated, CHATHISTORY/bouncer replay includes
   channel events (JOIN/PART/MODE/TOPIC/KICK/NICK/QUIT) as `:sender CMD <body>`;
   without it you get messages only.
@@ -168,7 +168,7 @@ Mechanisms (advertised `PLAIN,EXTERNAL,SCRAM-SHA-256`; live boot also enables
 | `PLAIN` | `base64(authzid \0 authcid \0 password)` |
 | `SCRAM-SHA-256` / `SCRAM-SHA-512` | Challenge-response, no plaintext password on wire |
 | `EXTERNAL` | TLS client-cert fingerprint (bind it first with `CERTADD`, see §7) |
-| `SESSION-TOKEN` | **Reconnect reclaim** — present a prior session token (see §6) |
+| `SESSION-TOKEN` | **Account re-entry** — present the bounded `sst_...` credential issued after a prior secure SASL login (see §6) |
 
 Flow: `AUTHENTICATE <MECH>` → server `AUTHENTICATE +` (or challenge) → client
 `AUTHENTICATE <base64 payload>` → `900 RPL_LOGGEDIN` then `903 RPL_SASLSUCCESS`.
@@ -180,22 +180,27 @@ account→oper class) — there is no `OPER` command (`491` says so).
 
 ---
 
-## 6. Sessions, Reconnect Reclaim & Bouncer (Ocean-critical)
+## 6. Sessions, Reconnect Reclaim & Bouncer (DarkBear-critical)
 
-Ocean should reconnect instantly into its live session instead of a JOIN storm.
+DarkBear should reconnect instantly into its live session instead of a JOIN storm.
 
 - **`SESSION`** command: `SESSION LIST` (live sessions for your account),
   `SESSION TOKEN` (reveals this session's local reclaim token, plus an optional
   mesh `MTOKEN` for cross-node reclaim), `SESSION RESUME <token>` (resume a detached
   session). Replies are `NOTE SESSION LIST|TOKEN|MTOKEN`. Failures
   `FAIL SESSION INVALID_TOKEN|NO_SESSION`.
-- **`SESSION-TOKEN` SASL mech**: reconnect by presenting the token from
-  `SESSION TOKEN` — re-attaches to the same account session.
+- **`SESSION-TOKEN` SASL mech**: authenticate the account without replaying its
+  password by presenting the bounded `sst_...` credential Orochi emits as
+  `NOTICE ... :SESSIONTOKEN <account> <token> expires=<unix>` after a secure
+  password/SCRAM login. This does not select a logical session.
+- **`SESSION TOKEN` / `SESSION MTOKEN` reclaim**: these distinct credentials
+  are used only with post-registration `SESSION RESUME` to attach the exact
+  logical session. DarkBear keeps all three bearer credentials session-only.
 - **`orochi/session-sync` cap**: multi-client "keep both" — when set, on login the
   server syncs the new connection into the same channels as your other same-account
   sessions. **Gate your `001` autojoin storm behind `!sessionSyncActive`** — the
   server drives the JOINs when the cap is present (this is already the pattern in
-  Ocean's `lib/store`).
+  DarkBear's bridge/session state).
 - **`orochi/bouncer` cap**: automatic history rewind on join/rejoin. Combine with
   CHATHISTORY; **dedup by `msgid`** on reconnect (auto-reconnect preserves channel
   state, so replayed history would otherwise duplicate).
@@ -300,14 +305,21 @@ user's mode → `502`.
 | `EDIT …` | Message editing (cap `draft/message-editing`). |
 | `CHATHISTORY <sub> <target> …` | IRCv3 history playback, returns batches. `LATEST/BEFORE/AFTER/AROUND/BETWEEN`. |
 | `MARKREAD <target> <ts\|msgid>` | Bouncer read marker. |
-| `METADATA <target> <sub> [key] [value]` | IRCv3 metadata; `761/762`, errors `766/767/769`. |
+| `METADATA <target> <sub> [key] [visibility] [value]` | IRCv3 metadata; `761/762`, errors `766/767/769`. DarkBear uses authenticated, `secret` account values for its namespaced preference document. |
 | `MONITOR <+\|-\|C\|L\|S> [nicks]` | Presence monitor; `730/731/732/733`, `734` full. `extended-monitor` adds richer state. |
 | `SILENCE [+\|-]<mask>` | Per-user ignore list; `271/272`. |
 | `ACCEPT [+\|-]<nick>` | Caller-id allow list; `281/282`. |
 
 **CTCP** is parsed for policy (`+C` blocks); standard CTCP replies apply. **DCC is
 parser-only** — no server-mediated DCC/filehost; do not rely on a server DCC surface.
-For file sharing use the external upload service (Ocean already integrates one).
+For file sharing use the external upload service (DarkBear already integrates one).
+
+DarkBear also publishes its P-256 DM device key as `ocean.dm-key`. That key name
+is an existing cross-client wire contract, not a product/backend name. A
+successful publish means only that the local device key is discoverable; it is
+not proof that a peer or conversation is verified. DarkBear fingerprints the
+observed peer key, pins verification locally by Orochi endpoint/account/peer,
+and blocks a changed verified key until explicit re-trust.
 
 Message tags you'll see/use: `time=` (server-time), `msgid=`, `account=`,
 `batch=`, `label=`, and client-only `+typing`/`+react`/`+reply`/`+draft/…`.
@@ -336,7 +348,7 @@ list `818`, end `819`; built-ins `NAME/OID/CREATION/MEMBERCOUNT/MEMBERLIMIT/MEMB
 ## 11. Network-Wide Operator Events (Event Spine & OBSERVE)
 
 Two parallel **network-wide** oper surfaces — an event raised on any node fans to
-every node, rendered with the **originating** server name. (Relevant if Ocean has an
+every node, rendered with the **originating** server name. (Relevant if DarkBear has an
 operator/admin view.)
 
 - **Category feed:** `EVENT ADD <category>` / `EVENT DEL <category>` /
@@ -354,32 +366,31 @@ operator/admin view.)
 
 ---
 
-## 12. Voice / Video / Screen (MEDIA) — Discord-style calls
+## 12. Voice / Video / Screen (MEDIA) calls
 
-`MEDIA <subcommand> <#channel> [args]` (feature-gated; control plane only — **media
-bytes never flow over the IRC socket**). You must be a channel member. All replies
-are `EVENT <target> MEDIA …` Event Spine lines; failures `FAIL MEDIA <CODE>`.
+`MEDIA <subcommand> <#channel> [args]` is the feature-gated text control plane.
+DarkBear carries encoded media as Kagura binary datagrams on Orochi's WebSocket
+sideband; it does not place media bytes in IRC text messages. You must be a
+channel member. Replies are `EVENT <target> MEDIA …` Event Spine lines; failures
+use `FAIL MEDIA <CODE>`.
 
-Subcommands: `JOIN <kind>` · `LEAVE` · `OFFER <codecs> [transport=webrtc]` ·
+Subcommands: `JOIN <kind>` · `LEAVE` · `OFFER <codecs>` ·
 `ANSWER <codecs>` · `ROSTER` · `PROFILE` · `STATS` · `MUTE`/`UNMUTE <kind>` ·
 `SPEAKING` · `HAND` · `REACT` · `LAYER` (simulcast) · `BREAKOUT` · `POS` (spatial) ·
-`CAPTION` · `TRANSCRIPT`.
+`ABR` · `CAPTION` · `TRANSCRIPT`.
 
 - **kind** = `voice` | `video` | `screen` (default `voice`).
-- **codecs** (CSV) = `kaguravox` (audio) | `kaguravis` (video) | `raw`. `OFFER` may request
-  `transport=webrtc` for the browser/WebRTC leg; otherwise the native KAGURAVOX/KAGURAVIS
-  UDP leg is used.
-- Two media planes, bridged by header-rewrap only (no transcode): a **WebRTC-compatible
-  RTP/STUN UDP plane** (`MEDIA OFFER transport=webrtc` → ICE creds, SRTP group key)
-  and a **native KAGURAVOX/KAGURAVIS UDP leg** (`kagura_frame` datagrams). SFU forwarding,
-  simulcast, ABR; room cap 64 participants.
-- **Browser codec:** Orochi ships WASM codec exports (`kagura_wasm.zig`: KAGURAVOX
-  audio + KAGURAVIS video encode/decode for `wasm32-freestanding`) — Ocean can use these
-  for the native leg, or use standard WebRTC for the RTP leg.
+- **codecs** (CSV) = `kaguravox` (audio) | `kaguravis` (video) | `raw`.
+- **Browser codec:** DarkBear uses its shipped KaguraVox/KaguraVis WASM bundle
+  over Orochi's binary WebSocket media relay, with per-participant `MACKEY`
+  authentication and deterministic stream IDs.
+- **Adaptive feedback:** `MEDIA ABR <#channel> <current_kbps>
+  <available_kbps> <loss_pct> <rtt_ms> [nack_per_sec]` returns a targeted
+  `EVENT … MEDIA ABR` hint with bitrate, FEC, keyframe, and layer guidance.
 - **`ACTIVITY <target> <state> [text]`** — presence/activity broadcast (rich presence).
 
 `MEDIA ROSTER`/`SPEAKING`/`MUTE` give you the call roster + live speaking/mute state
-to render a Discord-style voice UI. `OFFER-ACK`/`ANSWER-ACK`/`TRANSPORT`/`NATIVE`
+to render the call UI. `OFFER-ACK`/`ANSWER-ACK`/`TRANSPORT`/`NATIVE`
 Event Spine media lines carry the negotiated transport + endpoint info.
 
 ---
@@ -470,22 +481,26 @@ Orochi is a CRDT **mesh** (not a TS6 tree). What a client sees:
 
 ---
 
-## 17. Ocean Refactor Checklist
+## 17. DarkBear Integration Checklist
 
-- [ ] WebSocket reader splits on `/\r?\n/`, no cross-frame remainder (§1.1).
-- [ ] CAP LS 302 → REQ the caps Ocean uses (echo-message, server-time, message-tags,
-      batch, labeled-response, account-notify, away-notify, chghost, extended-join,
+- [x] WebSocket reader splits on `/\r?\n/`, no cross-frame remainder (§1.1).
+- [x] CAP LS 302 → REQ the caps DarkBear uses (echo-message, server-time, message-tags,
+      batch, account-notify, away-notify, chghost, extended-join,
       multi-prefix, draft/chathistory, draft/event-playback, draft/typing,
       draft/react, draft/reply, draft/message-redaction, orochi/session-sync,
       orochi/bouncer, sasl).
-- [ ] SASL during registration; support PLAIN + SCRAM-SHA-256 (+ SESSION-TOKEN for
+- [x] SASL during registration; support PLAIN + SCRAM-SHA-256 (+ SESSION-TOKEN for
       reconnect, EXTERNAL if using client certs).
-- [ ] Gate the `001` autojoin storm behind `!session-sync`; let the server drive JOINs.
-- [ ] On reconnect: `SESSION TOKEN` capture + `SESSION-TOKEN` SASL reclaim; dedup
+- [x] Gate the `001` autojoin storm behind `!session-sync`; let the server drive JOINs.
+- [x] On reconnect: capture bounded SASL `SESSIONTOKEN` plus logical-session
+      `SESSION TOKEN`/`MTOKEN`, authenticate then resume, and dedup
       CHATHISTORY/bouncer replay by `msgid`.
-- [ ] Parse `time=`/`msgid=`/`account=` tags; render typing/react/reply TAGMSG tags.
-- [ ] Honor `MODES` (combine modes per line per the advertised value; live = 1).
-- [ ] Map service `FAIL`/`NOTE`/`NOTICE` replies to UI (REGISTER/IDENTIFY/CHANNEL/…).
-- [ ] Voice/video via `MEDIA` control + KAGURAVOX/KAGURAVIS WASM codec; render
+- [x] Parse `time=`/`msgid=`/`account=` tags; render typing/react/reply TAGMSG tags.
+- [x] Honor `MODES` (combine modes per line per the advertised value; live = 1).
+- [x] Map service `FAIL`/`NOTE`/`NOTICE` replies to a bounded, server-scoped UI log
+      (REGISTER/IDENTIFY/CHANNEL/…), excluding bearer-token notices.
+- [x] Voice/video via `MEDIA` control + KAGURAVOX/KAGURAVIS WASM codec; render
       roster/speaking/mute from Event Spine `EVENT … MEDIA` lines.
-- [ ] Treat `:server NOTE EVENT <CAT> :…` and `EVENT … OBSERVE …` as the oper feed.
+- [x] Publish/fetch DM device keys through METADATA, compare peer fingerprints,
+      and fail closed on changed verified keys.
+- [x] Treat `:server NOTE EVENT <CAT> :…` and `EVENT … OBSERVE …` as the oper feed.

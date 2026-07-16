@@ -56,10 +56,31 @@ describe('matchesQuery', () => {
     expect(matchesQuery(rec({ timestamp: NOW - 3_600_000 }), q)).toBe(true);
   });
 
+  it('before: boundary is exclusive', () => {
+    const q = parseSearchQuery('before:1h', NOW);
+    expect(matchesQuery(rec({ timestamp: NOW - 3_600_000 }), q)).toBe(false);
+    expect(matchesQuery(rec({ timestamp: NOW - 3_600_000 - 1 }), q)).toBe(true);
+  });
+
+  it('normalizes channel sigils and case on both sides of in:', () => {
+    expect(match('in:&&OPS', { channel: '##ops-team' })).toBe(true);
+    expect(match('in:#ops', { channel: '&general' })).toBe(false);
+  });
+
   it('a malformed date bound imposes no constraint', () => {
     // before:xyz -> before is null, so only the free text applies and matches.
     expect(match('before:xyz world')).toBe(true);
     expect(match('before:xyz absent')).toBe(false);
+  });
+
+  it('malformed date-only queries remain inert instead of matching every record', () => {
+    expect(match('before:notadate')).toBe(false);
+    expect(match('after:2024-02-31')).toBe(false);
+  });
+
+  it('still lets text match system lines that have no nick fallback', () => {
+    expect(match('daemon notice', { nick: null, text: 'daemon notice' })).toBe(true);
+    expect(match('alice', { nick: null, text: 'daemon notice' })).toBe(false);
   });
 
   it('ANDs every constraint together', () => {

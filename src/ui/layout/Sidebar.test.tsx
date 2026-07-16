@@ -115,13 +115,16 @@ describe('Sidebar', () => {
   it('shows an unread pip for #alpha and a hot highlight pip for #beta', () => {
     const { getAllByText } = render(() => <Sidebar />);
 
+    // Hot/mention pips now carry the --role-mention token class (was bg-red-500,
+    // retired by the P2.5 semantic-role work); unread pips use the primary tint.
+    const mentionClass = 'bg-[var(--role-mention,#f87171)]';
     const unreadPip = getAllByText('3').find((el) => el.classList.contains('min-w-[16px]'));
     expect(unreadPip).toBeInTheDocument();
-    expect(unreadPip?.classList.contains('bg-red-500')).toBe(false);
+    expect(unreadPip?.classList.contains(mentionClass)).toBe(false);
 
     const hotPip = getAllByText('2').find((el) => el.classList.contains('min-w-[16px]'));
     expect(hotPip).toBeInTheDocument();
-    expect(hotPip?.classList.contains('bg-red-500')).toBe(true);
+    expect(hotPip?.classList.contains(mentionClass)).toBe(true);
   });
 
   it('activates a channel when its row is clicked', () => {
@@ -162,12 +165,24 @@ describe('Sidebar', () => {
     expect(getByText('eshmaki')).toBeInTheDocument();
   });
 
+  it('keeps a join value open when the relay rejects dispatch', () => {
+    const { getByLabelText, getByPlaceholderText } = render(() => <Sidebar />);
+
+    fireEvent.click(getByLabelText('Join channel'));
+    const input = getByPlaceholderText('#channel') as HTMLInputElement;
+    fireEvent.input(input, { target: { value: 'retry-room' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveValue('retry-room');
+  });
+
   it('renders the notify control at its default tier for channel rows', () => {
     const { getAllByLabelText } = render(() => <Sidebar />);
 
-    // Both channels default to the 'mentions' tier (the pre-P3.4 behavior).
+    // Channels and DMs all expose the same default mentions tier.
     const controls = getAllByLabelText(/Notifications: mentions only/);
-    expect(controls).toHaveLength(2);
+    expect(controls).toHaveLength(3);
     expect(controls[0]).toHaveAttribute('data-notify-mode', 'mentions');
     // Mentions tier carries an accent dot on the bell.
     expect(controls[0]?.querySelector('circle')).not.toBeNull();

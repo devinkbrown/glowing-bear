@@ -2,6 +2,7 @@
 // markers, IRCv3 read-marker timestamp helpers, and the scroll-to-message intent.
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { WeeChatLine } from '@/lib/weechat/model';
 import {
   threadsState,
   setPendingReply,
@@ -12,13 +13,30 @@ import {
   recordReadMarker,
   clearReadMarker,
   readMarkerFor,
+  exportReadState,
+  applyReadState,
   readMarkerTimestamp,
   parseReadMarkerTimestamp,
   requestScrollToMessage,
   consumeScrollRequest,
   sanitizePreview,
+  resolveThreadRoot,
+  buildThreadView,
+  threadUnreadCount,
+  openThread,
+  closeThread,
+  markThreadRead,
+  threadReadThroughFor,
   resetThreads,
 } from './threads';
+
+function line(id: string, msgid: string, replyTo?: string, nick = 'alice', ms = 1000): WeeChatLine {
+  const date = new Date(ms);
+  return {
+    id, buffer: '0xb', date, datePrinted: date, displayed: true, highlight: false,
+    tags: [], prefix: nick, message: id, nick, ircTags: new Map(), msgid, replyTo,
+  };
+}
 
 beforeEach(() => {
   resetThreads();
@@ -81,6 +99,57 @@ describe('reply preview map', () => {
   });
 });
 
+describe('thread graph and panel state', () => {
+  it('resolves the oldest loaded ancestor and stops at a missing parent', () => {
+    const root = line('l1', 'root');
+    const parent = line('l2', 'parent', 'root');
+    const child = line('l3', 'child', 'parent');
+    const index = { root, parent, child };
+
+    expect(resolveThreadRoot(child, index)).toBe('root');
+    expect(resolveThreadRoot(line('l4', 'orphan-child', 'missing'), index)).toBe('missing');
+    expect(resolveThreadRoot(line('l5', '', undefined), index)).toBeNull();
+  });
+
+  it('builds transitive replies in time order with unique participants', () => {
+    const root = line('root-line', 'root', undefined, 'Alice', 1000);
+    const nested = line('nested-line', 'nested', 'direct', 'carol', 3000);
+    const direct = line('direct-line', 'direct', 'root', 'bob', 2000);
+    const other = line('other-line', 'other', undefined, 'nobody', 4000);
+
+    const view = buildThreadView([root, nested, direct, other], 'root');
+
+    expect(view.root).toBe(root);
+    expect(view.replies.map((item) => item.msgid)).toEqual(['direct', 'nested']);
+    expect(view.participants).toEqual(['Alice', 'bob', 'carol']);
+    expect(view.latestTimestamp).toBe(3000);
+  });
+
+  it('tracks unread replies until the stable thread is marked read', () => {
+    const root = line('root-line', 'root', undefined, 'alice', 1000);
+    const old = line('old-line', 'old', 'root', 'bob', 2000);
+    const self = { ...line('self-line', 'self', 'root', 'me', 2500), isSelf: true };
+    const recent = line('recent-line', 'recent', 'root', 'carol', 3000);
+    const view = buildThreadView([root, old, self, recent], 'root');
+
+    expect(threadUnreadCount(view, undefined)).toBe(2);
+    markThreadRead('irc.fixture.#darkbear', 'root', 2000);
+    expect(threadReadThroughFor('irc.fixture.#darkbear', 'root')).toBe(2000);
+    expect(threadUnreadCount(view, threadReadThroughFor('irc.fixture.#darkbear', 'root'))).toBe(1);
+    markThreadRead('irc.fixture.#darkbear', 'root', 1000);
+    expect(threadReadThroughFor('irc.fixture.#darkbear', 'root')).toBe(2000);
+  });
+
+  it('opens and closes a selection keyed by stable buffer name', () => {
+    openThread('0xb', 'irc.fixture.#darkbear', 'root');
+    expect(threadsState.activeThread).toEqual({
+      bufferPtr: '0xb', bufferKey: 'irc.fixture.#darkbear', rootMsgid: 'root',
+    });
+    closeThread();
+    expect(threadsState.activeThread).toBeNull();
+  });
+});
+
 describe('read markers (monotonic)', () => {
   it('records and reads a per-buffer marker', () => {
     recordReadMarker('#chan', 1000);
@@ -104,6 +173,16 @@ describe('read markers (monotonic)', () => {
     recordReadMarker('#chan', 1000);
     clearReadMarker('#chan');
     expect(readMarkerFor('#chan')).toBeUndefined();
+  });
+
+  it('exports stable keys and merges imported progress without rewinding', () => {
+    recordReadMarker('irc.example.#one', 2000);
+    applyReadState({ 'irc.example.#one': 1000, 'irc.example.#two': 3000 });
+
+    expect(exportReadState()).toEqual({
+      'irc.example.#one': 2000,
+      'irc.example.#two': 3000,
+    });
   });
 });
 

@@ -13,6 +13,7 @@ import {
   buffersState,
   cycleNotifyMode,
   getNotifyMode,
+  getTemporaryMuteUntil,
   getSorted,
   isMuted,
   isOper,
@@ -21,13 +22,21 @@ import {
   setActive,
   setTheme,
   toggleMute,
+  muteTemporarily,
+  clearTemporaryMute,
   toggleOperConsole,
   toggleSearch,
   toggleSplit,
   toggleUserList,
+  visibleUserActions,
+  beginUserAction,
 } from '@/state';
 import type { ThemeId } from '@/state';
 import { NOTIFY_MODES, type NotifyMode } from '@/lib/notifyDecision';
+import { formatDate, t } from '@/lib/i18n';
+import type { MessageKey } from '@/lib/i18n';
+import { untilTomorrow } from '@/lib/notificationPolicy';
+import { safeCommandDefinition } from '@/lib/userActions';
 
 export type PaletteGroup = 'buffers' | 'actions';
 
@@ -115,6 +124,16 @@ function nextNotify(current: NotifyMode): NotifyMode {
   return NOTIFY_MODES[(i + 1) % NOTIFY_MODES.length] ?? current;
 }
 
+const NOTIFY_LABELS: Record<NotifyMode, MessageKey> = {
+  all: 'palette.notifyAll',
+  mentions: 'palette.notifyMentions',
+  mute: 'palette.notifyMute',
+};
+
+function notifyLabel(mode: NotifyMode): string {
+  return t(NOTIFY_LABELS[mode]);
+}
+
 /**
  * App-action commands. `query` seeds the dynamic join grammar: a query that
  * looks like a channel (`#name`) offers a Join action routed through the same
@@ -132,8 +151,8 @@ function actionCommands(query: string): PaletteCommand[] {
     commands.push({
       id: `action:join:${target.toLowerCase()}`,
       group: 'actions',
-      title: `Join ${target}`,
-      subtitle: 'channel',
+      title: t('palette.join', { target }),
+      subtitle: t('palette.channel'),
       glyph: '#',
       keywords: ['join', 'channel', 'open', target],
       run: () => sendInput(`/join ${target}`),
@@ -143,20 +162,33 @@ function actionCommands(query: string): PaletteCommand[] {
   commands.push({
     id: 'action:settings',
     group: 'actions',
-    title: 'Open settings',
-    subtitle: 'preferences',
+    title: t('palette.openSettings'),
+    subtitle: t('palette.preferences'),
     glyph: '⚙',
     keywords: ['settings', 'preferences', 'options', 'appearance', 'config'],
     run: () => openModal('settings'),
   });
 
   if (active && name) {
+    for (const action of visibleUserActions()) {
+      const definition = safeCommandDefinition(action.commandId);
+      commands.push({
+        id: `action:user:${action.id}`,
+        group: 'actions',
+        title: action.name,
+        subtitle: `${definition.label} · ${action.scope === 'global' ? t('palette.allProfiles') : action.scope.slice('profile:'.length)}`,
+        glyph: '›',
+        keywords: ['custom', 'user action', definition.label, definition.template, action.name],
+        run: () => beginUserAction(action.id),
+      });
+    }
+
     const notify = getNotifyMode(active);
     commands.push({
       id: 'action:notify-cycle',
       group: 'actions',
-      title: `Cycle notifications — ${name}`,
-      subtitle: `${notify} → ${nextNotify(notify)}`,
+      title: t('palette.cycleNotifications', { name }),
+      subtitle: `${notifyLabel(notify)} → ${notifyLabel(nextNotify(notify))}`,
       glyph: '◐',
       keywords: ['notify', 'notification', 'tier', 'mentions', 'all', 'mute', 'alert', name],
       run: () => cycleNotifyMode(active),
@@ -166,18 +198,49 @@ function actionCommands(query: string): PaletteCommand[] {
     commands.push({
       id: 'action:mute',
       group: 'actions',
-      title: `${muted ? 'Unmute' : 'Mute'} — ${name}`,
-      subtitle: muted ? 'muted' : 'notifying',
+      title: t(muted ? 'palette.unmute' : 'palette.mute', { name }),
+      subtitle: t(muted ? 'palette.muted' : 'palette.notifying'),
       glyph: muted ? '○' : '●',
       keywords: ['mute', 'unmute', 'silence', 'quiet', name],
       run: () => toggleMute(active),
     });
 
+    const temporaryMuteUntil = getTemporaryMuteUntil(active);
+    if (temporaryMuteUntil > Date.now()) {
+      commands.push({
+        id: 'action:mute-temporary-clear',
+        group: 'actions',
+        title: t('palette.resumeAlerts', { name }),
+        subtitle: t('palette.mutedUntil', {
+          time: formatDate(temporaryMuteUntil, { hour: '2-digit', minute: '2-digit' }),
+        }),
+        glyph: '◷',
+        keywords: ['resume', 'temporary', 'mute', 'alerts', name],
+        run: () => clearTemporaryMute(active),
+      });
+    } else {
+      for (const option of [
+        { id: '1h', label: t('palette.oneHour'), duration: () => 60 * 60 * 1000 },
+        { id: '8h', label: t('palette.eightHours'), duration: () => 8 * 60 * 60 * 1000 },
+        { id: 'tomorrow', label: t('palette.untilTomorrow'), duration: () => untilTomorrow() - Date.now() },
+      ]) {
+        commands.push({
+          id: `action:mute-temporary-${option.id}`,
+          group: 'actions',
+          title: t('palette.muteFor', { duration: option.label, name }),
+          subtitle: t('palette.temporaryDeviceOnly'),
+          glyph: '◷',
+          keywords: ['temporary', 'mute', 'snooze', 'quiet', option.label, name],
+          run: () => muteTemporarily(active, option.duration()),
+        });
+      }
+    }
+
     commands.push({
       id: 'action:split',
       group: 'actions',
-      title: `Toggle split view — ${name}`,
-      subtitle: 'split pane',
+      title: t('palette.toggleSplit', { name }),
+      subtitle: t('palette.splitPane'),
       glyph: '‖',
       keywords: ['split', 'pane', 'side by side', 'compare', name],
       run: () => toggleSplit(active),
@@ -187,8 +250,8 @@ function actionCommands(query: string): PaletteCommand[] {
   commands.push({
     id: 'action:search',
     group: 'actions',
-    title: 'Toggle buffer search',
-    subtitle: 'find in buffer',
+    title: t('palette.toggleSearch'),
+    subtitle: t('palette.findInBuffer'),
     glyph: '⌕',
     keywords: ['search', 'find', 'grep', 'filter messages'],
     run: () => toggleSearch(),
@@ -197,8 +260,8 @@ function actionCommands(query: string): PaletteCommand[] {
   commands.push({
     id: 'action:userlist',
     group: 'actions',
-    title: 'Toggle member list',
-    subtitle: 'nicklist',
+    title: t('palette.toggleMembers'),
+    subtitle: t('palette.nicklist'),
     glyph: '☷',
     keywords: ['members', 'users', 'nicklist', 'people', 'roster'],
     run: () => toggleUserList(),
@@ -208,8 +271,8 @@ function actionCommands(query: string): PaletteCommand[] {
     commands.push({
       id: 'action:oper-console',
       group: 'actions',
-      title: 'Toggle oper console',
-      subtitle: 'operator',
+      title: t('palette.toggleOper'),
+      subtitle: t('palette.operator'),
       glyph: '⚑',
       keywords: ['oper', 'operator', 'console', 'admin', 'staff'],
       run: () => toggleOperConsole(),
@@ -220,8 +283,8 @@ function actionCommands(query: string): PaletteCommand[] {
     commands.push({
       id: `action:theme:${theme.id}`,
       group: 'actions',
-      title: `Theme — ${theme.name}`,
-      subtitle: 'appearance',
+      title: t('palette.theme', { name: theme.name }),
+      subtitle: t('palette.appearance'),
       glyph: '◆',
       keywords: ['theme', 'color', 'appearance', theme.id, theme.name],
       run: () => setTheme(theme.id),

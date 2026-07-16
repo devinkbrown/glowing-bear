@@ -19,6 +19,7 @@
 // and drives the composer off pendingReply is a separate slice (see README).
 
 import { createStore } from 'solid-js/store';
+import type { WeeChatLine } from '@/lib/weechat/model';
 
 /** The message a pending composer reply will thread against. */
 export interface ReplyTarget {
@@ -37,6 +38,24 @@ export interface ScrollRequest {
   nonce: number;
 }
 
+/** The optional thread panel selection, stable across relay pointer churn. */
+export interface ActiveThread {
+  /** Current pointer when opened; used as a fast path while connected. */
+  bufferPtr: string;
+  /** Stable full buffer name used to re-resolve the pointer after reconnect. */
+  bufferKey: string;
+  /** Root msgid for the derived thread graph. */
+  rootMsgid: string;
+}
+
+/** A thread derived entirely from the canonical loaded timeline. */
+export interface ThreadView {
+  root: WeeChatLine | undefined;
+  replies: WeeChatLine[];
+  participants: string[];
+  latestTimestamp: number;
+}
+
 export interface ThreadsState {
   /** bufferPtr → the reply the composer is currently threading against. */
   pendingReply: Record<string, ReplyTarget | undefined>;
@@ -46,6 +65,10 @@ export interface ThreadsState {
   readMarkers: Record<string, number | undefined>;
   /** Latest scroll-to-message request, consumed by the message list. */
   scrollRequest: ScrollRequest | null;
+  /** Optional thread side-panel selection. */
+  activeThread: ActiveThread | null;
+  /** Stable thread key → latest reply timestamp the user dismissed as read. */
+  threadReadThrough: Record<string, number | undefined>;
 }
 
 /** Max length of a stored/emitted reply preview, in characters. */
@@ -63,6 +86,8 @@ const [state, setState] = createStore<ThreadsState>({
   replyPreview: {},
   readMarkers: {},
   scrollRequest: null,
+  activeThread: null,
+  threadReadThrough: {},
 });
 
 /** Read-only threads store. Mutate via the exported actions only. */
@@ -113,6 +138,108 @@ export function replyPreviewFor(msgid: string): string | undefined {
   return state.replyPreview[msgid];
 }
 
+// ── Thread graph + panel state ───────────────────────────────────────────────
+
+function threadKey(bufferKey: string, rootMsgid: string): string {
+  return `${bufferKey}\0${rootMsgid}`;
+}
+
+/**
+ * Resolve the oldest loaded ancestor for a line. If an ancestor is outside the
+ * loaded window, its msgid becomes the root target so the panel can fetch it.
+ */
+export function resolveThreadRoot(
+  line: WeeChatLine,
+  msgIndex: Readonly<Record<string, WeeChatLine | undefined>>,
+): string | null {
+  const initial = line.replyTo || line.msgid;
+  if (!initial) return null;
+  let root: string = initial;
+  const seen = new Set<string>();
+  while (!seen.has(root)) {
+    seen.add(root);
+    const parent: WeeChatLine | undefined = msgIndex[root];
+    if (!parent?.replyTo) break;
+    root = parent.replyTo;
+  }
+  return root;
+}
+
+/**
+ * Build a transitive, chronological reply view from loaded timeline lines.
+ * Nested replies remain in the root thread even when they target another reply.
+ */
+export function buildThreadView(lines: readonly WeeChatLine[], rootMsgid: string): ThreadView {
+  const root = lines.find((line) => line.msgid === rootMsgid);
+  const includedParents = new Set<string>([rootMsgid]);
+  const includedLines = new Set<string>();
+  const replies: WeeChatLine[] = [];
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (const line of lines) {
+      if (!line.replyTo || !includedParents.has(line.replyTo) || includedLines.has(line.id)) continue;
+      includedLines.add(line.id);
+      replies.push(line);
+      if (line.msgid) includedParents.add(line.msgid);
+      changed = true;
+    }
+  }
+
+  const position = new Map(lines.map((line, index) => [line.id, index]));
+  replies.sort((a, b) =>
+    a.date.getTime() - b.date.getTime() ||
+    (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0),
+  );
+
+  const participants: string[] = [];
+  const seenNicks = new Set<string>();
+  for (const line of root ? [root, ...replies] : replies) {
+    const nick = line.nick?.trim();
+    const normalized = nick?.toLowerCase();
+    if (!nick || !normalized || seenNicks.has(normalized)) continue;
+    seenNicks.add(normalized);
+    participants.push(nick);
+  }
+  const latestTimestamp = Math.max(
+    0,
+    root?.date.getTime() ?? 0,
+    ...replies.map((line) => line.date.getTime()),
+  );
+  return { root, replies, participants, latestTimestamp };
+}
+
+/** Count non-self replies newer than the last dismissed/read instant. */
+export function threadUnreadCount(view: ThreadView, readThrough: number | undefined): number {
+  const boundary = readThrough ?? 0;
+  return view.replies.filter((line) => !line.isSelf && line.date.getTime() > boundary).length;
+}
+
+/** Open or replace the optional thread panel selection. */
+export function openThread(bufferPtr: string, bufferKey: string, rootMsgid: string): void {
+  if (!bufferPtr || !bufferKey || !rootMsgid) return;
+  setState('activeThread', { bufferPtr, bufferKey, rootMsgid });
+}
+
+/** Close the optional thread panel. */
+export function closeThread(): void {
+  setState('activeThread', null);
+}
+
+/** Record the latest reply timestamp dismissed/read for one stable thread. */
+export function markThreadRead(bufferKey: string, rootMsgid: string, timestamp: number): void {
+  if (!bufferKey || !rootMsgid || !Number.isFinite(timestamp)) return;
+  const key = threadKey(bufferKey, rootMsgid);
+  const current = state.threadReadThrough[key];
+  if (current === undefined || timestamp > current) setState('threadReadThrough', key, timestamp);
+}
+
+/** Latest dismissed/read timestamp for one stable thread. */
+export function threadReadThroughFor(bufferKey: string, rootMsgid: string): number | undefined {
+  return state.threadReadThrough[threadKey(bufferKey, rootMsgid)];
+}
+
 // ── Read markers ─────────────────────────────────────────────────────────────
 
 /**
@@ -133,6 +260,28 @@ export function clearReadMarker(bufferKey: string): void {
 /** The read-marker position (epoch ms) for `bufferKey`, or undefined. */
 export function readMarkerFor(bufferKey: string): number | undefined {
   return state.readMarkers[bufferKey];
+}
+
+/** Canonical stable-name read positions for account preference sync. */
+export function exportReadState(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [bufferKey, timestamp] of Object.entries(state.readMarkers)
+    .sort(([a], [b]) => a.localeCompare(b))) {
+    if (timestamp !== undefined && Number.isSafeInteger(timestamp) && timestamp >= 0) {
+      out[bufferKey] = timestamp;
+    }
+  }
+  return out;
+}
+
+/** Merge read positions monotonically so sync can never move a marker back. */
+export function applyReadState(value: Record<string, number>): void {
+  const merged: Record<string, number | undefined> = { ...state.readMarkers };
+  for (const [bufferKey, timestamp] of Object.entries(value)) {
+    if (!bufferKey || !Number.isSafeInteger(timestamp) || timestamp < 0) continue;
+    merged[bufferKey] = Math.max(merged[bufferKey] ?? 0, timestamp);
+  }
+  setState('readMarkers', merged);
 }
 
 /** Format an epoch-ms instant as an IRCv3 read-marker timestamp (UTC). */
@@ -168,6 +317,13 @@ export function consumeScrollRequest(): ScrollRequest | null {
 
 /** Test-only: reset every threads field to empty. */
 export function resetThreads(): void {
-  setState({ pendingReply: {}, replyPreview: {}, readMarkers: {}, scrollRequest: null });
+  setState({
+    pendingReply: {},
+    replyPreview: {},
+    readMarkers: {},
+    scrollRequest: null,
+    activeThread: null,
+    threadReadThrough: {},
+  });
   scrollNonce = 0;
 }

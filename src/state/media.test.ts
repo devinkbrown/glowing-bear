@@ -12,7 +12,11 @@ import type { SuimyakuMediaCallbacks, SuimyakuPeerState } from '@/lib/suimyaku-m
 const harness = vi.hoisted(() => ({
   callbacks: null as SuimyakuMediaCallbacks | null,
   engine: null as Record<string, ReturnType<typeof vi.fn>> | null,
+  codecSelfTest: vi.fn<() => Promise<void>>(),
+  archiveMessages: vi.fn<() => Promise<void>>(),
 }));
+
+vi.mock('@/lib/archive/client', () => ({ archiveMessages: harness.archiveMessages }));
 
 vi.mock('@/lib/suimyaku-media/MediaEngine', () => {
   class SuimyakuMediaEngine {
@@ -30,7 +34,9 @@ vi.mock('@/lib/suimyaku-media/MediaEngine', () => {
     startScreenShare = vi.fn();
     stopBroadcast = vi.fn();
     sendReaction = vi.fn();
+    setOutput = vi.fn();
     setClient = vi.fn();
+    setTransportConnected = vi.fn();
     getLocalKind = vi.fn(() => null);
     getLocalStream = vi.fn(() => null);
     getScreenStream = vi.fn(() => null);
@@ -40,7 +46,12 @@ vi.mock('@/lib/suimyaku-media/MediaEngine', () => {
       harness.engine = this as unknown as Record<string, ReturnType<typeof vi.fn>>;
     }
   }
-  return { SuimyakuMediaEngine, setMountedSuimyakuMediaEngine: vi.fn(), getMountedSuimyakuMediaEngine: vi.fn(() => null) };
+  return {
+    SuimyakuMediaEngine,
+    runSuimyakuCodecSelfTest: harness.codecSelfTest,
+    setMountedSuimyakuMediaEngine: vi.fn(),
+    getMountedSuimyakuMediaEngine: vi.fn(() => null),
+  };
 });
 
 // ringtone is a no-op under jsdom (no AudioContext) — mock it away.
@@ -52,6 +63,7 @@ vi.mock('@/lib/ringtone', () => ({
 
 import * as media from './media';
 import { _setBridgeBackend, _setBridgeState, type BridgeBackend } from './bridge';
+import { resetSettings, updateSettings } from './settings';
 
 // The store registers every callback used below; assert non-null so the
 // optional-in-interface fields are callable without `?.` noise in each test.
@@ -78,7 +90,32 @@ function readyBackend(): BridgeBackend {
   };
 }
 
+function fakeStream(video = false) {
+  const audioTrack = { kind: 'audio', stop: vi.fn(), clone: vi.fn() };
+  audioTrack.clone.mockReturnValue({ ...audioTrack, stop: vi.fn() });
+  const videoTrack = { kind: 'video', stop: vi.fn(), clone: vi.fn() };
+  videoTrack.clone.mockReturnValue({ ...videoTrack, stop: vi.fn() });
+  const tracks = video ? [audioTrack, videoTrack] : [audioTrack];
+  return {
+    stream: {
+      getTracks: () => tracks,
+      getAudioTracks: () => [audioTrack],
+      getVideoTracks: () => video ? [videoTrack] : [],
+    } as unknown as MediaStream,
+    tracks,
+  };
+}
+
+const getUserMedia = vi.fn<(constraints?: MediaStreamConstraints) => Promise<MediaStream>>();
+const enumerateDevices = vi.fn<() => Promise<MediaDeviceInfo[]>>();
+const permissionQuery = vi.fn<() => Promise<PermissionStatus>>();
+
 beforeEach(() => {
+  resetSettings();
+  media.closeMediaPreflight();
+  media.selectMediaDevice('microphone', '');
+  media.selectMediaDevice('camera', '');
+  media.selectMediaDevice('speaker', '');
   _setBridgeState({ status: 'ready', nick: 'me', error: null, e2eeReady: false });
   _setBridgeBackend(readyBackend());
   // The media engine is a module singleton — construct it once (its
@@ -86,7 +123,97 @@ beforeEach(() => {
   // state to idle via the engine's own idle callback so each test starts clean.
   media._ensureMediaEngine();
   cb().onCallState('idle', '', null);
+  cb().onCallHealth?.({
+    status: 'idle', transportConnected: false, tier: 0, suggestedBps: 0,
+    jitterMs: 0, lossRate: 0, roundTripMs: 0, encodePressure: 0,
+    roomStats: null, reconnectAttempt: 0, updatedAt: 0,
+  });
   vi.clearAllMocks();
+  harness.codecSelfTest.mockResolvedValue(undefined);
+  harness.archiveMessages.mockResolvedValue(undefined);
+  getUserMedia.mockResolvedValue(fakeStream().stream);
+  enumerateDevices.mockResolvedValue([
+    { deviceId: 'mic-default', groupId: 'inputs', kind: 'audioinput', label: 'Desk microphone', toJSON: vi.fn() },
+    { deviceId: 'camera-default', groupId: 'inputs', kind: 'videoinput', label: 'Desk camera', toJSON: vi.fn() },
+    { deviceId: 'speaker-default', groupId: 'outputs', kind: 'audiooutput', label: 'Desk speakers', toJSON: vi.fn() },
+  ]);
+  permissionQuery.mockResolvedValue({ state: 'granted' } as PermissionStatus);
+  Object.defineProperty(navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia, enumerateDevices },
+  });
+  Object.defineProperty(navigator, 'permissions', {
+    configurable: true,
+    value: { query: permissionQuery },
+  });
+});
+
+describe('media preflight', () => {
+  it('gates a room join on capture and the actual codec self-test', async () => {
+    const captured = fakeStream(true);
+    getUserMedia.mockResolvedValueOnce(captured.stream);
+
+    media.requestRoomJoin('#room', true);
+
+    expect(eng().joinVideo).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(media.mediaState.preflight.status).toBe('ready'));
+    expect(harness.codecSelfTest).toHaveBeenCalledOnce();
+    expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ video: expect.any(Object) }));
+    expect(media.mediaState.preflight.codec).toBe('ready');
+    expect(media.mediaState.preflight.microphones[0]?.label).toBe('Desk microphone');
+    expect(media.confirmMediaPreflight()).toBe(true);
+    expect(eng().joinVideo).toHaveBeenCalledWith('#room');
+    expect(captured.tracks.every((track) => track.stop.mock.calls.length === 1)).toBe(true);
+  });
+
+  it('surfaces blocked permission before any engine action', async () => {
+    getUserMedia.mockRejectedValueOnce(new DOMException('blocked', 'NotAllowedError'));
+
+    media.requestStartCall('trev', false);
+
+    await vi.waitFor(() => expect(media.mediaState.preflight.status).toBe('error'));
+    expect(media.mediaState.preflight.microphonePermission).toBe('denied');
+    expect(media.mediaState.preflight.error).toContain('permission is blocked');
+    expect(media.confirmMediaPreflight()).toBe(false);
+    expect(eng().startCall).not.toHaveBeenCalled();
+  });
+
+  it('surfaces an unavailable codec before joining', async () => {
+    harness.codecSelfTest.mockRejectedValueOnce(new Error('WASM unavailable'));
+
+    media.requestRoomJoin('#room', false);
+
+    await vi.waitFor(() => expect(media.mediaState.preflight.status).toBe('error'));
+    expect(media.mediaState.preflight.codec).toBe('error');
+    expect(media.mediaState.preflight.error).toContain('WASM unavailable');
+    expect(eng().joinVoice).not.toHaveBeenCalled();
+  });
+
+  it('recovers a disconnected saved microphone by retrying the default', async () => {
+    const recovered = fakeStream();
+    media.selectMediaDevice('microphone', 'missing-mic');
+    getUserMedia
+      .mockRejectedValueOnce(new DOMException('gone', 'OverconstrainedError'))
+      .mockResolvedValueOnce(recovered.stream);
+
+    media.requestRoomJoin('#room', false);
+
+    await vi.waitFor(() => expect(media.mediaState.preflight.status).toBe('ready'));
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect(media.mediaState.preflight.microphoneId).toBeNull();
+  });
+
+  it('feeds selected devices to the engine and updates its output', () => {
+    media.selectMediaDevice('microphone', 'mic-2');
+    media.selectMediaDevice('camera', 'camera-2');
+    media.selectMediaDevice('speaker', 'speaker-2');
+
+    expect(cb().getMediaSettings()).toEqual(expect.objectContaining({
+      inputDeviceId: 'mic-2',
+      cameraDeviceId: 'camera-2',
+    }));
+    expect(eng().setOutput).toHaveBeenCalledWith('speaker-2', 100);
+  });
 });
 
 describe('room join / leave', () => {
@@ -159,6 +286,19 @@ describe('1:1 calls', () => {
     expect(media.mediaState.callState).toBe('idle');
     expect(media.mediaState.callWith).toBeNull();
   });
+
+  it('records a confirmed peer media key and clears it when the call ends', () => {
+    media.startCall('trev', false);
+    cb().onCallState('in_call', 'trev', null);
+    cb().onTsumugiState('Trev', 3, 'PeerKey12345');
+    expect(media.mediaState.observedAudioKeys['trev']).toEqual({
+      epoch: 3,
+      fingerprint: 'PeerKey12345',
+    });
+
+    cb().onCallState('idle', '', null);
+    expect(media.mediaState.observedAudioKeys).toEqual({});
+  });
 });
 
 describe('peers', () => {
@@ -212,6 +352,17 @@ describe('peers', () => {
     expect(media.mediaState.liveCaption?.text).toBe('first line');
     expect(got).toEqual([{ channel: '#room', nick: 'bob', text: 'first line', time: 1 }]);
   });
+
+  it('archives captions only through the existing opt-in archive policy', () => {
+    cb().onCaption({ channel: '#room', nick: 'bob', text: 'ephemeral', time: 3 }, true);
+    expect(harness.archiveMessages).not.toHaveBeenCalled();
+
+    updateSettings({ archiveRetention: '7d' });
+    cb().onCaption({ channel: '#room', nick: 'bob', text: 'persisted locally', time: 4 }, true);
+    expect(harness.archiveMessages).toHaveBeenCalledWith([
+      expect.objectContaining({ bufferKey: 'media:#room', sender: 'bob', text: 'persisted locally' }),
+    ], { retention: '7d', maxMiB: 100 });
+  });
 });
 
 describe('toggles', () => {
@@ -254,6 +405,8 @@ describe('view state + errors', () => {
     expect(media.mediaState.minimized).toBe(true);
     media.setSpotlight('bob');
     expect(media.mediaState.spotlightNick).toBe('bob');
+    media.setTranscriptOpen(true);
+    expect(media.mediaState.transcriptOpen).toBe(true);
   });
 
   it('engine onError surfaces to mediaState.error', () => {
@@ -266,6 +419,27 @@ describe('view state + errors', () => {
     media.joinRoom('#room', false);
     cb().onPresence?.('#room', true);
     expect(media.mediaState.mediaAvailable).toBe(true);
+  });
+
+  it('stores typed call-health telemetry from the engine', () => {
+    cb().onCallHealth?.({
+      status: 'degraded', transportConnected: true, tier: 2, suggestedBps: 120_000,
+      jitterMs: 42, lossRate: 0.08, roundTripMs: 90, encodePressure: 1.1,
+      roomStats: { active_senders: 2, total_viewers: 4, video_fps: 30, audio_kbps: 48 },
+      reconnectAttempt: 1, updatedAt: 1234,
+    });
+    expect(media.mediaState.health).toMatchObject({
+      status: 'degraded', tier: 2, lossRate: 0.08, encodePressure: 1.1,
+      roomStats: { active_senders: 2, total_viewers: 4 },
+    });
+  });
+
+  it('forwards transient bridge connectivity without detaching the engine', () => {
+    media._setMediaTransportConnected(false);
+    media._setMediaTransportConnected(true);
+    expect(eng().setTransportConnected).toHaveBeenNthCalledWith(1, false);
+    expect(eng().setTransportConnected).toHaveBeenNthCalledWith(2, true);
+    expect(eng().setClient).not.toHaveBeenCalledWith(null);
   });
 
   it('peerStream returns null for an unknown peer', () => {

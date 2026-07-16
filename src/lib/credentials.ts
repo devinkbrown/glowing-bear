@@ -3,17 +3,13 @@
  * DarkBear — login credential persistence
  *
  * Storage split (by threat model):
- *   - localStorage 'darkbear:credentials' — the account password + metadata
- *     (nick / server / savedAt / activeKey). The password is stored in plain
- *     text, the same accepted tradeoff every desktop IRC client config makes;
- *     it survives across browser restarts so auto-connect keeps working.
- *   - sessionStorage 'darkbear:tokens' — the session/mesh BEARER reclaim tokens
- *     (sessionToken / meshToken / tokenExpiry), keyed by the same credential
- *     key. These are true bearer credentials that can resume/hijack a session,
- *     so they are kept in sessionStorage: they survive a reload but are cleared
- *     when the browser session ends, bounding their lifetime.
- * The public SavedCredentials shape is unchanged — read/write transparently
- * merge and split the two stores.
+ *   - localStorage 'darkbear:credentials' — identity metadata and, in the web
+ *     build only, passwords the user explicitly opted to remember.
+ *   - sessionStorage 'darkbear:tokens' — session-only passwords plus the
+ *     SASL re-entry and session/mesh reclaim tokens, keyed by the same
+ *     credential key.
+ *     They survive reloads but are cleared when the browser session ends.
+ * Reads and writes transparently merge and split the two stores.
  *
  * Session tokens are issued by Orochi after successful SASL auth via:
  *   NOTE SESSION TOKEN :<token>
@@ -27,9 +23,19 @@
  * token; `SESSION RESUME <mtoken>` routes through handleMeshReclaim, which either
  * reclaims a detached session held locally or redirects to the owning node.
  *
- * When no token is present (first login or expired) the password is used
- * for SASL PLAIN / SCRAM.
+ * Orochi separately issues an account-bound `sst_...` credential after a
+ * secure password/SCRAM login. That credential is preferred through SASL
+ * SESSION-TOKEN on reconnect; rejection clears only it and falls back to the
+ * password. It never substitutes for the logical-session reclaim tokens above.
  */
+
+import {
+  desktopVaultDelete,
+  desktopVaultGet,
+  desktopVaultSet,
+  isDesktopBuild,
+  isDesktopRuntime,
+} from './desktop';
 
 const KEY = 'darkbear:credentials';
 const TOKEN_KEY = 'darkbear:tokens';
@@ -53,12 +59,20 @@ export interface SavedCredentials {
   server: string;
   /** NickServ / SASL password — only set when user opted in AND no valid token */
   password?: string;
+  /** True only when the user explicitly allowed localStorage persistence. */
+  rememberPassword?: boolean;
   /** Orochi-issued session resume token (local node only) */
   sessionToken?: string;
   /** Orochi-issued mesh-sealed reclaim token (resumes from any mesh node) */
   meshToken?: string;
   /** Token validity deadline — ISO string */
   tokenExpiry?: string;
+  /** Orochi-issued account re-entry credential for SASL SESSION-TOKEN. */
+  saslSessionToken?: string;
+  /** Canonical account bound to the SASL credential. */
+  saslAccount?: string;
+  /** Server-provided SASL token deadline — ISO string. */
+  saslTokenExpiry?: string;
   /** When these credentials were last written */
   savedAt: string;
 }
@@ -96,9 +110,24 @@ function isSavedCredentials(value: unknown): value is SavedCredentials {
 
 /** Bearer-token fields, persisted separately from the localStorage password. */
 interface TokenFields {
+  password?: string;
   sessionToken?: string;
   meshToken?: string;
   tokenExpiry?: string;
+  saslSessionToken?: string;
+  saslAccount?: string;
+  saslTokenExpiry?: string;
+}
+
+let memoryTokenMap: Record<string, TokenFields> = {};
+let desktopPasswordMap: Record<string, string> = {};
+
+function passwordOnly(map: Record<string, TokenFields>): Record<string, TokenFields> {
+  const out: Record<string, TokenFields> = {};
+  for (const [key, fields] of Object.entries(map)) {
+    if (fields.password) out[key] = { password: fields.password };
+  }
+  return out;
 }
 
 /**
@@ -109,7 +138,10 @@ interface TokenFields {
 function readTokenMap(): Record<string, TokenFields> {
   try {
     const raw = sessionStorage.getItem(TOKEN_KEY);
-    if (!raw) return {};
+    if (!raw) {
+      memoryTokenMap = {};
+      return {};
+    }
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object') return {};
     const out: Record<string, TokenFields> = {};
@@ -117,19 +149,30 @@ function readTokenMap(): Record<string, TokenFields> {
       if (!value || typeof value !== 'object') continue;
       const t = value as Partial<TokenFields>;
       const fields: TokenFields = {};
+      if (typeof t.password === 'string') fields.password = t.password;
       if (typeof t.sessionToken === 'string') fields.sessionToken = t.sessionToken;
       if (typeof t.meshToken === 'string') fields.meshToken = t.meshToken;
       if (typeof t.tokenExpiry === 'string') fields.tokenExpiry = t.tokenExpiry;
-      if (fields.sessionToken || fields.meshToken) out[key] = fields;
+      if (typeof t.saslSessionToken === 'string') fields.saslSessionToken = t.saslSessionToken;
+      if (typeof t.saslAccount === 'string') fields.saslAccount = t.saslAccount;
+      if (typeof t.saslTokenExpiry === 'string') fields.saslTokenExpiry = t.saslTokenExpiry;
+      if (fields.password || fields.sessionToken || fields.meshToken || fields.saslSessionToken) {
+        out[key] = fields;
+      }
     }
+    memoryTokenMap = passwordOnly(out);
     return out;
   } catch {
-    return {};
+    return memoryTokenMap;
   }
 }
 
 /** Persist the sessionStorage bearer-token map, removing the key when empty. */
 function writeTokenMap(map: Record<string, TokenFields>): void {
+  // Memory fallback is for the user's entered password only. Bearer tokens must
+  // not survive a failed sessionStorage write because callers would otherwise
+  // believe a resume credential was durably recorded when it was not.
+  memoryTokenMap = passwordOnly(map);
   try {
     if (Object.keys(map).length === 0) sessionStorage.removeItem(TOKEN_KEY);
     else sessionStorage.setItem(TOKEN_KEY, JSON.stringify(map));
@@ -145,7 +188,7 @@ function parseLocalStore(): { store: CredentialsStore; hadInlineTokens: boolean 
   const parsed = JSON.parse(raw) as unknown;
 
   const hasInlineToken = (c: SavedCredentials): boolean =>
-    Boolean(c.sessionToken || c.meshToken || c.tokenExpiry);
+    Boolean(c.sessionToken || c.meshToken || c.tokenExpiry || c.saslSessionToken || c.saslTokenExpiry);
 
   if (
     parsed
@@ -195,21 +238,30 @@ function readStore(): CredentialsStore | null {
   const tokens = readTokenMap();
   // sessionStorage is authoritative for token fields when present; otherwise a
   // legacy inline token on the entry survives this read and is migrated below.
+  let hadLegacyPassword = false;
   for (const [key, creds] of Object.entries(store.entries)) {
     const t = tokens[key];
     if (t) {
       store.entries[key] = {
         ...creds,
+        password:     t.password ?? creds.password,
         sessionToken: t.sessionToken,
         meshToken:    t.meshToken,
         tokenExpiry:  t.tokenExpiry,
+        saslSessionToken: t.saslSessionToken,
+        saslAccount:      t.saslAccount,
+        saslTokenExpiry:  t.saslTokenExpiry,
       };
+    }
+    if (creds.password && creds.rememberPassword !== true) hadLegacyPassword = true;
+    if (isDesktopBuild && creds.rememberPassword === true && desktopPasswordMap[key]) {
+      store.entries[key] = { ...(store.entries[key] ?? creds), password: desktopPasswordMap[key] };
     }
   }
 
   // One-time migration: a pre-split blob carried tokens in localStorage. Writing
   // now moves them into sessionStorage and strips them from localStorage.
-  if (hadInlineTokens) writeStore(store);
+  if (hadInlineTokens || hadLegacyPassword) writeStore(store);
   return store;
 }
 
@@ -222,13 +274,85 @@ function writeStore(store: CredentialsStore): void {
     activeKey: store.activeKey,
     entries: {},
   };
+  const rememberedPasswords: Record<string, string> = {};
   for (const [key, creds] of Object.entries(store.entries)) {
-    const { sessionToken, meshToken, tokenExpiry, ...rest } = creds;
-    stripped.entries[key] = rest;
-    if (sessionToken || meshToken) tokenMap[key] = { sessionToken, meshToken, tokenExpiry };
+    const {
+      password,
+      rememberPassword,
+      sessionToken,
+      meshToken,
+      tokenExpiry,
+      saslSessionToken,
+      saslAccount,
+      saslTokenExpiry,
+      ...rest
+    } = creds;
+    const remember = rememberPassword === true;
+    stripped.entries[key] = {
+      ...rest,
+      rememberPassword: remember,
+      password: remember && !isDesktopBuild ? password : undefined,
+    };
+    const fields: TokenFields = {
+      // The desktop copy is a session-only fallback if the OS vault is locked
+      // or temporarily unavailable; the browser keeps the original split.
+      password: !remember || isDesktopBuild ? password : undefined,
+      sessionToken,
+      meshToken,
+      tokenExpiry,
+      saslSessionToken,
+      saslAccount,
+      saslTokenExpiry,
+    };
+    if (fields.password || fields.sessionToken || fields.meshToken || fields.saslSessionToken) {
+      tokenMap[key] = fields;
+    }
+    if (remember && password) rememberedPasswords[key] = password;
   }
   localStorage.setItem(KEY, JSON.stringify(stripped));
   writeTokenMap(tokenMap);
+  if (isDesktopBuild) {
+    desktopPasswordMap = rememberedPasswords;
+    void persistDesktopCredentialPasswords();
+  }
+}
+
+async function persistDesktopCredentialPasswords(): Promise<void> {
+  if (!isDesktopRuntime()) return;
+  if (Object.keys(desktopPasswordMap).length === 0) {
+    await desktopVaultDelete('credentials-v1');
+    return;
+  }
+  await desktopVaultSet('credentials-v1', JSON.stringify({
+    version: 1,
+    passwords: desktopPasswordMap,
+  }));
+}
+
+/** Load remembered Orochi passwords before the direct bridge may connect. */
+export async function hydrateDesktopCredentialPasswords(): Promise<void> {
+  if (!isDesktopRuntime()) return;
+  const payload = await desktopVaultGet('credentials-v1');
+  const passwords: Record<string, string> = {};
+  if (payload) {
+    try {
+      const parsed: unknown = JSON.parse(payload);
+      if (parsed && typeof parsed === 'object'
+          && (parsed as { version?: unknown }).version === 1
+          && (parsed as { passwords?: unknown }).passwords
+          && typeof (parsed as { passwords: unknown }).passwords === 'object') {
+        for (const [key, value] of Object.entries(
+          (parsed as { passwords: Record<string, unknown> }).passwords,
+        )) {
+          if (key.length <= 1024 && typeof value === 'string' && value) passwords[key] = value;
+        }
+      }
+    } catch { /* corrupt vault record degrades to re-authentication */ }
+  }
+  desktopPasswordMap = passwords;
+  // Migrates a legacy remembered localStorage password into the native vault.
+  const store = readStore();
+  if (store) writeStore(store);
 }
 
 /**
@@ -237,12 +361,12 @@ function writeStore(store: CredentialsStore): void {
  * with no recorded expiry still ages out. A missing/invalid timestamp yields a
  * past deadline (fail-closed: purge rather than keep an unbounded token).
  */
-function tokenDeadlineMs(creds: SavedCredentials): number {
-  if (creds.tokenExpiry) {
-    const explicit = new Date(creds.tokenExpiry).getTime();
+function tokenDeadlineMs(expiry: string | undefined, savedAt: string): number {
+  if (expiry) {
+    const explicit = new Date(expiry).getTime();
     if (Number.isFinite(explicit)) return explicit;
   }
-  const saved = new Date(creds.savedAt).getTime();
+  const saved = new Date(savedAt).getTime();
   return (Number.isFinite(saved) ? saved : 0) + MAX_TOKEN_AGE_MS;
 }
 
@@ -250,13 +374,26 @@ function purgeExpiredTokens(store: CredentialsStore): boolean {
   let changed = false;
   const now = Date.now();
   for (const [key, creds] of Object.entries(store.entries)) {
-    if (!creds.sessionToken && !creds.meshToken) continue;
-    if (now > tokenDeadlineMs(creds)) {
-      store.entries[key] = {
-        ...creds,
+    let next = creds;
+    if ((creds.sessionToken || creds.meshToken) && now > tokenDeadlineMs(creds.tokenExpiry, creds.savedAt)) {
+      next = {
+        ...next,
         sessionToken: undefined,
         meshToken: undefined,
         tokenExpiry: undefined,
+      };
+    }
+    if (creds.saslSessionToken && now > tokenDeadlineMs(creds.saslTokenExpiry, creds.savedAt)) {
+      next = {
+        ...next,
+        saslSessionToken: undefined,
+        saslAccount: undefined,
+        saslTokenExpiry: undefined,
+      };
+    }
+    if (next !== creds) {
+      store.entries[key] = {
+        ...next,
       };
       changed = true;
     }
@@ -264,7 +401,7 @@ function purgeExpiredTokens(store: CredentialsStore): boolean {
   return changed;
 }
 
-/** Load credentials from localStorage. Returns null when nothing is saved. */
+/** Load merged identity metadata and session/local secrets. */
 export function loadCredentials(server?: string, nick?: string): SavedCredentials | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -285,6 +422,7 @@ export function saveCredentials(opts: {
   nick: string;
   server: string;
   password?: string;
+  rememberPassword?: boolean;
 }): void {
   if (typeof window === 'undefined') return;
   try {
@@ -300,9 +438,13 @@ export function saveCredentials(opts: {
       nick:         opts.nick,
       server:       opts.server,
       password:     opts.password,
+      rememberPassword: opts.rememberPassword === true,
       sessionToken: preserveToken ? existing.sessionToken : undefined,
       meshToken:    preserveToken ? existing.meshToken : undefined,
       tokenExpiry:  preserveToken ? existing.tokenExpiry : undefined,
+      saslSessionToken: preserveToken ? existing.saslSessionToken : undefined,
+      saslAccount: preserveToken ? existing.saslAccount : undefined,
+      saslTokenExpiry:  preserveToken ? existing.saslTokenExpiry : undefined,
       savedAt:      new Date().toISOString(),
     };
     store.entries[key] = creds;
@@ -360,7 +502,55 @@ export function clearSessionToken(server?: string, nick?: string): void {
     if (!store) return;
     const key = server && nick ? credentialKey(server, nick) : store.activeKey;
     if (!key || !store.entries[key]) return;
-    store.entries[key] = { ...store.entries[key], sessionToken: undefined, meshToken: undefined, tokenExpiry: undefined };
+    store.entries[key] = {
+      ...store.entries[key],
+      sessionToken: undefined,
+      meshToken: undefined,
+      tokenExpiry: undefined,
+      saslSessionToken: undefined,
+      saslAccount: undefined,
+      saslTokenExpiry: undefined,
+    };
+    writeStore(store);
+  } catch { /* quota */ }
+}
+
+/** Store a finite account re-entry token received after secure Orochi SASL. */
+export function storeSaslSessionToken(token: string, expiresAt: number, account?: string): void {
+  if (typeof window === 'undefined') return;
+  if (!/^sst_[a-f\d]{32}$/i.test(token) || !Number.isSafeInteger(expiresAt) || expiresAt <= 0) return;
+  try {
+    const store = readStore();
+    if (!store) return;
+    purgeExpiredTokens(store);
+    const activeKey = store.activeKey ?? Object.keys(store.entries)[0];
+    if (!activeKey) return;
+    const existing = store.entries[activeKey];
+    if (!existing) return;
+    store.entries[activeKey] = {
+      ...existing,
+      saslSessionToken: token,
+      saslAccount: account?.trim() || existing.saslAccount,
+      saslTokenExpiry: new Date(expiresAt * 1000).toISOString(),
+    };
+    writeStore(store);
+  } catch { /* quota */ }
+}
+
+/** Drop only a rejected/expired SASL re-entry token; keep session reclaim. */
+export function clearSaslSessionToken(server?: string, nick?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const store = readStore();
+    if (!store) return;
+    const key = server && nick ? credentialKey(server, nick) : store.activeKey;
+    if (!key || !store.entries[key]) return;
+    store.entries[key] = {
+      ...store.entries[key],
+      saslSessionToken: undefined,
+      saslAccount: undefined,
+      saslTokenExpiry: undefined,
+    };
     writeStore(store);
   } catch { /* quota */ }
 }
@@ -404,16 +594,18 @@ export function clearCredentials(): void {
   try {
     sessionStorage.removeItem(TOKEN_KEY);
   } catch { /* ignore */ }
+  memoryTokenMap = {};
+  desktopPasswordMap = {};
+  if (isDesktopBuild) void desktopVaultDelete('credentials-v1');
 }
 
 /**
  * Return the SASL secret (password) for a connect attempt, or undefined for a
  * guest/token-only session.
  *
- * The session token is intentionally NOT returned here: it is not a SASL
- * secret. It is supplied separately to IRCClient as `sessionToken` and replayed
- * via `SESSION RESUME` only after SASL has already succeeded (Orochi's SESSION
- * command requires a registered, logged-in connection).
+ * Neither token class is returned here. `saslSessionToken` is supplied through
+ * its dedicated IRCClient option, while `sessionToken`/`meshToken` are replayed
+ * via `SESSION RESUME` only after SASL has succeeded.
  */
 export function getAuthSecret(creds: SavedCredentials): string | undefined {
   return creds.password;

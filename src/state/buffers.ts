@@ -4,16 +4,18 @@
 // unread counters, typing/reaction state and channel modes. Collections are
 // plain objects (Record) / arrays so Solid store proxies track them.
 
-import { createStore, produce } from 'solid-js/store';
+import { createStore, produce, reconcile } from 'solid-js/store';
 import type { WeeChatBuffer, WeeChatLine, WeeChatNick, HotlistEntry } from '@/lib/weechat/model';
 import type { BufferEntry, Reaction, TypingInfo } from '@/types';
 import { type NotifyMode, DEFAULT_NOTIFY_MODE, nextNotifyMode } from '@/lib/notifyDecision';
+import { normalizeNotificationTarget } from '@/lib/notificationPolicy';
+import { archiveMessages } from '@/lib/archive/client';
+import { archiveRecordFromLine } from '@/lib/archive/record';
+import { settings } from './settings';
 
 export type { NotifyMode };
 
 const MAX_LINES = 5000;
-const CONTENT_DEDUP_WINDOW_MS = 3000;
-const CONTENT_DEDUP_SCAN = 10;
 const TYPING_ACTIVE_MS = 30_000;
 const TYPING_PAUSED_MS = 8_000;
 
@@ -28,6 +30,8 @@ const LAST_BUFFER_KEY = 'db-last-buffer';
 // muted buffers migrate to the 'mute' tier for free), and DEFAULT_NOTIFY_MODE
 // is stored implicitly by absence. See setNotifyMode/getNotifyMode.
 const NOTIFY_MODE_KEY = 'db-notify-modes';
+const TEMPORARY_MUTE_KEY = 'db-temporary-mutes';
+const MAX_TEMPORARY_MUTE_MS = 31 * 24 * 60 * 60 * 1000;
 
 // Ordered privilege tiers, highest first -- checked against nick.prefix.trim().
 // Covers orochi's PREFIX=(YQqov)*!.@+ (Y=* network-oper, Q=! founder,
@@ -136,6 +140,31 @@ function saveNotifyModes(modes: Record<string, NotifyMode>): void {
   }
 }
 
+function loadTemporaryMutes(now = Date.now()): Record<string, number> {
+  if (typeof localStorage === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(TEMPORARY_MUTE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    const out: Record<string, number> = {};
+    for (const [name, until] of Object.entries(parsed)) {
+      if (!name || typeof until !== 'number' || !Number.isFinite(until)) continue;
+      if (until <= now || until > now + MAX_TEMPORARY_MUTE_MS) continue;
+      out[name] = until;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveTemporaryMutes(mutes: Record<string, number>): void {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(TEMPORARY_MUTE_KEY, JSON.stringify(mutes));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -157,6 +186,8 @@ export interface BuffersState {
    * getNotifyMode for the precedence.
    */
   notifyModes: Record<string, NotifyMode>;
+  /** Device-local, expiring per-buffer mute deadlines keyed by full name. */
+  temporaryMutes: Record<string, number>;
   /** Buffer pointer -> line index of the read marker. */
   readMarkerPos: Record<string, number>;
 }
@@ -168,6 +199,7 @@ const [state, setState] = createStore<BuffersState>({
   ignoredNicks: loadKeys(IGNORE_KEY),
   mutedBuffers: loadKeys(MUTE_KEY),
   notifyModes: loadNotifyModes(),
+  temporaryMutes: loadTemporaryMutes(),
   readMarkerPos: {},
 });
 
@@ -239,6 +271,18 @@ export function getNotifyMode(pointer: string): NotifyMode {
   return state.notifyModes[name] ?? DEFAULT_NOTIFY_MODE;
 }
 
+export function getTemporaryMuteUntil(pointer: string, now = Date.now()): number {
+  const entry = state.buffers[pointer];
+  if (!entry) return 0;
+  const name = entry.buffer.fullName || entry.buffer.name;
+  const until = state.temporaryMutes[name] ?? 0;
+  return until > now ? until : 0;
+}
+
+export function isTemporarilyMuted(pointer: string, now = Date.now()): boolean {
+  return getTemporaryMuteUntil(pointer, now) > now;
+}
+
 export function isIgnored(nick: string): boolean {
   return !!state.ignoredNicks[nick.toLowerCase()];
 }
@@ -300,6 +344,43 @@ export function clearLines(pointer: string): void {
 const isOptimistic = (id: string) => id.startsWith('_opt_');
 
 /**
+ * Return whether a non-optimistic line repeats a stable relay pointer or IRC
+ * msgid already accepted for this buffer. `staged` lets the connection's
+ * frame-coalescing queue apply the same identity rule before the store flushes.
+ */
+export function isDuplicateLine(
+  pointer: string,
+  line: WeeChatLine,
+  staged: readonly WeeChatLine[] = [],
+): boolean {
+  if (isOptimistic(line.id)) return false;
+  const entry = state.buffers[pointer];
+  if (!entry) return false;
+  if (entry.lineIds[line.id]) return true;
+  if (line.msgid && entry.msgIndex[line.msgid]) return true;
+  return staged.some((candidate) => (
+    !isOptimistic(candidate.id) && (
+      candidate.id === line.id ||
+      (!!line.msgid && candidate.msgid === line.msgid)
+    )
+  ));
+}
+
+function archiveAcceptedLines(entry: BufferEntry, lines: readonly WeeChatLine[], isUnread: boolean): void {
+  if (settings.archiveRetention === 'off') return;
+  const records = lines
+    .map((line) => archiveRecordFromLine(entry.buffer, line, isUnread))
+    .filter((record) => record !== null);
+  if (records.length === 0) return;
+  void archiveMessages(records, {
+    retention: settings.archiveRetention,
+    maxMiB: settings.archiveMaxMiB,
+  }).catch(() => {
+    // Storage availability/quota failures must never interrupt live chat.
+  });
+}
+
+/**
  * Client-side highlight-word match. Returns a highlighted COPY when a trimmed
  * word occurs in the message, otherwise the original line untouched.
  */
@@ -311,24 +392,6 @@ function markHighlight(line: WeeChatLine, highlightWords: string[]): WeeChatLine
     if (lc && lcMsg.includes(lc)) return { ...line, highlight: true };
   }
   return line;
-}
-
-/**
- * Content-based dedup: true when a recent non-optimistic line (last
- * CONTENT_DEDUP_SCAN, within CONTENT_DEDUP_WINDOW_MS) has the same nick+message.
- * Catches the same message arriving under a different pointer id.
- */
-function isContentDuplicate(lines: WeeChatLine[], line: WeeChatLine): boolean {
-  if (!line.message || lines.length === 0) return false;
-  const cutoff = line.date.getTime() - CONTENT_DEDUP_WINDOW_MS;
-  for (let i = lines.length - 1; i >= Math.max(0, lines.length - CONTENT_DEDUP_SCAN); i--) {
-    const l = lines[i];
-    if (!l) break;
-    if (l.date.getTime() < cutoff) break;
-    if (isOptimistic(l.id)) continue;
-    if (l.nick === line.nick && l.message === line.message) return true;
-  }
-  return false;
 }
 
 /**
@@ -378,11 +441,12 @@ function trimEntry(e: BufferEntry): void {
 /**
  * Append a single live line.
  *
- * Dedup: O(1) id lookup, then a content scan over the last CONTENT_DEDUP_SCAN
- * lines within CONTENT_DEDUP_WINDOW_MS (same nick + message). Confirmed echoes
- * replace their `_opt_` optimistic placeholder. Client-side highlight words mark
- * the line highlighted before insertion. Unread/highlight counters bump when the
- * buffer is not active.
+ * Dedup uses stable relay line IDs and IRC msgids only. Content/time heuristics
+ * are deliberately excluded: users may legitimately send identical text more
+ * than once, including an immediate retry. Confirmed echoes replace their
+ * `_opt_` optimistic placeholder. Client-side highlight words mark the line
+ * highlighted before insertion. Unread/highlight counters bump when the buffer
+ * is not active.
  */
 export function addLine(pointer: string, line: WeeChatLine, highlightWords: string[]): void {
   // Suppress ignored nicks
@@ -393,18 +457,19 @@ export function addLine(pointer: string, line: WeeChatLine, highlightWords: stri
 
   const opt = isOptimistic(line.id);
 
-  // Deduplicate: O(1) id lookup, then recent-content scan
-  if (!opt && entry.lineIds[line.id]) return;
-  if (!opt && isContentDuplicate(entry.lines, line)) return;
+  // Deduplicate only by stable protocol identity.
+  if (!opt && isDuplicateLine(pointer, line)) return;
 
   const marked = markHighlight(line, highlightWords);
+  const inactive = state.activeBuffer !== pointer;
 
   setState(produce((s) => {
     const e = s.buffers[pointer];
     if (!e) return;
-    insertLine(e, marked, s.activeBuffer !== pointer, opt);
+    insertLine(e, marked, inactive, opt);
     trimEntry(e);
   }));
+  if (!opt) archiveAcceptedLines(entry, [marked], inactive);
 }
 
 /**
@@ -424,46 +489,55 @@ export function addLineBatch(pointer: string, lines: WeeChatLine[], highlightWor
   const entry = state.buffers[pointer];
   if (!entry) return;
 
+  const accepted: WeeChatLine[] = [];
+  const inactive = state.activeBuffer !== pointer;
   setState(produce((s) => {
     const e = s.buffers[pointer];
     if (!e) return;
-    const inactive = s.activeBuffer !== pointer;
     for (const raw of lines) {
       // Suppress ignored nicks
       if (raw.nick && s.ignoredNicks[raw.nick.toLowerCase()]) continue;
       const opt = isOptimistic(raw.id);
       if (!opt && e.lineIds[raw.id]) continue;
-      if (!opt && isContentDuplicate(e.lines, raw)) continue;
-      insertLine(e, markHighlight(raw, highlightWords), inactive, opt);
+      if (!opt && raw.msgid && e.msgIndex[raw.msgid]) continue;
+      const marked = markHighlight(raw, highlightWords);
+      insertLine(e, marked, inactive, opt);
+      if (!opt) accepted.push(marked);
     }
     trimEntry(e);
   }));
+  archiveAcceptedLines(entry, accepted, inactive);
 }
 
-/** Bulk-insert lines (history). `prepend` puts them before existing lines. */
-export function addLines(pointer: string, lines: WeeChatLine[], prepend = false): void {
+/**
+ * Bulk-insert lines (history). `prepend` puts them before existing lines.
+ *
+ * A targeted archive/reply jump may ask the relay for substantially more than
+ * MAX_LINES. When `preserveMsgid` is present in that response, retain a
+ * centered render window around it instead of trimming it back out with the
+ * oldest lines. Normal history paging keeps its newest-MAX_LINES behaviour.
+ */
+export function addLines(
+  pointer: string,
+  lines: WeeChatLine[],
+  prepend = false,
+  preserveMsgid?: string,
+): void {
   const entry = state.buffers[pointer];
   if (!entry) return;
 
-  // O(1) id lookup + content-based dedup over 3s buckets
+  // O(1) stable relay-id/msgid dedup. Never collapse repeated authored text.
   const existingIds = entry.lineIds;
-  const existingContent = new Set<string>();
-  for (const l of entry.lines) {
-    if (isOptimistic(l.id) || !l.nick || !l.message) continue;
-    existingContent.add(`${l.nick}\0${l.message}\0${Math.floor(l.date.getTime() / CONTENT_DEDUP_WINDOW_MS)}`);
-  }
+  const existingMsgids = new Set(Object.keys(entry.msgIndex));
   const seenInBatch = new Set<string>();
+  const seenMsgids = new Set<string>();
   const fresh = lines.filter((l) => {
     if (existingIds[l.id]) return false;
     if (seenInBatch.has(l.id)) return false;
     seenInBatch.add(l.id);
-    if (l.nick && l.message) {
-      const bucket = Math.floor(l.date.getTime() / CONTENT_DEDUP_WINDOW_MS);
-      const key = `${l.nick}\0${l.message}\0${bucket}`;
-      if (existingContent.has(key) ||
-          existingContent.has(`${l.nick}\0${l.message}\0${bucket - 1}`) ||
-          existingContent.has(`${l.nick}\0${l.message}\0${bucket + 1}`)) return false;
-      existingContent.add(key);
+    if (l.msgid) {
+      if (existingMsgids.has(l.msgid) || seenMsgids.has(l.msgid)) return false;
+      seenMsgids.add(l.msgid);
     }
     return true;
   });
@@ -473,13 +547,34 @@ export function addLines(pointer: string, lines: WeeChatLine[], prepend = false)
     const e = s.buffers[pointer];
     if (!e) return;
     let newLines = prepend ? [...fresh, ...e.lines] : [...e.lines, ...fresh];
-    if (newLines.length > MAX_LINES) newLines = newLines.slice(-MAX_LINES);
+    if (newLines.length > MAX_LINES) {
+      const targetIndex = preserveMsgid
+        ? newLines.findIndex((line) => line.msgid === preserveMsgid)
+        : -1;
+      if (targetIndex >= 0) {
+        const halfWindow = Math.floor(MAX_LINES / 2);
+        const start = Math.max(0, Math.min(
+          targetIndex - halfWindow,
+          newLines.length - MAX_LINES,
+        ));
+        newLines = newLines.slice(start, start + MAX_LINES);
+      } else {
+        newLines = newLines.slice(-MAX_LINES);
+      }
+    }
     e.lines = newLines;
-    // Rebuild the id index from the final array (handles trimming)
+    // Rebuild both indexes from the final array (handles trimming and makes
+    // history-loaded msgids immediately available to reply/archive jumps).
     const ids: Record<string, true> = {};
-    for (const l of newLines) if (!isOptimistic(l.id)) ids[l.id] = true;
+    const msgIndex: Record<string, WeeChatLine> = {};
+    for (const l of newLines) {
+      if (!isOptimistic(l.id)) ids[l.id] = true;
+      if (l.msgid) msgIndex[l.msgid] = l;
+    }
     e.lineIds = ids;
+    e.msgIndex = msgIndex;
   }));
+  archiveAcceptedLines(entry, fresh, false);
 }
 
 let sysLineCounter = 0;
@@ -732,10 +827,68 @@ export function toggleMute(pointer: string): void {
   if (!entry) return;
   const name = entry.buffer.fullName || entry.buffer.name;
   setState(produce((s) => {
+    delete s.temporaryMutes[name];
     if (s.mutedBuffers[name]) delete s.mutedBuffers[name];
     else s.mutedBuffers[name] = true;
   }));
   saveKeys(MUTE_KEY, state.mutedBuffers);
+  saveTemporaryMutes(state.temporaryMutes);
+}
+
+/** Temporarily silence one buffer without changing its synced notification tier. */
+export function muteTemporarily(pointer: string, durationMs: number, now = Date.now()): number {
+  const entry = state.buffers[pointer];
+  if (!entry || !Number.isFinite(durationMs) || durationMs <= 0) return 0;
+  const name = entry.buffer.fullName || entry.buffer.name;
+  const until = now + Math.min(durationMs, MAX_TEMPORARY_MUTE_MS);
+  setState('temporaryMutes', name, until);
+  saveTemporaryMutes(state.temporaryMutes);
+  return until;
+}
+
+export function clearTemporaryMute(pointer: string): void {
+  const entry = state.buffers[pointer];
+  if (!entry) return;
+  const name = entry.buffer.fullName || entry.buffer.name;
+  setState(produce((s) => { delete s.temporaryMutes[name]; }));
+  saveTemporaryMutes(state.temporaryMutes);
+}
+
+/** Remove expired entries and persist only when something changed. */
+export function pruneTemporaryMutes(now = Date.now()): void {
+  const expired = Object.entries(state.temporaryMutes)
+    .filter(([, until]) => until <= now)
+    .map(([name]) => name);
+  if (expired.length === 0) return;
+  setState(produce((s) => {
+    for (const name of expired) delete s.temporaryMutes[name];
+  }));
+  saveTemporaryMutes(state.temporaryMutes);
+}
+
+/**
+ * Policy aliases sent to the service worker. Full names preserve reconnect
+ * identity; loaded short names let an Orochi push `{from}` or `{target}` match.
+ */
+export function notificationMuteSnapshot(now = Date.now()): {
+  mutedTargets: string[];
+  temporaryMutes: Record<string, number>;
+} {
+  const muted = new Set(Object.keys(state.mutedBuffers).map(normalizeNotificationTarget));
+  const temporaryMutes: Record<string, number> = {};
+  for (const [name, until] of Object.entries(state.temporaryMutes)) {
+    if (until > now) temporaryMutes[normalizeNotificationTarget(name)] = until;
+  }
+  for (const entry of Object.values(state.buffers)) {
+    const fullName = entry.buffer.fullName || entry.buffer.name;
+    const aliases = [fullName, entry.buffer.name, entry.buffer.shortName, entry.buffer.localVars['channel']]
+      .map(normalizeNotificationTarget)
+      .filter(Boolean);
+    if (state.mutedBuffers[fullName]) for (const alias of aliases) muted.add(alias);
+    const until = state.temporaryMutes[fullName] ?? 0;
+    if (until > now) for (const alias of aliases) temporaryMutes[alias] = until;
+  }
+  return { mutedTargets: [...muted].filter(Boolean).sort(), temporaryMutes };
 }
 
 /**
@@ -749,6 +902,7 @@ export function setNotifyMode(pointer: string, mode: NotifyMode): void {
   if (!entry) return;
   const name = entry.buffer.fullName || entry.buffer.name;
   setState(produce((s) => {
+    delete s.temporaryMutes[name];
     if (mode === 'mute') {
       s.mutedBuffers[name] = true;
       delete s.notifyModes[name];
@@ -761,6 +915,7 @@ export function setNotifyMode(pointer: string, mode: NotifyMode): void {
   }));
   saveKeys(MUTE_KEY, state.mutedBuffers);
   saveNotifyModes(state.notifyModes);
+  saveTemporaryMutes(state.temporaryMutes);
 }
 
 /**
@@ -771,6 +926,46 @@ export function setNotifyMode(pointer: string, mode: NotifyMode): void {
 export function cycleNotifyMode(pointer: string): NotifyMode {
   setNotifyMode(pointer, nextNotifyMode(getNotifyMode(pointer)));
   return getNotifyMode(pointer);
+}
+
+export interface BufferPreferenceSnapshot {
+  pinned: boolean;
+  notify: NotifyMode;
+}
+
+/** Stable-name snapshot of the only buffer preferences safe to sync. */
+export function exportBufferPreferences(): Record<string, BufferPreferenceSnapshot> {
+  const names = new Set([
+    ...Object.keys(state.pinnedBuffers),
+    ...Object.keys(state.mutedBuffers),
+    ...Object.keys(state.notifyModes),
+  ]);
+  const out: Record<string, BufferPreferenceSnapshot> = {};
+  for (const name of [...names].sort((a, b) => a.localeCompare(b))) {
+    const pinned = state.pinnedBuffers[name] === true;
+    const notify = state.mutedBuffers[name] ? 'mute' : (state.notifyModes[name] ?? DEFAULT_NOTIFY_MODE);
+    if (pinned || notify !== DEFAULT_NOTIFY_MODE) out[name] = { pinned, notify };
+  }
+  return out;
+}
+
+/** Replace the synced buffer preference set and persist every backing store. */
+export function applyBufferPreferences(value: Record<string, BufferPreferenceSnapshot>): void {
+  const pinned: Record<string, true> = {};
+  const muted: Record<string, true> = {};
+  const notifyModes: Record<string, NotifyMode> = {};
+  for (const [name, pref] of Object.entries(value)) {
+    if (!name) continue;
+    if (pref.pinned) pinned[name] = true;
+    if (pref.notify === 'mute') muted[name] = true;
+    else if (pref.notify !== DEFAULT_NOTIFY_MODE) notifyModes[name] = pref.notify;
+  }
+  setState('pinnedBuffers', reconcile(pinned));
+  setState('mutedBuffers', reconcile(muted));
+  setState('notifyModes', reconcile(notifyModes));
+  saveKeys(PIN_KEY, state.pinnedBuffers);
+  saveKeys(MUTE_KEY, state.mutedBuffers);
+  saveNotifyModes(state.notifyModes);
 }
 
 export function addIgnore(nick: string): void {

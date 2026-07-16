@@ -25,13 +25,24 @@ import {
   type NicklistReceivedEvent,
   type NickRemovedEvent,
   type RelayErrorEvent,
+  type RelayDiagnostics,
+  type RelayDiagnosticsChangedEvent,
   type StateChangedEvent,
 } from '@/lib/weechat/client';
 import { stripColors } from '@/lib/weechat/strip-colors';
-import { notify, playSound, updateTitle } from '@/lib/notifications';
+import {
+  claimAlertDelivery,
+  notify,
+  playSound,
+  setAlertCoordinatorActive,
+  updateTitle,
+} from '@/lib/notifications';
 import { shouldNotify } from '@/lib/notifyDecision';
+import { notificationPolicyAllows } from '@/lib/notificationPolicy';
+import { recordDiagnosticEvent } from '@/lib/diagnosticsEvents';
 import { isChannelListNumeric, isIrcxNumeric, parseIrcxLine, buildPropEntry } from '@/lib/ircx/parser';
 import { NODES, wssUrlForOrochiHost } from '@/lib/irc/nodes';
+import { parseOrochiServiceFeedback } from '@/lib/irc/serviceFeedback';
 import type { BufferEntry } from '@/types';
 import { settings } from './settings';
 import {
@@ -41,6 +52,7 @@ import {
   addLine,
   addLines,
   addLineBatch,
+  isDuplicateLine,
   addLocalSystemLine,
   setNicklist,
   addNick,
@@ -53,11 +65,14 @@ import {
   addReaction,
   applyModeChange,
   getNotifyMode,
+  isTemporarilyMuted,
   getTotalHighlights,
   getTotalUnread,
   clearBuffers,
   clearLines,
 } from './buffers';
+import { threadsState } from './threads';
+import { recordLineActivity } from './activity';
 import {
   markOrochi,
   isOrochiServer,
@@ -81,6 +96,7 @@ import {
   monitorRemove,
   sendPushSet,
   clearIrcx,
+  recordServiceFeedback,
 } from './ircx';
 
 const PING_INTERVAL_MS = 15_000;
@@ -129,6 +145,22 @@ export function setRelayObserver(obs: RelayObserver | null): void {
 const [connectionState, setConnectionState] = createSignal<ConnectionState>(ConnectionState.DISCONNECTED);
 const [connectionError, setConnectionError] = createSignal<string | null>(null);
 const [lag, setLag] = createSignal(0);
+const [historyReceipt, setHistoryReceipt] = createSignal({ bufferPtr: '', returnedCount: 0, nonce: 0 });
+const [relayDiagnostics, setRelayDiagnostics] = createSignal<RelayDiagnostics>({
+  phase: 'idle',
+  transport: 'ws',
+  protocolMode: 'none',
+  authMode: 'none',
+  serverVersion: '',
+  compression: 'off',
+  hashAlgorithm: 'none',
+  totp: false,
+  handshake: 'unknown',
+  canDecodeCompression: false,
+  reconnectReason: 'none',
+  reconnectAttempt: 0,
+  reconnectDelayMs: 0,
+});
 
 /** Current relay connection state (signal accessor). */
 export { connectionState };
@@ -136,6 +168,10 @@ export { connectionState };
 export { connectionError };
 /** Round-trip lag in ms from the 15s ping loop (signal accessor). */
 export { lag };
+/** Latest relay history response metadata (no message content). */
+export { historyReceipt };
+/** Redacted, reactive relay lifecycle and negotiated-capability diagnostics. */
+export { relayDiagnostics };
 
 interface OperState {
   /** Server buffer pointers where we hold oper status. */
@@ -161,6 +197,50 @@ let cleanups: Array<() => void> = [];
 let pendingQueryNick: string | null = null;
 let pendingJoinChannel: string | null = null;
 let queryNickTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingHistoryTarget: string | null = null;
+let historyReceiptNonce = 0;
+const MAX_NOTIFICATION_PROFILE_SCOPES = 20;
+const notificationProfileScopes = new Map<string, string>();
+let notificationConnectionScope = '';
+
+function newNotificationConnectionScope(): string {
+  const bytes = new Uint8Array(24);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function notificationProfileKey(): string {
+  const relay = settings.relay;
+  // The credential remains only as an in-memory Map key; notifications expose
+  // the random value, never endpoint credentials. Re-selecting the same relay
+  // profile in this tab reuses its scope, while another account/profile cannot
+  // consume an old inline reply even if buffer pointers/names collide.
+  return JSON.stringify([
+    relay.tls,
+    relay.host.trim().toLocaleLowerCase(),
+    relay.port,
+    relay.password,
+  ]);
+}
+
+function bindNotificationConnectionScope(): void {
+  const key = notificationProfileKey();
+  let scope = notificationProfileScopes.get(key);
+  if (!scope) {
+    scope = newNotificationConnectionScope();
+    notificationProfileScopes.set(key, scope);
+    if (notificationProfileScopes.size > MAX_NOTIFICATION_PROFILE_SCOPES) {
+      const oldest = notificationProfileScopes.keys().next().value as string | undefined;
+      if (oldest) notificationProfileScopes.delete(oldest);
+    }
+  }
+  notificationConnectionScope = scope;
+}
+
+/** Opaque binding for actionable alerts created by the current relay profile. */
+export function currentNotificationConnectionScope(): string {
+  return notificationConnectionScope;
+}
 
 // Attach a typed CustomEvent listener and return a cleanup fn
 function on<T>(target: EventTarget, name: string, handler: (detail: T) => void): () => void {
@@ -322,14 +402,15 @@ function detectOrochiForEntry(entry: BufferEntry, line?: WeeChatLine): void {
 // lineAdded pipeline
 // ---------------------------------------------------------------------------
 
-// A single WeeChat `_buffer_line_added` frame dispatches one `lineAdded` event
-// per line, synchronously. We coalesce a burst (netsplit rejoin / flood) per
-// buffer and flush on a microtask, so one frame folds into ONE store write per
-// buffer instead of N — identical final state, a single reactive pass. The
-// per-line side-effects (typing/oper/tag detection, notifications) stay
-// synchronous; only the store insert and the title recompute are deferred.
+// WeeChat `_buffer_line_added` frames dispatch `lineAdded` synchronously. We
+// coalesce a burst (netsplit rejoin / flood) per buffer across a short 16 ms
+// event-loop window, so both a multi-line frame and adjacent WebSocket frames
+// fold into ONE store write per buffer instead of N. The per-line side-effects
+// (typing/oper/tag detection, notifications) stay synchronous; only the store
+// insert and title recompute are deferred by at most one frame.
+const LINE_BURST_WINDOW_MS = 16;
 const pendingLines = new Map<string, WeeChatLine[]>();
-let lineFlushScheduled = false;
+let lineFlushTimer: ReturnType<typeof setTimeout> | undefined;
 let titleDirty = false;
 
 function enqueueLine(line: WeeChatLine): void {
@@ -337,15 +418,15 @@ function enqueueLine(line: WeeChatLine): void {
   if (!arr) { arr = []; pendingLines.set(line.buffer, arr); }
   arr.push(line);
   titleDirty = true;
-  if (!lineFlushScheduled) {
-    lineFlushScheduled = true;
-    queueMicrotask(flushLineBatch);
+  if (!lineFlushTimer) {
+    lineFlushTimer = setTimeout(flushLineBatch, LINE_BURST_WINDOW_MS);
   }
 }
 
 /** Fold every coalesced burst into one store write per buffer, then retitle. */
 function flushLineBatch(): void {
-  lineFlushScheduled = false;
+  if (lineFlushTimer) clearTimeout(lineFlushTimer);
+  lineFlushTimer = undefined;
   if (pendingLines.size > 0) {
     const words = settings.highlightWords;
     for (const [ptr, lines] of pendingLines) addLineBatch(ptr, lines, words);
@@ -359,8 +440,9 @@ function flushLineBatch(): void {
 
 /** Drop any pending coalesced lines — teardown, before buffers are cleared. */
 function resetLineBatch(): void {
+  if (lineFlushTimer) clearTimeout(lineFlushTimer);
+  lineFlushTimer = undefined;
   pendingLines.clear();
-  lineFlushScheduled = false;
   titleDirty = false;
 }
 
@@ -376,14 +458,20 @@ function handleLineAdded(line: WeeChatLine): void {
       if (typingState && line.nick) {
         setTyping(line.buffer, line.nick, typingState as 'active' | 'paused' | 'done');
       }
-      const reactEmoji = line.ircTags.get('+react');
-      const reactTarget = line.ircTags.get('+reply') ?? line.replyTo;
+      const reactEmoji = line.ircTags.get('+draft/react') ?? line.ircTags.get('+react');
+      const reactTarget = line.ircTags.get('+draft/reply') ?? line.ircTags.get('+reply') ?? line.replyTo;
       if (reactEmoji && reactTarget && line.nick) {
         addReaction(line.buffer, reactTarget, reactEmoji, line.nick);
       }
     }
     return;
   }
+
+  // Reject repeated stable relay identities before any downstream state or
+  // user-visible side effect. The staged burst matters here: the first line
+  // may not have reached the store yet, but it has already earned its activity,
+  // service-feedback and alert effects.
+  if (isDuplicateLine(line.buffer, line, pendingLines.get(line.buffer))) return;
 
   // IRCX numeric interception
   if (isIrcxNumeric(line.tags) || isChannelListNumeric(line.tags)) {
@@ -440,6 +528,24 @@ function handleLineAdded(line: WeeChatLine): void {
   const entry = buffersState.buffers[line.buffer];
   if (!entry) return;
 
+  // Service commands are sent to the relay's server buffer. Mirror only
+  // narrowly recognised Orochi replies into the services panel; the parser
+  // deliberately rejects unrelated notices and SESSIONTOKEN credentials.
+  if (entry.buffer.localVars['type'] === 'server') {
+    const serverName = entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
+    // WeeChat exposes the IRC source through nick_<source> (or the rendered
+    // prefix). IRC nicknames cannot contain dots, so a dotted source is a
+    // server name. A local relay/network alias is not an authenticated source:
+    // it may also be a perfectly valid user nickname. Never trust a
+    // user-authored NOTICE merely because WeeChat rendered it in this buffer.
+    const source = (line.nick ?? '').trim().toLowerCase();
+    const serverSource = source.includes('.');
+    if (isOrochiServer(serverName) && serverSource) {
+      const feedback = parseOrochiServiceFeedback(stripCodes(line.message), line.tags);
+      if (feedback) recordServiceFeedback(serverName, feedback, line.date.getTime());
+    }
+  }
+
   // Oper detection
   detectOperFromLine(line, entry);
 
@@ -454,6 +560,12 @@ function handleLineAdded(line: WeeChatLine): void {
   // Clear typing on regular message
   if (line.nick) setTyping(line.buffer, line.nick, 'done');
 
+  recordLineActivity(
+    entry,
+    line,
+    isOperBuffer(line.buffer) && line.tags.some((tag) => tag === 'irc_wallops' || tag === 'orochi_oper_alert'),
+  );
+
   // Coalesce the store insert into the current frame's batch (flushed on a
   // microtask). The title is recomputed once per flush, not per line.
   enqueueLine(line);
@@ -462,12 +574,36 @@ function handleLineAdded(line: WeeChatLine): void {
   // and buffer metadata, not on the (deferred) store insertion. The per-channel
   // tier (all/mentions/mute) is decided by the pure shouldNotify table; notify()
   // itself stays focus-guarded, so this only reaches an OS alert when blurred.
-  if (shouldNotify(getNotifyMode(line.buffer), line, settings.notifications)) {
-    const bufName = entry.buffer.shortName || entry.buffer.name;
-    const entryType = entry.buffer.localVars['type'];
-    const title = entryType === 'private' ? `Message from ${bufName}` : `Highlight in ${bufName}`;
-    notify(title, stripCodes(line.message), undefined, line.buffer);
-    if (settings.notificationSound) playSound();
+  const now = Date.now();
+  const policyAllows = notificationPolicyAllows({
+    enabled: settings.notifications,
+    snoozedUntil: settings.notificationsSnoozedUntil,
+    quietHours: {
+      enabled: settings.quietHoursEnabled,
+      start: settings.quietHoursStart,
+      end: settings.quietHoursEnd,
+      timeZone: settings.quietHoursTimezone,
+    },
+    mutedTargets: [],
+    temporaryMutes: {},
+  }, undefined, now) && !isTemporarilyMuted(line.buffer, now);
+  if (shouldNotify(getNotifyMode(line.buffer), line, policyAllows)) {
+    if (claimAlertDelivery()) {
+      const bufName = entry.buffer.shortName || entry.buffer.name;
+      const entryType = entry.buffer.localVars['type'];
+      const title = entryType === 'private' ? `Message from ${bufName}` : `Highlight in ${bufName}`;
+      const stableTarget = entry.buffer.fullName || entry.buffer.name ||
+        entry.buffer.localVars['channel'] || entry.buffer.shortName;
+      notify(
+        title,
+        stripCodes(line.message),
+        undefined,
+        line.buffer,
+        stableTarget,
+        notificationConnectionScope,
+      );
+      if (settings.notificationSound) playSound();
+    }
   }
 }
 
@@ -478,16 +614,21 @@ function handleLineAdded(line: WeeChatLine): void {
 export function connect(): void {
   // Tear down existing
   disconnect();
+  bindNotificationConnectionScope();
 
   const c = new WeeRelayClient({ ...settings.relay });
   client = c;
   setConnectionError(null);
+  setRelayDiagnostics(c.diagnostics());
+  let lastRelayPhase = c.diagnostics().phase;
 
   cleanups = [
     // Protocol event handler — untracked reads of current state are intended.
     // eslint-disable-next-line solid/reactivity
     on<StateChangedEvent>(c, 'stateChanged', ({ state }) => {
       setConnectionState(state);
+      setAlertCoordinatorActive(state === ConnectionState.CONNECTED);
+      recordDiagnosticEvent('relay-state', state);
       if (state === ConnectionState.CONNECTED) {
         setConnectionError(null);
         startPing();
@@ -502,6 +643,15 @@ export function connect(): void {
 
     on<RelayErrorEvent>(c, 'error', ({ message }) => {
       setConnectionError(message);
+      recordDiagnosticEvent('relay-error');
+    }),
+
+    on<RelayDiagnosticsChangedEvent>(c, 'diagnosticsChanged', (detail) => {
+      if (lastRelayPhase !== detail.phase) {
+        recordDiagnosticEvent('relay-phase', detail.phase);
+      }
+      lastRelayPhase = detail.phase;
+      setRelayDiagnostics(detail);
     }),
 
     on<AuthenticatedEvent>(c, 'authenticated', () => {
@@ -573,14 +723,26 @@ export function connect(): void {
     on<HistoryLoadedEvent>(c, 'historyLoaded', ({ lines }) => {
       const first = lines[0];
       if (!first) {
-        const active = buffersState.activeBuffer;
-        if (active) setLoading(active, false);
+        const target = pendingHistoryTarget ?? buffersState.activeBuffer;
+        pendingHistoryTarget = null;
+        if (target) {
+          setLoading(target, false);
+          setHistoryReceipt({ bufferPtr: target, returnedCount: 0, nonce: ++historyReceiptNonce });
+        }
         return;
       }
       const bufPtr = first.buffer;
-      const hasExisting = (buffersState.buffers[bufPtr]?.lines.length ?? 0) > 0;
+      pendingHistoryTarget = null;
+      setHistoryReceipt({ bufferPtr: bufPtr, returnedCount: lines.length, nonce: ++historyReceiptNonce });
+      const before = buffersState.buffers[bufPtr];
+      const hasExisting = (before?.lines.length ?? 0) > 0;
+      const activeThread = threadsState.activeThread;
+      const stableBufferKey = before ? (before.buffer.fullName || before.buffer.name) : '';
+      const threadRoot = activeThread && (
+        activeThread.bufferPtr === bufPtr || activeThread.bufferKey === stableBufferKey
+      ) ? activeThread.rootMsgid : undefined;
       setLoading(bufPtr, false);
-      addLines(bufPtr, [...lines].reverse(), hasExisting);
+      addLines(bufPtr, [...lines].reverse(), hasExisting, threadsState.scrollRequest?.msgid ?? threadRoot);
 
       const entry = buffersState.buffers[bufPtr];
       const bufType = entry?.buffer.localVars['type'] ?? '';
@@ -633,11 +795,14 @@ export function connect(): void {
 }
 
 export function disconnect(): void {
+  notificationConnectionScope = '';
+  setAlertCoordinatorActive(false);
   stopPing();
   resetLineBatch(); // drop any coalesced burst; buffers are about to be cleared
   if (queryNickTimer) { clearTimeout(queryNickTimer); queryNickTimer = null; }
   pendingQueryNick = null;
   pendingJoinChannel = null;
+  pendingHistoryTarget = null;
   for (const cleanup of cleanups) cleanup();
   cleanups = [];
   if (client) {
@@ -645,6 +810,21 @@ export function disconnect(): void {
     client = null;
   }
   setConnectionState(ConnectionState.DISCONNECTED);
+  setRelayDiagnostics({
+    phase: 'idle',
+    transport: settings.relay.tls ? 'wss' : 'ws',
+    protocolMode: 'none',
+    authMode: 'none',
+    serverVersion: '',
+    compression: 'off',
+    hashAlgorithm: 'none',
+    totp: false,
+    handshake: 'unknown',
+    canDecodeCompression: typeof DecompressionStream !== 'undefined',
+    reconnectReason: 'none',
+    reconnectAttempt: 0,
+    reconnectDelayMs: 0,
+  });
   setOperState(produce((s) => { s.operServers = {}; s.adminServers = {}; }));
   clearBuffers();
   clearIrcx();
@@ -675,9 +855,9 @@ function withMediaSink(target: string, fn: (sink: MediaCommandSink) => void): vo
  * commands (orochi servers only) to the ircx store; /monitor anywhere;
  * everything else to the relay. Plain messages get an optimistic local echo.
  */
-export function sendInput(text: string, pointer?: string): void {
+export function sendInput(text: string, pointer?: string): boolean {
   const target = pointer ?? buffersState.activeBuffer;
-  if (!client || !target || !text.trim()) return;
+  if (!client || !target || !text.trim()) return false;
 
   if (text.startsWith('/')) {
     const parts = text.split(/\s+/);
@@ -687,30 +867,30 @@ export function sendInput(text: string, pointer?: string): void {
     if (cmd === '/call' || cmd === '/videocall') {
       const nick = parts[1];
       if (nick) withMediaSink(target, (sink) => sink.startCall(nick, true));
-      return;
+      return true;
     }
     if (cmd === '/vcall' || cmd === '/voicecall') {
       const nick = parts[1];
       if (nick) withMediaSink(target, (sink) => sink.startCall(nick, false));
-      return;
+      return true;
     }
     if (cmd === '/joinvoice' || cmd === '/voice') {
       const channel = parts[1] ?? buffersState.buffers[target]?.buffer.localVars['channel'];
       if (channel) withMediaSink(target, (sink) => sink.joinRoom(channel, false));
-      return;
+      return true;
     }
     if (cmd === '/joinvideo' || cmd === '/video') {
       const channel = parts[1] ?? buffersState.buffers[target]?.buffer.localVars['channel'];
       if (channel) withMediaSink(target, (sink) => sink.joinRoom(channel, true));
-      return;
+      return true;
     }
     if (cmd === '/hangup' || cmd === '/hup') {
       withMediaSink(target, (sink) => sink.hangup());
-      return;
+      return true;
     }
     if (cmd === '/clear') {
       clearLines(target);
-      return;
+      return true;
     }
     // IRCX client-side commands (orochi servers only)
     if (isActiveOrochi()) {
@@ -719,46 +899,46 @@ export function sendInput(text: string, pointer?: string): void {
         const nick = parts[1];
         if (channel && nick) {
           const msg = parts.slice(2).join(' ');
-          if (msg) sendWhisper(channel, nick, msg);
+          if (msg) return sendWhisper(channel, nick, msg);
         }
-        return;
+        return true;
       }
       if (cmd === '/prop') {
         const propTarget = parts[1];
         if (propTarget) {
           if (parts.length >= 4 && parts[2]) {
-            setProp(propTarget, parts[2], parts.slice(3).join(' '));
+            return setProp(propTarget, parts[2], parts.slice(3).join(' '));
           } else {
-            requestProps(propTarget);
+            return requestProps(propTarget);
           }
         }
-        return;
+        return true;
       }
       if (cmd === '/access') {
         const ch = parts[1];
-        if (ch) requestAccess(ch);
-        return;
+        if (ch) return requestAccess(ch);
+        return true;
       }
       if (cmd === '/chaninfo') {
         const ch = parts[1] ?? buffersState.buffers[target]?.buffer.localVars['channel'];
         if (ch) openChannelInfo(ch);
-        return;
+        return true;
       }
       if (cmd === '/profile') {
         const nick = parts[1];
         if (nick) openUserProfile(nick);
-        return;
+        return true;
       }
       if (cmd === '/services') {
         openServicesPanel('nick');
-        return;
+        return true;
       }
       if (cmd === '/pushset') {
         const key = parts[1];
         if (key && parts[2]) {
-          sendPushSet(key, parts.slice(2).join(' '));
+          return sendPushSet(key, parts.slice(2).join(' '));
         }
-        return;
+        return true;
       }
     }
     // MONITOR works on any IRCv3 server
@@ -766,24 +946,40 @@ export function sendInput(text: string, pointer?: string): void {
       const sub = parts[1]?.toLowerCase();
       const nick = parts[2];
       if (sub === 'add' && nick) {
-        monitorAdd(nick);
+        return monitorAdd(nick);
       } else if (sub === 'del' && nick) {
-        monitorRemove(nick);
+        return monitorRemove(nick);
       }
-      return;
+      return true;
     }
   }
 
-  // Optimistic local echo for non-commands (IRC buffers only)
+  // Do not mutate local state until the authenticated relay socket accepts the
+  // frame. A rejected dispatch must remain retryable in the composer and must
+  // not leave an optimistic line that suppresses the retry.
+  if (!sendTo(target, text)) return false;
+
+  if (text.startsWith('/')) {
+    const joinMatch = text.match(/^\/join\s+([^\s]+)/i);
+    if (joinMatch?.[1]) {
+      let ch = joinMatch[1];
+      if (!ch.startsWith('#') && !ch.startsWith('&')) ch = '#' + ch;
+      pendingJoinChannel = ch.toLowerCase();
+    }
+  }
+
+  // Optimistic local echo for accepted non-commands (IRC buffers only). Always
+  // dispatch repeated text; an existing placeholder merely avoids rendering a
+  // duplicate while the first confirmed echo is still pending.
   if (!text.startsWith('/') && !text.startsWith('\x01')) {
     const entry = buffersState.buffers[target];
-    if (entry?.lines.some((l) => l.id.startsWith('_opt_') && l.message === text)) {
-      return;
-    }
+    const hasMatchingOptimistic = entry?.lines.some((line) =>
+      line.id.startsWith('_opt_') && line.message === text,
+    );
     const entryType = entry?.buffer.localVars['type'] ?? '';
     const isIrcBuf = entryType === 'channel' || entryType === 'private' || entryType === 'server';
     const nick = entry && isIrcBuf ? ownNick(entry) : '';
-    if (nick && entry) {
+    if (!hasMatchingOptimistic && nick && entry) {
       const now = new Date();
       addLine(target, {
         id: `_opt_${Date.now()}`,
@@ -815,22 +1011,13 @@ export function sendInput(text: string, pointer?: string): void {
     }
   }
 
-  if (text.startsWith('/')) {
-    const joinMatch = text.match(/^\/join\s+([^\s]+)/i);
-    if (joinMatch?.[1]) {
-      let ch = joinMatch[1];
-      if (!ch.startsWith('#') && !ch.startsWith('&')) ch = '#' + ch;
-      pendingJoinChannel = ch.toLowerCase();
-    }
-  }
-
-  sendTo(target, text);
+  return true;
 }
 
 /** Send raw input text to a specific buffer via the relay. */
-export function sendTo(bufferPointer: string, text: string): void {
-  if (!client) return;
-  client.sendInput(bufferPointer, text);
+export function sendTo(bufferPointer: string, text: string): boolean {
+  if (!client) return false;
+  return client.sendInput(bufferPointer, text);
 }
 
 /**
@@ -840,11 +1027,25 @@ export function sendTo(bufferPointer: string, text: string): void {
 export function requestHistory(count = 100, pointer?: string): void {
   const target = pointer ?? buffersState.activeBuffer;
   if (!client || !target) return;
-  setLoading(target, true);
-
   const existing = buffersState.buffers[target];
   const haveCount = existing?.lines.filter((l) => !l.id.startsWith('_opt_')).length ?? 0;
-  client.requestHistory(target, haveCount + count);
+  requestHistoryTotal(haveCount + count, target);
+}
+
+/**
+ * Request an absolute history total from the relay.
+ *
+ * Unlike requestHistory(), this does not derive the request from the bounded
+ * in-memory line count. Archive jumps use it to reach messages older than the
+ * 5,000-line render window through staged, user-initiated requests.
+ */
+export function requestHistoryTotal(total: number, pointer?: string): void {
+  const target = pointer ?? buffersState.activeBuffer;
+  if (!client || !target) return;
+  const boundedTotal = Math.max(1, Math.floor(total));
+  setLoading(target, true);
+  pendingHistoryTarget = target;
+  client.requestHistory(target, boundedTotal);
 }
 
 export function requestNicklist(bufferPointer: string): void {

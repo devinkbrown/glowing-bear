@@ -4,6 +4,7 @@ import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { buffersState, ircxState, requestChannelList, sendInput } from '@/state';
 import Modal from '@/ui/bits/Modal';
+import { formatDate } from '@/lib/i18n';
 
 interface Props {
   open?: boolean;
@@ -15,6 +16,10 @@ export default function ChannelListModal(props: Props) {
   const [minUsers, setMinUsers] = createSignal('');
   const [maxUsers, setMaxUsers] = createSignal('');
   const [createName, setCreateName] = createSignal('');
+  // A CREATE may be accepted while the immediately following JOIN loses a
+  // socket race. Remember that partial success so retry does not issue CREATE
+  // twice; the modal stays open until JOIN itself is accepted.
+  const [createdPendingJoin, setCreatedPendingJoin] = createSignal('');
 
   createEffect(() => {
     if (props.open && ircxState.channelList.status === 'idle') requestChannelList();
@@ -57,16 +62,20 @@ export default function ChannelListModal(props: Props) {
   };
 
   const join = (channel: string) => {
-    sendInput(`/join ${channel}`);
-    props.onClose();
+    if (sendInput(`/join ${channel}`)) props.onClose();
   };
 
   const createChannel = () => {
     let ch = createName().trim();
     if (!ch) return;
     if (!ch.startsWith('#') && !ch.startsWith('&')) ch = `#${ch}`;
-    sendInput(`/quote CREATE ${ch}`);
-    sendInput(`/join ${ch}`);
+    if (createdPendingJoin() !== ch) {
+      if (!sendInput(`/quote CREATE ${ch}`)) return;
+      setCreatedPendingJoin(ch);
+    }
+    if (!sendInput(`/join ${ch}`)) return;
+    setCreatedPendingJoin('');
+    setCreateName('');
     props.onClose();
   };
 
@@ -120,7 +129,7 @@ export default function ChannelListModal(props: Props) {
               </Show>
             </div>
             <Show when={ircxState.channelList.updatedAt}>
-              {(ts) => <span class="font-mono">updated {new Date(ts()).toLocaleTimeString()}</span>}
+              {(ts) => <span class="font-mono">updated {formatDate(ts(), { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>}
             </Show>
           </div>
         </div>

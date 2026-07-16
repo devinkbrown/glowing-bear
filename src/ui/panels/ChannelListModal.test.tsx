@@ -40,6 +40,7 @@ describe('ChannelListModal', () => {
     cleanup();
     state.requestChannelList.mockClear();
     state.sendInput.mockClear();
+    state.sendInput.mockReturnValue(true);
     state.ircxState.channelList.status = 'ready';
   });
 
@@ -70,5 +71,31 @@ describe('ChannelListModal', () => {
 
     expect(queryByText('#quiet')).toBeInTheDocument();
     expect(queryByText('#root')).not.toBeInTheDocument();
+  });
+
+  it('keeps join/create retry state until each relay dispatch is accepted', () => {
+    const onClose = vi.fn();
+    state.sendInput
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    const { getByText, getByPlaceholderText, getAllByText } = render(() => (
+      <ChannelListModal open onClose={onClose} />
+    ));
+
+    fireEvent.click(getByText('Join'));
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.input(getByPlaceholderText('#new-channel'), { target: { value: 'retry-room' } });
+    fireEvent.click(getAllByText('Create')[1]!);
+    expect(state.sendInput).toHaveBeenNthCalledWith(2, '/quote CREATE #retry-room');
+    expect(state.sendInput).toHaveBeenNthCalledWith(3, '/join #retry-room');
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(getAllByText('Create')[1]!);
+    expect(state.sendInput.mock.calls.filter(([command]) => command === '/quote CREATE #retry-room')).toHaveLength(1);
+    expect(state.sendInput).toHaveBeenLastCalledWith('/join #retry-room');
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

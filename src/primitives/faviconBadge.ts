@@ -5,8 +5,9 @@
 // <link rel="icon"> href to the rendered data URL.
 
 import { createEffect, createRoot } from 'solid-js';
+import { appAsset } from '@/lib/desktop';
 
-const FAVICON_DEFAULT = '/darkbear/favicon.svg';
+const FAVICON_DEFAULT = appAsset('favicon.svg');
 const ICON_PX = 32;
 const BADGE_RADIUS_PX = 8;
 /** Counts above this render as a plain dot instead of a number. */

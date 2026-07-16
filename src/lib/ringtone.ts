@@ -12,7 +12,7 @@ function getCtx(): AudioContext | null {
       if (!Ctor) return null;
       audioCtx = new Ctor();
     }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx.state === 'suspended') void audioCtx.resume().catch(() => {});
     return audioCtx;
   } catch { return null; }
 }

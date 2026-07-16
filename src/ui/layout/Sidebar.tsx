@@ -9,6 +9,7 @@ import {
   connectionState,
   cycleNotifyMode,
   getNotifyMode,
+  getTemporaryMuteUntil,
   getTotalHighlights,
   getTotalUnread,
   getSorted,
@@ -28,6 +29,8 @@ import BearLogo from '@/ui/bits/BearLogo';
 import { bufferKind, type BufferKind } from '@/lib/bufferKind';
 import { stripColors } from '@/lib/weechat/strip-colors';
 import { createMediaQuery } from '@/primitives/mediaQuery';
+import { formatDate, t } from '@/lib/i18n';
+import { isImeComposing } from '@/primitives/ime';
 
 interface SidebarProps {
   /** Optional extra hook fired after a buffer is selected (e.g. close a drawer). */
@@ -142,9 +145,10 @@ export default function Sidebar(props: SidebarProps) {
     // Route the /join through this server group's buffer so multi-server
     // setups join on the right network (falls back to the active buffer).
     const pointer = grp.serverEntry?.buffer.id ?? grp.channels[0]?.buffer.id ?? grp.queries[0]?.buffer.id;
-    sendInput(`/join ${channel}`, pointer);
-    setJoinInput('');
-    setShowJoinBar(null);
+    if (sendInput(`/join ${channel}`, pointer)) {
+      setJoinInput('');
+      setShowJoinBar(null);
+    }
   };
 
   const nextUnread = createMemo(() => nextHighlighted(true));
@@ -178,7 +182,7 @@ export default function Sidebar(props: SidebarProps) {
           <span
             class="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-gray-950"
             classList={{
-              'bg-emerald-400': isConnected(),
+              'bg-[var(--role-online,#34d399)]': isConnected(),
               'bg-amber-400 animate-pulse': isConnecting() || isReconnecting(),
               'bg-gray-600': !isConnected() && !isConnecting() && !isReconnecting(),
             }}
@@ -186,12 +190,13 @@ export default function Sidebar(props: SidebarProps) {
         </div>
         <div class="min-w-0 flex-1">
           <div class="text-[14px] font-black text-gray-100 tracking-tight leading-tight">DarkBear</div>
-          <div class="text-[9px] uppercase tracking-[0.18em] text-gray-600 leading-tight">Relay console</div>
+          <div class="text-[9px] uppercase tracking-[0.18em] text-gray-600 leading-tight">{t('sidebar.relayConsole')}</div>
         </div>
         <button
           onClick={() => openModal('settings')}
           class="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.08] transition-all"
-          title="Settings"
+          title={t('mobile.settings')}
+          aria-label={t('mobile.settings')}
         >
           <svg class="w-[15px] h-[15px] sm:w-[13px] sm:h-[13px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="8" cy="8" r="2.5" />
@@ -205,7 +210,7 @@ export default function Sidebar(props: SidebarProps) {
         <div
           class="darkbear-connection-pill flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-semibold"
           classList={{
-            'bg-emerald-500/[0.08] text-emerald-300 border-emerald-400/15': isConnected(),
+            'bg-[var(--role-online,#34d399)]/[0.08] text-[var(--role-online,#34d399)] border-[var(--role-online,#34d399)]/25': isConnected(),
             'bg-amber-500/[0.08] text-amber-300 border-amber-400/15': isConnecting() || isReconnecting(),
             'bg-white/[0.03] text-gray-500': !isConnected() && !isConnecting(),
           }}
@@ -213,7 +218,7 @@ export default function Sidebar(props: SidebarProps) {
           <span
             class="w-[5px] h-[5px] rounded-full shrink-0"
             classList={{
-              'bg-emerald-400': isConnected(),
+              'bg-[var(--role-online,#34d399)]': isConnected(),
               'bg-amber-400 animate-pulse': isConnecting(),
               'bg-orange-400 animate-pulse': isReconnecting(),
               'bg-gray-600': !isConnected() && !isConnecting() && !isReconnecting(),
@@ -221,24 +226,24 @@ export default function Sidebar(props: SidebarProps) {
           />
           <span class="truncate">
             {isConnected() ? settings.relay.host :
-             isConnecting() ? 'Connecting...' :
-             isReconnecting() ? 'Reconnecting...' :
-             'Disconnected'}
+             isConnecting() ? t('sidebar.connecting') :
+             isReconnecting() ? t('sidebar.reconnecting') :
+             t('sidebar.disconnected')}
           </span>
           <span class="ml-auto font-mono text-[10px] opacity-70">{settings.relay.tls ? 'TLS' : 'plain'}</span>
         </div>
         <div class="grid grid-cols-4 gap-1.5">
-          <StatCell label="unread" value={stats().unread} hot={stats().unread > 0} />
-          <StatCell label="mentions" value={stats().mentions} hot={stats().mentions > 0} danger />
-          <StatCell label="chan" value={stats().channels} />
-          <StatCell label="dm" value={stats().dms} />
+          <StatCell label={t('sidebar.unread')} value={stats().unread} hot={stats().unread > 0} />
+          <StatCell label={t('sidebar.mentions')} value={stats().mentions} hot={stats().mentions > 0} danger />
+          <StatCell label={t('sidebar.channelsShort')} value={stats().channels} />
+          <StatCell label={t('sidebar.dmShort')} value={stats().dms} />
         </div>
       </div>
 
       {/* Filter */}
       <div class="px-3 pb-2 shrink-0 space-y-2">
         <label class="relative block">
-          <svg class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-600" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <svg class="sidebar-filter-icon pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-600" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <circle cx="6.5" cy="6.5" r="5" />
             <path d="M10.5 10.5L14.5 14.5" />
           </svg>
@@ -246,23 +251,24 @@ export default function Sidebar(props: SidebarProps) {
             type="text"
             value={filterQuery()}
             onInput={(e) => setFilterQuery(e.currentTarget.value)}
-            placeholder="Filter buffers or text"
+            placeholder={t('sidebar.filter')}
             autocomplete="off"
             spellcheck={false}
             onKeyDown={(e) => {
+              if (isImeComposing(e)) return;
               if (e.key === 'Escape') {
                 setFilterQuery('');
                 e.currentTarget.blur();
               }
             }}
-            class="w-full rounded-xl border border-white/[0.07] bg-white/[0.035] py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none transition-colors placeholder:text-gray-600 focus:border-[var(--custom-accent,#818cf8)]/35 focus:bg-white/[0.055] sm:py-2 sm:text-[12px]"
+            class="sidebar-filter-input w-full rounded-xl border border-white/[0.07] bg-white/[0.035] py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none transition-colors placeholder:text-gray-600 focus:border-[var(--role-primary,#818cf8)]/35 focus:bg-white/[0.055] sm:py-2 sm:text-[12px]"
           />
         </label>
         <div class="grid grid-cols-4 gap-1 rounded-xl border border-white/[0.055] bg-black/20 p-1">
-          <ModeButton label="All" active={modeActive('all')} onClick={() => setBufferMode('all')} />
-          <ModeButton label="Hot" active={modeActive('unread')} onClick={() => setBufferMode('unread')} />
+          <ModeButton label={t('sidebar.all')} active={modeActive('all')} onClick={() => setBufferMode('all')} />
+          <ModeButton label={t('sidebar.hot')} active={modeActive('unread')} onClick={() => setBufferMode('unread')} />
           <ModeButton label="@" active={modeActive('mentions')} onClick={() => setBufferMode('mentions')} />
-          <ModeButton label="DM" active={modeActive('dms')} onClick={() => setBufferMode('dms')} />
+          <ModeButton label={t('sidebar.dmMode')} active={modeActive('dms')} onClick={() => setBufferMode('dms')} />
         </div>
       </div>
 
@@ -288,7 +294,7 @@ export default function Sidebar(props: SidebarProps) {
                   <button
                     onClick={() => toggleCollapse(grp.serverName)}
                     class="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center text-gray-500 hover:text-gray-300 transition-colors"
-                    aria-label={isCollapsed() ? `Expand ${grp.serverName}` : `Collapse ${grp.serverName}`}
+                    aria-label={isCollapsed() ? t('sidebar.expand', { server: grp.serverName }) : t('sidebar.collapse', { server: grp.serverName })}
                   >
                     <svg
                       class="w-[9px] h-[9px] transition-transform duration-100"
@@ -312,7 +318,7 @@ export default function Sidebar(props: SidebarProps) {
                         onClick={(e) => selectBuffer(serverEntry().buffer.id, e)}
                         class="flex-1 text-left text-[9px] font-black uppercase tracking-[0.18em] py-1.5 px-1 rounded transition-colors truncate"
                         classList={{
-                          'text-[var(--custom-accent,#818cf8)]': buffersState.activeBuffer === serverEntry().buffer.id,
+                          'text-[var(--role-primary,#818cf8)]': buffersState.activeBuffer === serverEntry().buffer.id,
                           'text-gray-600 hover:text-gray-300': buffersState.activeBuffer !== serverEntry().buffer.id,
                         }}
                       >
@@ -334,8 +340,9 @@ export default function Sidebar(props: SidebarProps) {
                         setShowJoinBar(grp.serverName);
                         setJoinInput('');
                       }}
-                      class="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center rounded text-gray-500 hover:text-[var(--custom-accent,#818cf8)] active:bg-white/[0.04] transition-colors"
-                      title="Join channel"
+                      class="shrink-0 w-7 h-7 sm:w-5 sm:h-5 flex items-center justify-center rounded text-gray-500 hover:text-[var(--role-primary,#818cf8)] active:bg-white/[0.04] transition-colors"
+                      title={t('sidebar.join')}
+                      aria-label={t('sidebar.join')}
                     >
                       <svg class="w-[12px] h-[12px] sm:w-[10px] sm:h-[10px]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <path d="M5 1v8M1 5h8" />
@@ -352,6 +359,7 @@ export default function Sidebar(props: SidebarProps) {
                         value={joinInput()}
                         onInput={(e) => setJoinInput(e.currentTarget.value)}
                         onKeyDown={(e) => {
+                          if (isImeComposing(e)) return;
                           if (e.key === 'Enter') submitJoin(grp);
                           if (e.key === 'Escape') {
                             setShowJoinBar(null);
@@ -359,7 +367,7 @@ export default function Sidebar(props: SidebarProps) {
                           }
                         }}
                         placeholder="#channel"
-                        class="w-full bg-[var(--custom-accent,#818cf8)]/[0.06] border border-[var(--custom-accent,#818cf8)]/20 rounded-lg text-[13px] sm:text-[12px] text-gray-200 px-3 py-2.5 sm:py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/40 placeholder-gray-600 transition-colors"
+                        class="w-full bg-[var(--role-primary,#818cf8)]/[0.06] border border-[var(--role-primary,#818cf8)]/20 rounded-lg text-[13px] sm:text-[12px] text-gray-200 px-3 py-2.5 sm:py-1.5 outline-none focus:border-[var(--role-primary,#818cf8)]/40 placeholder-gray-600 transition-colors"
                       />
                     </div>
                   </Show>
@@ -373,13 +381,14 @@ export default function Sidebar(props: SidebarProps) {
                         indent
                         pinned={isPinned(entry.buffer.id)}
                         notifyMode={getNotifyMode(entry.buffer.id)}
+                        temporaryMutedUntil={getTemporaryMuteUntil(entry.buffer.id)}
                       />
                     )}
                   </For>
 
                   <Show when={grp.queries.length > 0}>
                     <div class="pl-8 pt-3 pb-1">
-                      <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-gray-500">DMs</span>
+                      <span class="text-[9px] font-bold uppercase tracking-[0.15em] text-gray-500">{t('sidebar.dms')}</span>
                     </div>
                     <For each={grp.queries}>
                       {(entry) => (
@@ -388,6 +397,8 @@ export default function Sidebar(props: SidebarProps) {
                           active={buffersState.activeBuffer === entry.buffer.id}
                           onClick={(e) => selectBuffer(entry.buffer.id, e)}
                           indent
+                          notifyMode={getNotifyMode(entry.buffer.id)}
+                          temporaryMutedUntil={getTemporaryMuteUntil(entry.buffer.id)}
                         />
                       )}
                     </For>
@@ -405,12 +416,12 @@ export default function Sidebar(props: SidebarProps) {
           <div class="shrink-0 px-3 py-2" style={{ 'padding-bottom': 'max(0.5rem, env(safe-area-inset-bottom))' }}>
             <button
               onClick={(e) => selectBuffer(pointer(), e)}
-              class="w-full flex items-center justify-center gap-2 py-2.5 sm:py-2 rounded-full bg-red-500/10 text-red-400 text-[12px] sm:text-[11px] font-semibold hover:bg-red-500/15 active:bg-red-500/20 transition-all"
+              class="w-full flex items-center justify-center gap-2 py-2.5 sm:py-2 rounded-full bg-[var(--role-mention,#f87171)]/10 text-[var(--role-mention,#f87171)] text-[12px] sm:text-[11px] font-semibold hover:bg-[var(--role-mention,#f87171)]/15 active:bg-[var(--role-mention,#f87171)]/20 transition-all"
             >
               <svg class="w-3.5 h-3.5 sm:w-3 sm:h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                 <path d="M8 2v8M5 7l3 3 3-3" />
               </svg>
-              Unread
+              {t('sidebar.unreadJump')}
             </button>
           </div>
         )}
@@ -426,6 +437,7 @@ function BufItem(props: {
   indent?: boolean;
   pinned?: boolean;
   notifyMode?: NotifyMode;
+  temporaryMutedUntil?: number;
 }) {
   const name = () => props.entry.buffer.shortName || props.entry.buffer.name;
   const kind = () => bufferKind(props.entry.buffer);
@@ -442,49 +454,46 @@ function BufItem(props: {
   const activityTime = () => {
     const line = lastLine();
     if (!line) return '';
-    return line.date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return formatDate(line.date, { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
-    // Row is a keyboard-operable container (role=button), NOT a native <button>,
-    // so the inline notify control can be a real nested <button> without an
-    // invalid button-in-button. Enter/Space replay the row's own click.
+    // The row selector and notification control are sibling buttons. A single
+    // interactive container would hide the inner control from assistive tech.
     <div
-      role="button"
-      tabindex={0}
-      onClick={(e) => props.onClick(e)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          e.currentTarget.click();
-        }
-      }}
-      title={props.entry.buffer.fullName}
-      class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-[transform,background-color,box-shadow,color] duration-150 ease-out text-[14px] sm:text-[13px] rounded-xl group relative active:scale-[0.985] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--custom-accent,#818cf8)]/50"
+      onClick={(event) => props.onClick(event)}
+      class="darkbear-buffer-row w-full text-left pr-2 py-2.5 sm:py-2 flex items-start gap-2 transition-[transform,background-color,box-shadow,color] duration-150 ease-out text-[14px] sm:text-[13px] rounded-xl group relative active:scale-[0.985] cursor-pointer focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--role-primary,#818cf8)]/50"
       classList={{
         'pl-6': props.indent,
         'pl-3': !props.indent,
-        'text-gray-100 bg-[var(--custom-accent,#818cf8)]/[0.14] ring-1 ring-inset ring-[var(--custom-accent,#818cf8)]/30 shadow-sm shadow-black/20': props.active,
+        'text-gray-100 bg-[var(--role-primary,#818cf8)]/[0.14] ring-1 ring-inset ring-[var(--role-primary,#818cf8)]/30 shadow-sm shadow-black/20': props.active,
         'text-gray-100 hover:bg-white/[0.04]': !props.active && props.entry.highlighted > 0,
         'text-gray-300 hover:bg-white/[0.03]': !props.active && props.entry.highlighted === 0 && props.entry.unread > 0,
         'text-gray-400 hover:text-gray-200 hover:bg-white/[0.025]':
           !props.active && props.entry.highlighted === 0 && props.entry.unread === 0,
       }}
     >
+      <button
+        type="button"
+        aria-label={name()}
+        aria-current={props.active ? 'page' : undefined}
+        title={props.entry.buffer.fullName}
+        class="absolute inset-0 z-0 rounded-xl focus:outline-none"
+      />
       {/* Selection rail — an accent left-edge that reads as a continuum:
           hidden when idle, faint on hover, solid + taller when selected.
           Animated on opacity/transform only (compositor-friendly). */}
       <span
-        class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-[var(--custom-accent,#818cf8)] origin-center transition-[opacity,transform] duration-200 ease-out"
+        class="buffer-selection-rail pointer-events-none absolute left-0 top-1/2 z-[1] -translate-y-1/2 w-[3px] rounded-r-full bg-[var(--role-primary,#818cf8)] origin-center transition-[opacity,transform] duration-200 ease-out"
         classList={{
           'h-6 sm:h-5 scale-y-100 opacity-100': props.active,
           'h-4 scale-y-50 opacity-0 group-hover:opacity-50 group-hover:scale-y-100': !props.active,
         }}
       />
-      <span class="mt-0.5">
+      <span class="pointer-events-none relative z-[1] mt-0.5">
         <BufIcon kind={kind()} active={props.active || props.entry.unread > 0 || props.entry.highlighted > 0} />
       </span>
-      <span class="min-w-0 flex-1">
+      <span class="pointer-events-none relative z-[1] min-w-0 flex-1">
         <span class="flex min-w-0 items-center gap-1.5">
           <span
             class="truncate leading-snug"
@@ -503,12 +512,13 @@ function BufItem(props: {
         </Show>
       </span>
       <Show when={props.pinned}>
-        <span class="w-1 h-1 rounded-full bg-[var(--custom-accent,#818cf8)]/50 shrink-0" />
+        <span class="pointer-events-none relative z-[1] w-1 h-1 rounded-full bg-[var(--role-primary,#818cf8)]/50 shrink-0" />
       </Show>
       <Show when={props.notifyMode}>
         {(mode) => (
           <NotifyButton
             mode={mode()}
+            temporaryMutedUntil={props.temporaryMutedUntil ?? 0}
             onCycle={(e) => {
               // Keep the notify toggle from also selecting the buffer.
               e.stopPropagation();
@@ -519,10 +529,10 @@ function BufItem(props: {
       </Show>
       <Show when={props.entry.highlighted > 0} fallback={
         <Show when={props.entry.unread > 0}>
-          <Pip count={props.entry.unread} />
+          <span class="pointer-events-none relative z-[1]"><Pip count={props.entry.unread} /></span>
         </Show>
       }>
-        <Pip count={props.entry.highlighted} hot />
+        <span class="pointer-events-none relative z-[1]"><Pip count={props.entry.highlighted} hot /></span>
       </Show>
     </div>
   );
@@ -538,15 +548,21 @@ function BufItem(props: {
  * house 150ms ease-out. The label announces the current tier for a screen
  * reader and updates reactively as the tier changes.
  */
-function NotifyButton(props: { mode: NotifyMode; onCycle: (e: MouseEvent) => void }) {
+function NotifyButton(props: { mode: NotifyMode; temporaryMutedUntil: number; onCycle: (e: MouseEvent) => void }) {
+  const temporarilyMuted = () => props.temporaryMutedUntil > Date.now();
   const label = () => {
+    if (temporarilyMuted()) {
+      return t('sidebar.notifyTemporary', {
+        time: formatDate(props.temporaryMutedUntil, { hour: '2-digit', minute: '2-digit' }),
+      });
+    }
     switch (props.mode) {
       case 'all':
-        return 'Notifications: all messages — click to change';
+        return t('sidebar.notifyAll');
       case 'mentions':
-        return 'Notifications: mentions only — click to change';
+        return t('sidebar.notifyMentions');
       case 'mute':
-        return 'Notifications: muted — click to change';
+        return t('sidebar.notifyMuted');
     }
   };
   const iconCls = 'w-[13px] h-[13px] sm:w-3 sm:h-3';
@@ -556,32 +572,39 @@ function NotifyButton(props: { mode: NotifyMode; onCycle: (e: MouseEvent) => voi
       aria-label={label()}
       title={label()}
       data-notify-mode={props.mode}
+      data-temporary-mute={temporarilyMuted() ? 'true' : undefined}
       onClick={(e) => props.onCycle(e)}
-      class="shrink-0 flex items-center justify-center w-6 h-6 -my-0.5 rounded-md transition-[opacity,color,transform] duration-150 ease-out hover:bg-white/[0.06] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--custom-accent,#818cf8)]/60"
+      class="relative z-[2] shrink-0 flex items-center justify-center w-6 h-6 -my-0.5 rounded-md transition-[opacity,color,transform] duration-150 ease-out hover:bg-white/[0.06] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--role-primary,#818cf8)]/60"
       classList={{
         // Default tier: unobtrusive until the row is hovered or the control focused.
         'opacity-40 text-gray-600 group-hover:opacity-90 group-hover:text-gray-400 focus-visible:opacity-100':
           props.mode === 'all',
-        // Mentions-only: present and legible, the accent dot carries the meaning.
+        // Mentions-only: present and legible, the --role-mention dot carries the meaning.
         'opacity-100 text-gray-400 hover:text-gray-200': props.mode === 'mentions',
         // Muted: present but quiet, the slash carries the meaning.
         'opacity-100 text-gray-600 hover:text-gray-400': props.mode === 'mute',
       }}
     >
-      <Show when={props.mode === 'all'}>
+      <Show when={temporarilyMuted()}>
+        <svg class={iconCls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="5.5" />
+          <path d="M8 4.8v3.5l2.3 1.4" />
+        </svg>
+      </Show>
+      <Show when={!temporarilyMuted() && props.mode === 'all'}>
         <svg class={iconCls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M8 2a1 1 0 0 0-1 1v.5C5.4 3.9 4.3 5.4 4.3 7.1c0 2.5-1 3.5-1 3.5h9.4s-1-1-1-3.5c0-1.7-1.1-3.2-2.7-3.6V3a1 1 0 0 0-1-1z" />
           <path d="M6.7 11.4a1.4 1.4 0 0 0 2.6 0" />
         </svg>
       </Show>
-      <Show when={props.mode === 'mentions'}>
+      <Show when={!temporarilyMuted() && props.mode === 'mentions'}>
         <svg class={iconCls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M8 2a1 1 0 0 0-1 1v.5C5.4 3.9 4.3 5.4 4.3 7.1c0 2.5-1 3.5-1 3.5h9.4s-1-1-1-3.5c0-1.7-1.1-3.2-2.7-3.6V3a1 1 0 0 0-1-1z" />
           <path d="M6.7 11.4a1.4 1.4 0 0 0 2.6 0" />
-          <circle cx="12" cy="4" r="2.4" fill="var(--custom-accent,#818cf8)" stroke="none" />
+          <circle cx="12" cy="4" r="2.4" fill="var(--role-mention,#f87171)" stroke="none" />
         </svg>
       </Show>
-      <Show when={props.mode === 'mute'}>
+      <Show when={!temporarilyMuted() && props.mode === 'mute'}>
         <svg class={iconCls} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M8 2a1 1 0 0 0-1 1v.5C5.4 3.9 4.3 5.4 4.3 7.1c0 2.5-1 3.5-1 3.5h9.4s-1-1-1-3.5c0-1.7-1.1-3.2-2.7-3.6V3a1 1 0 0 0-1-1z" opacity="0.7" />
           <path d="M6.7 11.4a1.4 1.4 0 0 0 2.6 0" opacity="0.7" />
@@ -597,15 +620,15 @@ function StatCell(props: { label: string; value: number; hot?: boolean; danger?:
     <div
       class="rounded-xl border border-white/[0.055] bg-white/[0.025] px-2 py-1.5 text-center"
       classList={{
-        'border-[var(--custom-accent,#818cf8)]/20 bg-[var(--custom-accent,#818cf8)]/[0.06]': props.hot && !props.danger,
-        'border-red-400/20 bg-red-500/[0.07]': props.hot && props.danger,
+        'border-[var(--role-primary,#818cf8)]/20 bg-[var(--role-primary,#818cf8)]/[0.06]': props.hot && !props.danger,
+        'border-[var(--role-mention,#f87171)]/20 bg-[var(--role-mention,#f87171)]/[0.07]': props.hot && props.danger,
       }}
     >
       <div
         class="font-mono text-[13px] font-black leading-none tabular-nums"
         classList={{
-          'text-[var(--custom-accent,#818cf8)]': props.hot && !props.danger,
-          'text-red-300': props.hot && props.danger,
+          'text-[var(--role-primary,#818cf8)]': props.hot && !props.danger,
+          'text-[var(--role-mention,#f87171)]': props.hot && props.danger,
           'text-gray-300': !props.hot,
         }}
       >
@@ -623,7 +646,7 @@ function ModeButton(props: { label: string; active: boolean; onClick: (e: MouseE
       onClick={(e) => props.onClick(e)}
       class="h-7 rounded-lg text-[10px] font-black uppercase tracking-[0.08em] transition-all"
       classList={{
-        'bg-[var(--custom-accent,#818cf8)] text-white shadow-lg shadow-black/20': props.active,
+        'darkbear-mode-button-active shadow-lg shadow-black/20': props.active,
         'text-gray-500 hover:bg-white/[0.04] hover:text-gray-300': !props.active,
       }}
     >
@@ -680,10 +703,12 @@ function Pip(props: { count: number; hot?: boolean }) {
     <span
       class="shrink-0 flex items-center justify-center rounded-full min-w-[16px] h-4 text-[10px] font-bold tabular-nums leading-none"
       classList={{
-        // Mention: rose role, ringed + colored glow — the "what did I miss" focal point.
-        'px-1.5 bg-red-500 text-white ring-1 ring-red-400/50 shadow-sm shadow-red-500/40': props.hot,
-        // Unread: quieter accent tint, one tier down.
-        'px-1 bg-[var(--custom-accent,#818cf8)]/20 text-[var(--custom-accent,#818cf8)]': !props.hot,
+        // Mention: --role-mention solid, ringed + glow — the "what did I miss"
+        // focal point. Glyphs use the theme GROUND (text-gray-950: near-black on
+        // dark, white on light) so they clear AA on the badge on every theme.
+        'px-1.5 bg-[var(--role-mention,#f87171)] text-gray-950 ring-1 ring-[var(--role-mention,#f87171)]/50 shadow-sm shadow-[var(--role-mention,#f87171)]/40': props.hot,
+        // Unread: quieter primary tint, one tier down.
+        'px-1 bg-[var(--role-primary,#818cf8)]/20 text-[var(--role-primary,#818cf8)]': !props.hot,
       }}
     >
       {props.count > PIP_MAX ? `${PIP_MAX}+` : props.count}

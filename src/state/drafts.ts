@@ -15,7 +15,9 @@
 // Only user-typed composer text and submitted inputs are stored here — never any
 // credential, session token, device key, or decrypted E2EE plaintext overlay.
 
+import { createSignal } from 'solid-js';
 import { createStore, produce, unwrap } from 'solid-js/store';
+import type { BufferEntry } from '@/types';
 
 const DRAFTS_KEY = 'darkbear:drafts:v1';
 const HISTORY_KEY = 'darkbear:inputhistory:v1';
@@ -74,6 +76,18 @@ const [draftsState, setDraftsState] = createStore<DraftsState>({
 
 /** Read-only drafts/history store. Mutate via the exported actions only. */
 export { draftsState };
+
+export interface ComposerDraftRestoration {
+  key: string;
+  text: string;
+  revision: number;
+}
+
+const [composerDraftRestoration, setComposerDraftRestoration] =
+  createSignal<ComposerDraftRestoration | null>(null);
+
+/** Latest external draft restoration request, consumed reactively by InputBar. */
+export { composerDraftRestoration };
 
 // ---------------------------------------------------------------------------
 // Persistence (debounced; unwrap the proxy before JSON)
@@ -136,6 +150,30 @@ export function setDraft(key: string, text: string): void {
   scheduleSave();
 }
 
+/**
+ * Persist externally recovered composer text and notify a mounted InputBar so
+ * the active draft updates immediately. Existing user text is preserved.
+ */
+export function restoreComposerDraft(entry: BufferEntry | undefined, text: string): boolean {
+  const key = entry ? (entry.buffer.fullName || entry.buffer.name) : '';
+  const recovered = text.trim();
+  if (!key || !recovered) return false;
+  const current = getDraft(key);
+  const next = current && current !== recovered
+    ? `${current}${current.endsWith('\n') ? '' : '\n'}${recovered}`
+    : recovered;
+  setDraft(key, next);
+  // Inline notification replies are transient session data. Persist before the
+  // service-worker queue is consumed so a reload cannot drop the failed reply.
+  flushDrafts();
+  setComposerDraftRestoration((previous) => ({
+    key,
+    text: next,
+    revision: (previous?.revision ?? 0) + 1,
+  }));
+  return true;
+}
+
 /** Remove a buffer's draft (e.g. after its text is submitted). */
 export function clearDraft(key: string): void {
   if (!key || draftsState.drafts[key] === undefined) return;
@@ -153,8 +191,8 @@ export function pushHistory(entry: string): void {
   scheduleSave();
 }
 
-/** Test/reset hook: wipe both containers and their persisted keys. */
-export function _resetDrafts(): void {
+/** Wipe all composer drafts and submitted-input history from this device. */
+export function clearDraftsAndHistory(): void {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   setDraftsState(produce((s) => { s.drafts = {}; s.history = []; }));
   if (typeof localStorage !== 'undefined') {
@@ -162,3 +200,6 @@ export function _resetDrafts(): void {
     localStorage.removeItem(HISTORY_KEY);
   }
 }
+
+/** Backwards-compatible test/reset alias. */
+export const _resetDrafts = clearDraftsAndHistory;
