@@ -10,8 +10,11 @@ import {
   isActiveOrochi, isBot, openUserProfile, sendWhisper,
 } from '@/state';
 import type { WeeChatNick } from '@/types';
-import { mediaState, startCall } from '@/state/media';
+import { mediaState, requestStartCall } from '@/state/media';
 import { nickColor } from '@/lib/nickcolor';
+import { formatNumber, t } from '@/lib/i18n';
+import type { MessageKey } from '@/lib/i18n';
+import { isImeComposing } from '@/primitives/ime';
 
 const TIER_ICONS: Record<string, { icon: string; label: string }> = {
   Operator: { icon: 'star', label: 'Operator' },
@@ -27,6 +30,23 @@ const TIER_ICONS: Record<string, { icon: string; label: string }> = {
 const TIER_SIGILS_FALLBACK: Record<string, string> = {
   Operator: '*', Founder: '!', Owner: '.', Admin: '&', Op: '@', Halfop: '%', Voice: '+', Regular: '',
 };
+
+const TIER_LABEL_KEYS: Record<string, MessageKey> = {
+  Operator: 'users.operator',
+  Founder: 'users.founder',
+  Owner: 'users.owner',
+  Admin: 'users.admin',
+  Op: 'users.op',
+  Halfop: 'users.halfop',
+  Voice: 'users.voice',
+  Regular: 'users.regular',
+  User: 'users.user',
+};
+
+function tierLabel(label: string): string {
+  const key = TIER_LABEL_KEYS[label];
+  return key ? t(key) : label;
+}
 
 interface Props {
   mobile?: boolean;
@@ -167,17 +187,17 @@ export default function UserList(props: Props) {
       case 'whisper': {
         const ch = entry()?.buffer.localVars['channel'];
         if (ch) {
-          const msg = prompt(`Whisper to ${nick} in ${ch}:`);
+          const msg = prompt(t('users.whisperPrompt', { nick, channel: ch }));
           if (msg) sendWhisper(ch, nick, msg);
         }
         break;
       }
       case 'video':
-        startCall(nick, true);
+        requestStartCall(nick, true);
         props.onClose?.();
         break;
       case 'voice':
-        startCall(nick, false);
+        requestStartCall(nick, false);
         props.onClose?.();
         break;
     }
@@ -185,7 +205,7 @@ export default function UserList(props: Props) {
 
   return (
     <Show when={entry()}>
-      <aside class={`${props.mobile ? 'w-full' : 'w-[220px]'} shrink-0 flex flex-col h-full border-l border-white/[0.04] bg-gray-950 relative`}>
+      <aside class={`user-list-panel ${props.mobile ? 'w-full' : 'w-[220px]'} shrink-0 flex flex-col h-full border-l border-white/[0.04] bg-gray-950 relative`}>
         {/* Header */}
         <div
           class="flex items-center h-11 sm:h-12 px-3 sm:px-3 border-b border-white/[0.04] shrink-0"
@@ -195,14 +215,14 @@ export default function UserList(props: Props) {
             <svg class="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[var(--custom-accent,#818cf8)] shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
               <circle cx="6" cy="5" r="3" /><circle cx="11" cy="6" r="2.5" /><path d="M1 14c0-3 2-4.5 5-4.5" /><path d="M9 14c0-2.5 1.5-3.5 4-3.5" />
             </svg>
-            <span class="text-[13px] sm:text-[12px] font-semibold text-gray-200 truncate">Users</span>
+            <span class="text-[13px] sm:text-[12px] font-semibold text-gray-200 truncate">{t('users.title')}</span>
           </div>
-          <span class="text-[11px] sm:text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-md bg-white/[0.04] text-[var(--custom-accent,#818cf8)]">{totalNicks()}</span>
+          <span class="text-[11px] sm:text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded-md bg-white/[0.04] text-[var(--custom-accent,#818cf8)]">{formatNumber(totalNicks())}</span>
           <Show when={props.mobile && props.onClose}>
             <button
               onClick={() => props.onClose?.()}
               class="w-10 h-10 flex items-center justify-center rounded-xl text-gray-500 hover:text-gray-200 active:bg-white/[0.06] -mr-1 ml-1"
-              aria-label="Close"
+              aria-label={t('users.close')}
             >
               <svg class="w-[18px] h-[18px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <path d="M4 4l8 8M12 4l-8 8" />
@@ -214,7 +234,7 @@ export default function UserList(props: Props) {
         {/* Search */}
         <div class="px-2 sm:px-2 pt-2 pb-1 shrink-0">
           <div class="relative">
-            <svg class="absolute left-2.5 sm:left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-3 sm:h-3 text-gray-600 pointer-events-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <svg class="user-filter-icon absolute left-2.5 sm:left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-3 sm:h-3 text-gray-600 pointer-events-none" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <circle cx="6.5" cy="6.5" r="4.5" /><path d="M10 10l4 4" />
             </svg>
             <input
@@ -222,15 +242,19 @@ export default function UserList(props: Props) {
               type="text"
               value={filter()}
               onInput={(e) => setFilter(e.currentTarget.value)}
-              placeholder="Search users..."
+              placeholder={t('users.search')}
               autocomplete="off"
               spellcheck={false}
-              onKeyDown={(e) => { if (e.key === 'Escape') { setFilter(''); filterEl?.blur(); } }}
-              class="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-[13px] sm:text-[11px] text-gray-300 placeholder-gray-600 pl-8 sm:pl-7 pr-3 py-2 sm:py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 focus:bg-white/[0.04] transition-all"
+              onKeyDown={(e) => {
+                if (isImeComposing(e)) return;
+                if (e.key === 'Escape') { setFilter(''); filterEl?.blur(); }
+              }}
+              class="user-filter-input w-full bg-white/[0.03] border border-white/[0.06] rounded-lg text-[13px] sm:text-[11px] text-gray-300 placeholder-gray-600 pl-8 sm:pl-7 pr-3 py-2 sm:py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 focus:bg-white/[0.04] transition-all"
             />
             <Show when={filter()}>
               <button
                 onClick={() => { setFilter(''); filterEl?.focus(); }}
+                aria-label={t('users.clearSearch')}
                 class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 transition-colors"
               >
                 <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -266,10 +290,10 @@ export default function UserList(props: Props) {
                       <TierIcon icon={tierInfo?.icon ?? ''} accent={accent} />
                     </Show>
                     <span class="text-[11px] sm:text-[10px] font-bold uppercase tracking-[0.08em] flex-1 text-left" style={{ color: accent }}>
-                      {label}
+                      {tierLabel(label)}
                     </span>
                     <span class="text-[10px] sm:text-[9px] tabular-nums font-mono px-1.5 py-0.5 rounded bg-white/[0.03] text-gray-500 group-hover:text-gray-400 transition-colors">
-                      {nicks.length}
+                      {formatNumber(nicks.length)}
                     </span>
                   </button>
 
@@ -315,7 +339,7 @@ export default function UserList(props: Props) {
                                 {nick.name}
                                 <Show when={isBot(nick.name)}>
                                   <span class="inline-flex px-1 py-px rounded text-[7px] sm:text-[6px] font-bold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/20 leading-none shrink-0">
-                                    BOT
+                                    {t('users.bot')}
                                   </span>
                                 </Show>
                               </span>
@@ -336,7 +360,7 @@ export default function UserList(props: Props) {
                 <circle cx="8" cy="5" r="3" /><path d="M2 14c0-3 3-5 6-5s6 2 6 5" />
               </svg>
               <span class="text-[11px] text-gray-600">
-                {filter() ? 'No matches' : 'No users'}
+                {filter() ? t('users.noMatches') : t('users.noUsers')}
               </span>
             </div>
           </Show>
@@ -376,27 +400,27 @@ export default function UserList(props: Props) {
                   </div>
                   <div class="flex-1 min-w-0">
                     <div class="text-[13px] font-semibold text-gray-100 truncate">{popup().nick}</div>
-                    <div class="text-[10px] text-gray-500">{popupTier()}</div>
+                    <div class="text-[10px] text-gray-500">{tierLabel(popupTier())}</div>
                   </div>
                 </div>
                 <div class="py-1.5">
-                  <PopupBtn icon="msg" label="Message" onClick={() => doAction('query')} />
-                  <PopupBtn icon="whois" label="Whois" onClick={() => doAction('whois')} />
+                  <PopupBtn icon="msg" label={t('users.message')} onClick={() => doAction('query')} />
+                  <PopupBtn icon="whois" label={t('users.whois')} onClick={() => doAction('whois')} />
                   <Show when={isActiveOrochi()}>
-                    <PopupBtn icon="profile" label="Profile" onClick={() => doAction('profile')} />
+                    <PopupBtn icon="profile" label={t('users.profile')} onClick={() => doAction('profile')} />
                   </Show>
                   <Show when={isActiveOrochi() && entry()?.buffer.localVars['type'] === 'channel'}>
-                    <PopupBtn icon="whisper" label="Whisper" onClick={() => doAction('whisper')} />
+                    <PopupBtn icon="whisper" label={t('users.whisper')} onClick={() => doAction('whisper')} />
                   </Show>
                   <Show when={mediaState.callState === 'idle'}>
                     <div class="h-px bg-white/[0.04] mx-3 my-1" />
-                    <PopupBtn icon="video" label="Video call" onClick={() => doAction('video')} accent="emerald" />
-                    <PopupBtn icon="voice" label="Voice call" onClick={() => doAction('voice')} accent="custom" />
+                    <PopupBtn icon="video" label={t('users.videoCall')} onClick={() => doAction('video')} accent="emerald" />
+                    <PopupBtn icon="voice" label={t('users.voiceCall')} onClick={() => doAction('voice')} accent="custom" />
                   </Show>
                   <Show when={canModerate()}>
                     <div class="h-px bg-white/[0.04] mx-3 my-1" />
-                    <PopupBtn icon="kick" label={confirming() === 'kick' ? 'Confirm Kick?' : 'Kick'} onClick={() => doAction('kick')} danger />
-                    <PopupBtn icon="ban" label={confirming() === 'ban' ? 'Confirm Ban?' : 'Ban'} onClick={() => doAction('ban')} danger />
+                    <PopupBtn icon="kick" label={confirming() === 'kick' ? t('users.confirmKick') : t('users.kick')} onClick={() => doAction('kick')} danger />
+                    <PopupBtn icon="ban" label={confirming() === 'ban' ? t('users.confirmBan') : t('users.ban')} onClick={() => doAction('ban')} danger />
                   </Show>
                 </div>
               </div>

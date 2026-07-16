@@ -3,10 +3,10 @@
 // monitored status; own profile fields (URL/GENDER/PICTURE/LOCATION/BIO/
 // REALNAME/EMAIL) are editable via PROP. Auto-requests PROP on open.
 
-import { createSignal, createMemo, createEffect, on, For, Show } from 'solid-js';
+import { createSignal, createMemo, createEffect, on, onCleanup, For, Show } from 'solid-js';
 import type { JSX } from 'solid-js';
 import {
-  buffersState, ircxState,
+  buffersState, ircxState, settings,
   requestProps, setProp, openQuery, sendInput, sendWhisper,
   monitorAdd, monitorRemove,
 } from '@/state';
@@ -81,6 +81,7 @@ interface Props {
 export default function UserProfileCard(props: Props) {
   const [editField, setEditField] = createSignal<string | null>(null);
   const [editValue, setEditValue] = createSignal('');
+  let propsRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   const nick = createMemo(() => ircxState.userProfileTarget);
   const profile = createMemo(() => {
@@ -113,6 +114,18 @@ export default function UserProfileCard(props: Props) {
     if (n) requestProps(n);
   }));
 
+  onCleanup(() => {
+    if (propsRefreshTimer) clearTimeout(propsRefreshTimer);
+  });
+
+  const schedulePropsRefresh = (n: string): void => {
+    if (propsRefreshTimer) clearTimeout(propsRefreshTimer);
+    propsRefreshTimer = setTimeout(() => {
+      propsRefreshTimer = undefined;
+      if (nick() === n) requestProps(n);
+    }, 500);
+  };
+
   const fieldValue = (key: string): string | undefined => {
     const p = profile();
     if (!p) return undefined;
@@ -132,10 +145,10 @@ export default function UserProfileCard(props: Props) {
     const field = editField();
     const n = nick();
     if (field && n) {
-      setProp(n, field, editValue());
+      if (!setProp(n, field, editValue())) return;
       setEditField(null);
       setEditValue('');
-      setTimeout(() => requestProps(n), 500);
+      schedulePropsRefresh(n);
     }
   };
 
@@ -163,7 +176,7 @@ export default function UserProfileCard(props: Props) {
             {/* Avatar + Name header */}
             <div class="flex items-center gap-4 pb-4 border-b border-white/[0.06]">
               <Show
-                when={isSafeProfileUrl(profile()?.picture)}
+                when={settings.inlineImages && isSafeProfileUrl(profile()?.picture)}
                 fallback={
                   <div
                     class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold"
@@ -176,6 +189,8 @@ export default function UserProfileCard(props: Props) {
                 <img
                   src={profile()?.picture}
                   alt={n()}
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
                   class="w-16 h-16 rounded-full object-cover border-2 border-white/[0.08]"
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />

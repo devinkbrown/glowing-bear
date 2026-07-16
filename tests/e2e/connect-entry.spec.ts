@@ -28,7 +28,7 @@ test.describe('connect entry surface', () => {
     // shell's underlying empty-state prompt is present behind the overlay.
     await expect(page.getByText('WeeChat Relay Client')).toBeVisible();
     await expect(
-      page.getByText('Connect to your WeeChat relay to get started'),
+      page.getByText('Connect to your WeeChat relay to bring your buffers, channels, and DMs into orbit.'),
     ).toBeAttached();
 
     // Relay-login fields render and are editable. `exact` on the labels so

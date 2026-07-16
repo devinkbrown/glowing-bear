@@ -4,9 +4,9 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { render, cleanup } from '@solidjs/testing-library';
+import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import type { WeeChatLine } from '@/types';
-import { clearBuffers, clearIrcx, markBot, resetSettings, updateSettings } from '@/state';
+import { addLine, activityState, clearBuffers, clearIrcx, markBot, resetActivity, resetSettings, updateSettings, upsertBuffer } from '@/state';
 import { decryptedFor } from '@/state/bridge';
 import { threadsState, recordLinePreview, resetThreads, pendingReplyFor } from '@/state/threads';
 import { nickColor } from '@/lib/nickcolor';
@@ -63,6 +63,7 @@ beforeEach(() => {
   clearBuffers();
   clearIrcx();
   resetThreads();
+  resetActivity();
 });
 
 afterEach(() => {
@@ -128,6 +129,48 @@ describe('MessageLine', () => {
   it('does not apply the highlight class on a plain line', () => {
     const { container } = renderLine(makeLine({ highlight: false }));
     expect(container.querySelector('.msg-highlight')).toBeNull();
+  });
+
+  it('opens the stable root thread from a nested reply action', () => {
+    upsertBuffer({
+      id: '0xb', number: 1, name: 'irc.fixture.#darkbear', fullName: 'irc.fixture.#darkbear',
+      shortName: '#darkbear', title: '', type: 0, nicksCount: 0,
+      localVars: { type: 'channel', channel: '#darkbear', server: 'fixture' },
+      notify: 3, hidden: false,
+    });
+    const root = makeLine({ id: 'root-line', msgid: 'root', message: 'root body' });
+    const parent = makeLine({ id: 'parent-line', msgid: 'parent', replyTo: 'root', message: 'parent body' });
+    const child = makeLine({ id: 'child-line', msgid: 'child', replyTo: 'parent', message: 'child body' });
+    addLine('0xb', root, []);
+    addLine('0xb', parent, []);
+    addLine('0xb', child, []);
+
+    const { getByLabelText } = renderLine(child);
+    fireEvent.click(getByLabelText('Open message thread'));
+
+    expect(threadsState.activeThread).toEqual({
+      bufferPtr: '0xb',
+      bufferKey: 'irc.fixture.#darkbear',
+      rootMsgid: 'root',
+    });
+  });
+
+  it('saves a message only after local archive opt-in', () => {
+    updateSettings({ archiveRetention: '7d' });
+    upsertBuffer({
+      id: '0xb', number: 1, name: 'irc.fixture.#darkbear', fullName: 'irc.fixture.#darkbear',
+      shortName: '#darkbear', title: '', type: 0, nicksCount: 0,
+      localVars: { type: 'channel' }, notify: 3, hidden: false,
+    });
+    const message = makeLine({ id: 'saved-line', msgid: 'saved-msg', message: 'keep this' });
+    addLine('0xb', message, []);
+
+    const { getByLabelText } = renderLine(message);
+    fireEvent.click(getByLabelText('Save message'));
+
+    expect(activityState.saved).toHaveLength(1);
+    expect(activityState.saved[0]?.preview).toBe('keep this');
+    expect(getByLabelText('Remove saved message')).toBeInTheDocument();
   });
 
   it('shows the BOT badge for nicks marked via ircx markBot', () => {

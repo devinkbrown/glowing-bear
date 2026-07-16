@@ -7,9 +7,13 @@
 import { describe, expect, it } from 'vitest';
 import type { BufferEntry, Reaction } from '@/types';
 import {
+  bridgeTransportAllowed,
   bridgeShouldRun,
   findChannelPtr,
   hasReaction,
+  INSECURE_BRIDGE_TRANSPORT_ERROR,
+  isLoopbackBridgeTransport,
+  isSecureBridgeTransport,
   randomGuestNick,
   readMarkerRecord,
   replyRawArgs,
@@ -84,6 +88,41 @@ describe('bridgeShouldRun', () => {
   it('stays off when enabled but neither detected nor pinned', () => {
     expect(bridgeShouldRun(true, false, '')).toBe(false);
     expect(bridgeShouldRun(true, false, '   ')).toBe(false);
+  });
+});
+
+describe('isSecureBridgeTransport', () => {
+  it('allows bearer re-entry only over WSS', () => {
+    expect(isSecureBridgeTransport('wss://orochi.example/irc')).toBe(true);
+    expect(isSecureBridgeTransport('WSS://OROCHI.EXAMPLE/irc')).toBe(true);
+    expect(isSecureBridgeTransport('ws://orochi.example/irc')).toBe(false);
+    expect(isSecureBridgeTransport('not a url')).toBe(false);
+  });
+});
+
+describe('bridge transport policy', () => {
+  it('allows WSS with or without credentials', () => {
+    expect(bridgeTransportAllowed('wss://orochi.example/irc', false)).toBe(true);
+    expect(bridgeTransportAllowed('wss://orochi.example/irc', true)).toBe(true);
+  });
+
+  it('allows plain WS only on credential-free loopback endpoints', () => {
+    for (const url of ['ws://localhost:8080', 'ws://127.0.0.1:8080', 'ws://[::1]:8080']) {
+      expect(isLoopbackBridgeTransport(url)).toBe(true);
+      expect(bridgeTransportAllowed(url, false)).toBe(true);
+      expect(bridgeTransportAllowed(url, true)).toBe(false);
+    }
+  });
+
+  it('rejects remote or malformed plain-text endpoints even without credentials', () => {
+    expect(bridgeTransportAllowed('ws://orochi.example/irc', false)).toBe(false);
+    expect(bridgeTransportAllowed('ws://127.example/irc', false)).toBe(false);
+    expect(bridgeTransportAllowed('ws://user:secret@localhost:8080/irc', false)).toBe(false);
+    expect(bridgeTransportAllowed('http://localhost/irc', false)).toBe(false);
+    expect(bridgeTransportAllowed('not a url', false)).toBe(false);
+    expect(INSECURE_BRIDGE_TRANSPORT_ERROR).toBe(
+      'Orochi bridge requires wss://; ws:// is allowed only for unauthenticated loopback endpoints.',
+    );
   });
 });
 

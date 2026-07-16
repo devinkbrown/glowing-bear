@@ -1,6 +1,7 @@
 // IRCv3 message tag parsing utilities
 
 const WEECHAT_INTERNAL = /^(irc_|notify_|nick_|log\d|self_msg$)/;
+const WEECHAT_IRC_TAG_PREFIX = 'irc_tag_';
 
 /**
  * Parse IRCv3 key=value tags out of WeeChat's tags_array.
@@ -8,8 +9,13 @@ const WEECHAT_INTERNAL = /^(irc_|notify_|nick_|log\d|self_msg$)/;
  */
 export function parseIrcv3Tags(tags: string[]): Map<string, string> {
 	const map = new Map<string, string>();
-	for (const tag of tags) {
-		if (WEECHAT_INTERNAL.test(tag)) continue;
+	for (const sourceTag of tags) {
+		// WeeChat exposes IRCv3 tags as `irc_tag_<key>=<value>` in relay
+		// hdata. Accept raw keys too for compatible relays/test fixtures.
+		const tag = sourceTag.startsWith(WEECHAT_IRC_TAG_PREFIX)
+			? sourceTag.slice(WEECHAT_IRC_TAG_PREFIX.length)
+			: sourceTag;
+		if (tag === sourceTag && WEECHAT_INTERNAL.test(sourceTag)) continue;
 		const eq = tag.indexOf('=');
 		if (eq > 0) {
 			map.set(tag.slice(0, eq), decodeTagValue(tag.slice(eq + 1)));
@@ -18,6 +24,11 @@ export function parseIrcv3Tags(tags: string[]): Map<string, string> {
 		}
 	}
 	return map;
+}
+
+/** Prefer the current client-only reply tag while accepting the legacy name. */
+export function replyParentFromTags(tags: ReadonlyMap<string, string>): string | undefined {
+	return tags.get('+draft/reply') ?? tags.get('+reply');
 }
 
 /**

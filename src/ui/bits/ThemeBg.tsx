@@ -128,13 +128,23 @@ function themeBackground(theme: ThemeName): JSX.Element {
   }
 }
 
-const Shell = (props: { children: JSX.Element }) => (
-  <div class="theme-bg-shell absolute inset-0 pointer-events-none overflow-hidden opacity-75" aria-hidden="true"
-    style={{ contain: 'layout style' }}>
-    <style>{`@media (prefers-reduced-motion: reduce) { .theme-bg-shell * { animation: none !important; } }`}</style>
-    {props.children}
-  </div>
-);
+const Shell = (props: { children: JSX.Element }) => {
+  const motionOn = useContext(MotionContext);
+  return (
+    <div
+      class="theme-bg-shell absolute inset-0 pointer-events-none overflow-hidden opacity-75"
+      aria-hidden="true"
+      data-scene-motion={motionOn() ? 'full' : 'reduced'}
+      style={{ contain: 'layout style' }}
+    >
+      <style>{`
+        .theme-bg-shell[data-scene-motion="reduced"] * { animation: none !important; }
+        @media (prefers-reduced-motion: reduce) { .theme-bg-shell * { animation: none !important; } }
+      `}</style>
+      {props.children}
+    </div>
+  );
+};
 
 /* ── DarkBear: Living digital mesh — network nodes, data streams, pulse rings ── */
 function DarkBearBg() {

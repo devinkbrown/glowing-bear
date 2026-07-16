@@ -24,7 +24,7 @@ vi.hoisted(() => {
 import type { WeeChatBuffer } from '@/lib/weechat/model';
 import type { AccessEntry, PropEntry } from '@/lib/ircx/types';
 
-vi.mock('./connection', () => ({ sendTo: vi.fn() }));
+vi.mock('./connection', () => ({ sendTo: vi.fn(() => true) }));
 
 import { sendTo } from './connection';
 import { clearBuffers, upsertBuffer, setActiveBuffer } from './buffers';
@@ -59,6 +59,8 @@ import {
   closeUserProfile,
   openServicesPanel,
   closeServicesPanel,
+  recordServiceFeedback,
+  clearServiceFeedback,
   sendAccount,
   sendChannel,
   sendMemo,
@@ -124,7 +126,8 @@ describe('ircx store', () => {
     clearIrcx();
     clearBuffers();
     localStorage.clear();
-    sendToMock.mockClear();
+    sendToMock.mockReset();
+    sendToMock.mockReturnValue(true);
     setupServerAndChannel();
   });
 
@@ -209,9 +212,17 @@ describe('ircx store', () => {
     });
 
     it('setProp quotes PROP <target> <key> :<value>', () => {
-      setProp('#general', 'TOPIC', 'hello world');
+      expect(setProp('#general', 'TOPIC', 'hello world')).toBe(true);
 
       expect(sendToMock).toHaveBeenCalledWith(SRV, '/quote PROP #general TOPIC :hello world');
+    });
+
+    it('does not arm a PROP request when relay dispatch is rejected', () => {
+      sendToMock.mockReturnValue(false);
+
+      expect(requestProps('#general')).toBe(false);
+      expect(ircxState.pendingPropTarget).toBeNull();
+      expect(ircxState.pendingPropEntries).toEqual([]);
     });
 
     it('addPropEntry accumulates and finishPropList commits channel targets to channelProps', () => {
@@ -324,11 +335,24 @@ describe('ircx store', () => {
 
   describe('ACCESS flow', () => {
     it('requestAccess arms the pending list and quotes ACCESS <chan> LIST', () => {
-      requestAccess('#general');
+      expect(requestAccess('#general')).toBe(true);
 
       expect(ircxState.pendingAccessChannel).toBe('#general');
       expect(ircxState.pendingAccessEntries).toEqual([]);
       expect(sendToMock).toHaveBeenCalledWith(SRV, '/quote ACCESS #general LIST');
+    });
+
+    it('does not arm ACCESS state or a delayed refresh after rejection', () => {
+      vi.useFakeTimers();
+      sendToMock.mockReturnValue(false);
+
+      expect(requestAccess('#general')).toBe(false);
+      expect(addAccess('#general', 'DENY', '*!*@bad.host')).toBe(false);
+      expect(ircxState.pendingAccessChannel).toBeNull();
+      expect(sendToMock).toHaveBeenCalledTimes(2);
+
+      vi.advanceTimersByTime(500);
+      expect(sendToMock).toHaveBeenCalledTimes(2);
     });
 
     it('finishAccessList commits only entries matching the channel', () => {
@@ -511,10 +535,23 @@ describe('ircx store', () => {
 
   describe('MONITOR', () => {
     it('monitorAdd tracks the lowercase nick and quotes MONITOR +', () => {
-      monitorAdd('Alice');
+      expect(monitorAdd('Alice')).toBe(true);
 
       expect(ircxState.monitorList['alice']).toBe(true);
       expect(sendToMock).toHaveBeenCalledWith(SRV, '/quote MONITOR + Alice');
+    });
+
+    it('does not change monitor state when the relay rejects the command', () => {
+      sendToMock.mockReturnValue(false);
+
+      expect(monitorAdd('Alice')).toBe(false);
+      expect(ircxState.monitorList['alice']).toBeUndefined();
+
+      sendToMock.mockReturnValue(true);
+      monitorAdd('Alice');
+      sendToMock.mockReturnValue(false);
+      expect(monitorRemove('Alice')).toBe(false);
+      expect(ircxState.monitorList['alice']).toBe(true);
     });
 
     it('monitorRemove untracks and quotes MONITOR -', () => {
@@ -527,9 +564,40 @@ describe('ircx store', () => {
     });
   });
 
+  describe('service feedback', () => {
+    it('keeps a bounded session-only history and can clear one server', () => {
+      for (let i = 0; i < 30; i += 1) {
+        recordServiceFeedback('esh', {
+          kind: 'info',
+          command: 'CHANNEL',
+          code: 'NOTICE',
+          message: `reply ${i}`,
+        }, i);
+      }
+      recordServiceFeedback('other', {
+        kind: 'success',
+        command: 'REGISTER',
+        code: 'SUCCESS',
+        message: 'Account registered',
+      }, 31);
+
+      expect(ircxState.serviceFeedback).toHaveLength(24);
+      expect(ircxState.serviceFeedback[0]?.message).toBe('reply 7');
+      expect(ircxState.serviceFeedback.at(-1)?.serverName).toBe('other');
+
+      clearServiceFeedback('esh');
+      expect(ircxState.serviceFeedback).toEqual([
+        expect.objectContaining({ serverName: 'other', command: 'REGISTER' }),
+      ]);
+
+      clearServiceFeedback();
+      expect(ircxState.serviceFeedback).toEqual([]);
+    });
+  });
+
   describe('raw command builders', () => {
     it('sendWhisper builds WHISPER <chan> <nick> :<msg>', () => {
-      sendWhisper('#general', 'alice', 'psst hello');
+      expect(sendWhisper('#general', 'alice', 'psst hello')).toBe(true);
 
       expect(sendToMock).toHaveBeenCalledWith(SRV, '/quote WHISPER #general alice :psst hello');
     });
@@ -561,9 +629,20 @@ describe('ircx store', () => {
     it('does not send when no server buffer is resolvable', () => {
       clearBuffers();
 
-      sendWhisper('#general', 'alice', 'hi');
+      expect(sendWhisper('#general', 'alice', 'hi')).toBe(false);
 
       expect(sendToMock).not.toHaveBeenCalled();
+    });
+
+    it('propagates rejected relay dispatch for extension commands', () => {
+      sendToMock.mockReturnValue(false);
+
+      expect(setProp('#general', 'TOPIC', 'kept')).toBe(false);
+      expect(sendWhisper('#general', 'alice', 'kept')).toBe(false);
+      expect(sendPushSet('endpoint', 'kept')).toBe(false);
+      expect(sendAccount('INFO')).toBe(false);
+      expect(sendChannel('INFO #general')).toBe(false);
+      expect(sendMemo('LIST')).toBe(false);
     });
   });
 

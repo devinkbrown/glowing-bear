@@ -165,12 +165,24 @@ describe('Sidebar', () => {
     expect(getByText('eshmaki')).toBeInTheDocument();
   });
 
+  it('keeps a join value open when the relay rejects dispatch', () => {
+    const { getByLabelText, getByPlaceholderText } = render(() => <Sidebar />);
+
+    fireEvent.click(getByLabelText('Join channel'));
+    const input = getByPlaceholderText('#channel') as HTMLInputElement;
+    fireEvent.input(input, { target: { value: 'retry-room' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveValue('retry-room');
+  });
+
   it('renders the notify control at its default tier for channel rows', () => {
     const { getAllByLabelText } = render(() => <Sidebar />);
 
-    // Both channels default to the 'mentions' tier (the pre-P3.4 behavior).
+    // Channels and DMs all expose the same default mentions tier.
     const controls = getAllByLabelText(/Notifications: mentions only/);
-    expect(controls).toHaveLength(2);
+    expect(controls).toHaveLength(3);
     expect(controls[0]).toHaveAttribute('data-notify-mode', 'mentions');
     // Mentions tier carries an accent dot on the bell.
     expect(controls[0]?.querySelector('circle')).not.toBeNull();

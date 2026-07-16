@@ -8,7 +8,24 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
-const relayMock = vi.hoisted(() => ({ instances: [] as unknown[] }));
+const relayMock = vi.hoisted(() => ({
+  instances: [] as unknown[],
+  emptyDiagnostics: {
+    phase: 'idle',
+    transport: 'ws',
+    protocolMode: 'none',
+    authMode: 'none',
+    serverVersion: '',
+    compression: 'off',
+    hashAlgorithm: 'none',
+    totp: false,
+    handshake: 'unknown',
+    canDecodeCompression: false,
+    reconnectReason: 'none',
+    reconnectAttempt: 0,
+    reconnectDelayMs: 0,
+  } as const,
+}));
 
 // Node 22+ defines an experimental localStorage global that is undefined
 // without --localstorage-file and shadows any jsdom implementation. Install a
@@ -32,9 +49,10 @@ vi.mock('@/lib/weechat/client', () => {
     connect = vi.fn();
     disconnect = vi.fn();
     sendPing = vi.fn();
-    sendInput = vi.fn();
+    sendInput = vi.fn(() => true);
     requestHistory = vi.fn();
     requestNicklist = vi.fn();
+    diagnostics = vi.fn(() => relayMock.emptyDiagnostics);
     constructor(settings: unknown) {
       super();
       this.settings = settings;
@@ -47,6 +65,8 @@ vi.mock('@/lib/weechat/client', () => {
 vi.mock('@/lib/notifications', () => ({
   notify: vi.fn(),
   playSound: vi.fn(),
+  claimAlertDelivery: vi.fn(() => true),
+  setAlertCoordinatorActive: vi.fn(),
   updateTitle: vi.fn(),
   clearTitle: vi.fn(),
   requestPermission: vi.fn(async () => false),
@@ -54,27 +74,43 @@ vi.mock('@/lib/notifications', () => ({
 
 import { ConnectionState } from '@/lib/weechat/model';
 import type { RelaySettings, WeeChatBuffer, WeeChatLine, WeeChatNick } from '@/lib/weechat/model';
-import { notify } from '@/lib/notifications';
+import { claimAlertDelivery, notify, playSound } from '@/lib/notifications';
 import {
   connect,
+  currentNotificationConnectionScope,
   disconnect,
+  reconnect,
   sendInput,
+  sendTo,
   setMediaSink,
   setRelayObserver,
   connectionState,
   connectionError,
   lag,
+  relayDiagnostics,
   isOper,
   isAdmin,
   isOperBuffer,
   requestHistory,
+  requestHistoryTotal,
   setActive,
   openQuery,
   _flushLineBatch,
   type MediaCommandSink,
 } from './connection';
-import { buffersState, upsertBuffer, setActiveBuffer, addLine, setNotifyMode } from './buffers';
+import {
+  buffersState,
+  upsertBuffer,
+  setActiveBuffer,
+  addLine,
+  getNotifyMode,
+  setNotifyMode,
+  muteTemporarily,
+  clearTemporaryMute,
+} from './buffers';
+import { resetSettings, updateRelay, updateSettings } from './settings';
 import { ircxState, isOrochiServer, markOrochi } from './ircx';
+import { activityState, resetActivity } from './activity';
 import type { BufferEntry } from '@/types';
 
 interface FakeClient extends EventTarget {
@@ -85,6 +121,7 @@ interface FakeClient extends EventTarget {
   sendInput: Mock;
   requestHistory: Mock;
   requestNicklist: Mock;
+  diagnostics: Mock;
 }
 
 function lastClient(): FakeClient {
@@ -166,12 +203,14 @@ function entry(pointer: string): BufferEntry {
   return e;
 }
 
-describe('connection store', () => {
+  describe('connection store', () => {
   beforeEach(() => {
     disconnect(); // clears buffers, ircx, oper state, client
     setMediaSink(null);
     setRelayObserver(null);
     localStorage.clear();
+    resetSettings();
+    resetActivity();
     relayMock.instances.length = 0;
     vi.clearAllMocks();
   });
@@ -183,6 +222,17 @@ describe('connection store', () => {
   });
 
   describe('lifecycle wiring', () => {
+    it('reports whether direct relay input reached the client socket', () => {
+      expect(sendTo('0x123', '/quote LOGOUT')).toBe(false);
+
+      connect();
+      const c = lastClient();
+      c.sendInput.mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+      expect(sendTo('0x123', '/quote ACCOUNTINFO')).toBe(false);
+      expect(sendTo('0x123', '/quote ACCOUNTINFO')).toBe(true);
+    });
+
     it('connect() builds a client from settings.relay and dials it', () => {
       connect();
 
@@ -190,6 +240,26 @@ describe('connection store', () => {
       expect(c.settings.host).toBe('eshmaki.me');
       expect(c.settings.port).toBe(9001);
       expect(c.connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('binds notifications to the current relay profile across reconnects', () => {
+      updateRelay({ password: 'profile-a-secret' });
+      connect();
+      const scopeA = currentNotificationConnectionScope();
+      expect(scopeA).toMatch(/^[a-f0-9]{48}$/);
+
+      reconnect();
+      expect(currentNotificationConnectionScope()).toBe(scopeA);
+
+      updateRelay({ password: 'profile-b-secret' });
+      connect();
+      const scopeB = currentNotificationConnectionScope();
+      expect(scopeB).toMatch(/^[a-f0-9]{48}$/);
+      expect(scopeB).not.toBe(scopeA);
+
+      updateRelay({ password: 'profile-a-secret' });
+      connect();
+      expect(currentNotificationConnectionScope()).toBe(scopeA);
     });
 
     it('tracks stateChanged, pings on connect, and surfaces errors', () => {
@@ -205,6 +275,24 @@ describe('connection store', () => {
 
       emit(c, 'stateChanged', { state: ConnectionState.DISCONNECTED });
       expect(connectionState()).toBe(ConnectionState.DISCONNECTED);
+    });
+
+    it('mirrors detailed relay diagnostics reactively', () => {
+      connect();
+      const c = lastClient();
+      const detail = {
+        ...relayMock.emptyDiagnostics,
+        phase: 'reconnect-wait' as const,
+        protocolMode: 'password-hash' as const,
+        authMode: 'hashed' as const,
+        reconnectReason: 'network' as const,
+        reconnectAttempt: 2,
+        reconnectDelayMs: 2000,
+      };
+
+      emit(c, 'diagnosticsChanged', detail);
+
+      expect(relayDiagnostics()).toEqual(detail);
     });
 
     it('computes lag from the pong echo', () => {
@@ -370,6 +458,96 @@ describe('connection store', () => {
       expect(isOrochiServer('esh')).toBe(true);
       expect(entry(SRV).lines).toHaveLength(2);
     });
+
+    it('maps recognised service replies from the Orochi server buffer', () => {
+      const c = connectWithBuffers();
+      markOrochi('esh');
+      const at = new Date('2026-07-16T12:00:00.000Z');
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: SRV,
+        date: at,
+        nick: 'orochi.test',
+        tags: ['irc_fail'],
+        message: 'FAIL CHANNEL ACCESS_DENIED :Founder access required',
+      }) });
+
+      expect(ircxState.serviceFeedback).toEqual([{
+        serverName: 'esh',
+        receivedAt: at.getTime(),
+        kind: 'error',
+        command: 'CHANNEL',
+        code: 'ACCESS_DENIED',
+        message: 'Founder access required',
+      }]);
+    });
+
+    it('records stable service feedback only once across different relay pointers', () => {
+      const c = connectWithBuffers();
+      markOrochi('esh');
+      const at = new Date('2026-07-16T12:00:00.000Z');
+      const feedback: Partial<WeeChatLine> & { buffer: string } = {
+        buffer: SRV,
+        date: at,
+        nick: 'orochi.test',
+        tags: ['irc_fail'],
+        msgid: 'service-feedback-1',
+        message: 'FAIL CHANNEL ACCESS_DENIED :Founder access required',
+      };
+
+      emit(c, 'lineAdded', { line: makeLine({ ...feedback, id: 'relay-service-1' }) });
+      emit(c, 'lineAdded', { line: makeLine({ ...feedback, id: 'relay-service-2' }) });
+      _flushLineBatch();
+
+      expect(ircxState.serviceFeedback).toHaveLength(1);
+      expect(entry(SRV).lines).toHaveLength(1);
+    });
+
+    it('does not mirror unrelated notices or session-token credentials', () => {
+      const c = connectWithBuffers();
+      markOrochi('esh');
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: SRV,
+        tags: ['irc_notice'],
+        message: 'End of MOTD',
+      }) });
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: SRV,
+        tags: ['irc_notice'],
+        message: 'SESSIONTOKEN kain sst_0123456789abcdef0123456789abcdef expires=1784217600',
+      }) });
+
+      expect(ircxState.serviceFeedback).toEqual([]);
+    });
+
+    it('rejects service-shaped feedback authored by a user in the server buffer', () => {
+      const c = connectWithBuffers();
+      markOrochi('esh');
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: SRV,
+        nick: 'mallory',
+        tags: ['irc_notice', 'nick_mallory'],
+        message: 'You are now identified as mallory',
+      }) });
+
+      expect(ircxState.serviceFeedback).toEqual([]);
+    });
+
+    it('does not mistake a user matching the local relay alias for the server', () => {
+      const c = connectWithBuffers();
+      markOrochi('esh');
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: SRV,
+        nick: 'esh',
+        tags: ['irc_notice', 'nick_esh'],
+        message: 'You are now identified as esh',
+      }) });
+
+      expect(ircxState.serviceFeedback).toEqual([]);
+    });
   });
 
   describe('oper detection', () => {
@@ -433,6 +611,23 @@ describe('connection store', () => {
   });
 
   describe('TAGMSG handling', () => {
+    it('coalesces adjacent WebSocket-frame lines inside one 16 ms store window', () => {
+      vi.useFakeTimers();
+      try {
+        const c = connectWithBuffers();
+        emit(c, 'lineAdded', { line: makeLine({ buffer: CHAN, nick: 'alice', message: 'one' }) });
+        emit(c, 'lineAdded', { line: makeLine({ buffer: CHAN, nick: 'bob', message: 'two' }) });
+
+        expect(entry(CHAN).lines).toHaveLength(0);
+        vi.advanceTimersByTime(15);
+        expect(entry(CHAN).lines).toHaveLength(0);
+        vi.advanceTimersByTime(1);
+        expect(entry(CHAN).lines.map((line) => line.message)).toEqual(['one', 'two']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('+typing routes to setTyping and never renders', () => {
       const c = connectWithBuffers();
 
@@ -474,6 +669,21 @@ describe('connection store', () => {
       }) });
 
       expect(entry(CHAN).reactions['msgid-42']).toEqual([{ emoji: '🔥', nicks: ['bob'] }]);
+      expect(entry(CHAN).lines).toHaveLength(0);
+    });
+
+    it('+draft/react/+draft/reply routes to addReaction and never renders', () => {
+      const c = connectWithBuffers();
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: CHAN,
+        nick: 'alice',
+        isTagMsg: true,
+        tags: ['irc_tagmsg'],
+        ircTags: new Map([['+draft/react', '🚀'], ['+draft/reply', 'msgid-current']]),
+      }) });
+
+      expect(entry(CHAN).reactions['msgid-current']).toEqual([{ emoji: '🚀', nicks: ['alice'] }]);
       expect(entry(CHAN).lines).toHaveLength(0);
     });
   });
@@ -674,16 +884,30 @@ describe('connection store', () => {
       setActiveBuffer(CHAN);
       markOrochi('esh');
 
-      sendInput('/w alice psst secret plans');
+      expect(sendInput('/w alice psst secret plans')).toBe(true);
 
       expect(c.sendInput).toHaveBeenCalledWith(SRV, '/quote WHISPER #general alice :psst secret plans');
+    });
+
+    it('propagates rejected Orochi extension command dispatch', () => {
+      const c = connectWithBuffers();
+      setActiveBuffer(CHAN);
+      markOrochi('esh');
+      c.sendInput.mockReturnValue(false);
+
+      expect(sendInput('/w alice keep this')).toBe(false);
+      expect(sendInput('/prop #general')).toBe(false);
+      expect(sendInput('/access #general')).toBe(false);
+      expect(sendInput('/pushset endpoint keep-this')).toBe(false);
+      expect(sendInput('/monitor add Alice')).toBe(false);
+      expect(ircxState.monitorList['alice']).toBeUndefined();
     });
 
     it('plain text gets an optimistic _opt_ echo and goes to the relay', () => {
       const c = connectWithBuffers();
       setActiveBuffer(CHAN);
 
-      sendInput('hello world');
+      expect(sendInput('hello world')).toBe(true);
 
       const lines = entry(CHAN).lines;
       expect(lines).toHaveLength(1);
@@ -710,15 +934,28 @@ describe('connection store', () => {
       expect(lines[0]?.id.startsWith('_opt_')).toBe(false);
     });
 
-    it('suppresses a resend while an identical optimistic line is pending', () => {
+    it('resends identical text while keeping a single optimistic placeholder', () => {
       const c = connectWithBuffers();
       setActiveBuffer(CHAN);
 
-      sendInput('hello world');
-      sendInput('hello world');
+      expect(sendInput('hello world')).toBe(true);
+      expect(sendInput('hello world')).toBe(true);
 
       expect(entry(CHAN).lines).toHaveLength(1);
-      expect(c.sendInput).toHaveBeenCalledTimes(1);
+      expect(c.sendInput).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not add an optimistic line when dispatch is rejected and accepts a retry', () => {
+      const c = connectWithBuffers();
+      setActiveBuffer(CHAN);
+      c.sendInput.mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+      expect(sendInput('retry after reconnect')).toBe(false);
+      expect(entry(CHAN).lines).toHaveLength(0);
+
+      expect(sendInput('retry after reconnect')).toBe(true);
+      expect(entry(CHAN).lines).toHaveLength(1);
+      expect(c.sendInput).toHaveBeenCalledTimes(2);
     });
 
     it('does nothing without a client or with blank input', () => {
@@ -726,11 +963,11 @@ describe('connection store', () => {
       setActiveBuffer(CHAN);
       const c = lastClient();
 
-      sendInput('   ');
+      expect(sendInput('   ')).toBe(false);
       expect(c.sendInput).not.toHaveBeenCalled();
 
       disconnect();
-      sendInput('hello');
+      expect(sendInput('hello')).toBe(false);
       expect(c.sendInput).not.toHaveBeenCalled();
     });
 
@@ -753,6 +990,29 @@ describe('connection store', () => {
   });
 
   describe('highlight notifications', () => {
+    it('applies one line, activity item, notification and sound for a repeated msgid', () => {
+      const c = connectWithBuffers(); // SRV active
+      updateSettings({ notificationSound: true });
+      const alert = {
+        buffer: CHAN,
+        nick: 'alice',
+        message: 'kain: stable alert',
+        msgid: 'stable-alert-1',
+        highlight: true,
+      } as const;
+
+      emit(c, 'lineAdded', { line: makeLine({ ...alert, id: 'relay-alert-1' }) });
+      emit(c, 'lineAdded', { line: makeLine({ ...alert, id: 'relay-alert-2' }) });
+      _flushLineBatch();
+
+      expect(entry(CHAN).lines).toHaveLength(1);
+      expect(activityState.items).toHaveLength(1);
+      expect(activityState.items[0]?.msgid).toBe('stable-alert-1');
+      expect(vi.mocked(claimAlertDelivery)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(notify)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(playSound)).toHaveBeenCalledTimes(1);
+    });
+
     it('notifies on a highlighted line in an inactive, unmuted buffer', () => {
       const c = connectWithBuffers(); // SRV active
 
@@ -762,6 +1022,49 @@ describe('connection store', () => {
 
       expect(vi.mocked(notify)).toHaveBeenCalledTimes(1);
       expect(vi.mocked(notify).mock.calls[0]?.[0]).toBe('Highlight in #general');
+    });
+
+    it('lets only the elected tab produce notification and sound side effects', () => {
+      const c = connectWithBuffers();
+      vi.mocked(claimAlertDelivery).mockReturnValueOnce(false);
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: CHAN, nick: 'alice', message: 'kain: one alert only', highlight: true,
+      }) });
+
+      expect(vi.mocked(notify)).not.toHaveBeenCalled();
+      expect(vi.mocked(playSound)).not.toHaveBeenCalled();
+    });
+
+    it('suppresses alerts during scheduled quiet hours', () => {
+      const c = connectWithBuffers();
+      const dateNow = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-16T12:00:00Z'));
+      updateSettings({
+        quietHoursEnabled: true,
+        quietHoursStart: '11:00',
+        quietHoursEnd: '13:00',
+        quietHoursTimezone: 'UTC',
+      });
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: CHAN, nick: 'alice', message: 'kain: quiet ping', highlight: true,
+      }) });
+
+      expect(vi.mocked(notify)).not.toHaveBeenCalled();
+      dateNow.mockRestore();
+    });
+
+    it('suppresses a temporary buffer mute without changing its mention tier', () => {
+      const c = connectWithBuffers();
+      muteTemporarily(CHAN, 60_000);
+
+      emit(c, 'lineAdded', { line: makeLine({
+        buffer: CHAN, nick: 'alice', message: 'kain: muted ping', highlight: true,
+      }) });
+
+      expect(vi.mocked(notify)).not.toHaveBeenCalled();
+      expect(getNotifyMode(CHAN)).toBe('mentions');
+      clearTemporaryMute(CHAN);
     });
   });
 
@@ -820,6 +1123,17 @@ describe('connection store', () => {
 
       expect(entry(CHAN).loading).toBe(true);
       expect(c.requestHistory).toHaveBeenCalledWith(CHAN, 52);
+    });
+
+    it('requestHistoryTotal bypasses the bounded in-memory count', () => {
+      const c = connectWithBuffers();
+      setActiveBuffer(CHAN);
+      addLine(CHAN, makeLine({ buffer: CHAN, nick: 'a', message: 'one' }), []);
+
+      requestHistoryTotal(20_000, CHAN);
+
+      expect(entry(CHAN).loading).toBe(true);
+      expect(c.requestHistory).toHaveBeenCalledWith(CHAN, 20_000);
     });
 
     it('setActive activates locally and clears the WeeChat hotlist', () => {

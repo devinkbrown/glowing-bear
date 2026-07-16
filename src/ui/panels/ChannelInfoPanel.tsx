@@ -4,7 +4,7 @@
 //   Access (grouped OWNER/HOST/VOICE/GRANT/DENY list with add/remove).
 // PROP and ACCESS lists are auto-requested whenever the target channel opens.
 
-import { createSignal, createMemo, createEffect, on, For, Show } from 'solid-js';
+import { createSignal, createMemo, createEffect, on, onCleanup, For, Show } from 'solid-js';
 import type { JSX } from 'solid-js';
 import {
   buffersState, ircxState,
@@ -15,6 +15,7 @@ import {
   type AccessLevel,
 } from '@/lib/ircx/types';
 import Modal from '@/ui/bits/Modal';
+import { formatDate, formatNumber } from '@/lib/i18n';
 
 type Tab = 'props' | 'modes' | 'access';
 
@@ -23,7 +24,7 @@ const EDITABLE_KEYS = ['TOPIC', 'SUBJECT', 'LANGUAGE', 'PICS'];
 function formatTimestamp(ts: number): string {
   if (!ts || ts <= 0) return '';
   const d = new Date(ts * 1000);
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return formatDate(d, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 /** Access-entry lifetime in seconds → compact "3d" / "2h" / "45m" / "30s". */
@@ -40,7 +41,7 @@ function formatPropValue(key: string, value: string): string {
   if (k === 'CREATION' && /^\d+$/.test(value)) return formatTimestamp(parseInt(value, 10));
   if (k === 'MEMBERCOUNT' || k === 'MEMBERLIMIT') {
     const n = parseInt(value, 10);
-    if (!Number.isNaN(n)) return n.toLocaleString();
+    if (!Number.isNaN(n)) return formatNumber(n);
   }
   return value;
 }
@@ -58,6 +59,7 @@ export default function ChannelInfoPanel(props: Props) {
   const [newLevel, setNewLevel] = createSignal<AccessLevel>('HOST');
   const [newMask, setNewMask] = createSignal('');
   const [newReason, setNewReason] = createSignal('');
+  let propsRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   const channel = createMemo(() => ircxState.channelInfoTarget);
   const chanProps = createMemo(() => {
@@ -87,21 +89,33 @@ export default function ChannelInfoPanel(props: Props) {
     requestAccess(ch);
   }));
 
+  onCleanup(() => {
+    if (propsRefreshTimer) clearTimeout(propsRefreshTimer);
+  });
+
+  const schedulePropsRefresh = (ch: string): void => {
+    if (propsRefreshTimer) clearTimeout(propsRefreshTimer);
+    propsRefreshTimer = setTimeout(() => {
+      propsRefreshTimer = undefined;
+      if (channel() === ch) requestProps(ch);
+    }, 500);
+  };
+
   const handleSaveProp = (): void => {
     const key = editKey();
     const ch = channel();
     if (key && ch) {
-      setProp(ch, key, editValue());
+      if (!setProp(ch, key, editValue())) return;
       setEditKey(null);
       setEditValue('');
-      setTimeout(() => requestProps(ch), 500);
+      schedulePropsRefresh(ch);
     }
   };
 
   const handleAddAccess = (): void => {
     const ch = channel();
     if (ch && newMask().trim()) {
-      addAccess(ch, newLevel(), newMask().trim(), newReason().trim() || undefined);
+      if (!addAccess(ch, newLevel(), newMask().trim(), newReason().trim() || undefined)) return;
       setNewMask('');
       setNewReason('');
       setShowAddAccess(false);

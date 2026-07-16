@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Minimal native capabilities for DarkBear's bundled main window",
+  "windows": ["main"],
+  "local": true,
+  "permissions": [
+    "core:event:default",
+    "deep-link:default",
+    "notification:default",
+    "credential-vault"
+  ]
+}

@@ -11,6 +11,7 @@ import {
   parseCHANLIMIT,
   normalizeCase,
   selectSaslMechanism,
+  parseSaslSessionTokenNotice,
   parseStandardReply,
   parseSessionTokenNote,
   parseSessionMeshTokenNote,
@@ -304,6 +305,13 @@ describe('selectSaslMechanism', () => {
     expect(selectSaslMechanism(offered, { hasPassword: true })).toBe('SCRAM-SHA-256');
   });
 
+  it('prefers a prior-auth SESSION-TOKEN over replaying the password', () => {
+    expect(selectSaslMechanism(offered, {
+      hasPassword: true,
+      hasSessionToken: true,
+    })).toBe('SESSION-TOKEN');
+  });
+
   it('falls back to PLAIN when SCRAM-SHA-256 is not offered', () => {
     expect(selectSaslMechanism(['PLAIN', 'EXTERNAL'], { hasPassword: true })).toBe('PLAIN');
   });
@@ -323,6 +331,31 @@ describe('selectSaslMechanism', () => {
 
   it('matches mechanism names case-insensitively', () => {
     expect(selectSaslMechanism(['scram-sha-256'], { hasPassword: true })).toBe('SCRAM-SHA-256');
+  });
+});
+
+describe('parseSaslSessionTokenNotice', () => {
+  it('parses the TLS-only token automatically issued after SASL success', () => {
+    const msg = parseIRCMessage(
+      ':orochi.test NOTICE darkbear :SESSIONTOKEN alice sst_0123456789abcdef0123456789abcdef expires=1784217600',
+    );
+    expect(parseSaslSessionTokenNotice(msg)).toEqual({
+      account: 'alice',
+      token: 'sst_0123456789abcdef0123456789abcdef',
+      expiresAt: 1_784_217_600,
+    });
+  });
+
+  it('rejects malformed, non-NOTICE, and unbounded credentials', () => {
+    expect(parseSaslSessionTokenNotice(parseIRCMessage(
+      ':orochi.test NOTICE darkbear :SESSIONTOKEN alice not-a-token expires=1784217600',
+    ))).toBeNull();
+    expect(parseSaslSessionTokenNotice(parseIRCMessage(
+      ':orochi.test NOTICE darkbear :SESSIONTOKEN alice sst_0123456789abcdef0123456789abcdef',
+    ))).toBeNull();
+    expect(parseSaslSessionTokenNotice(parseIRCMessage(
+      ':orochi.test PRIVMSG darkbear :SESSIONTOKEN alice sst_0123456789abcdef0123456789abcdef expires=1784217600',
+    ))).toBeNull();
   });
 });
 

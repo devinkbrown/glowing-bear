@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import ThemeBg, { shimmerLayers, type ThemeName } from './ThemeBg';
+import { resetSettings, setSceneMotion } from '@/state';
 
 // The reduced-motion gate and budget cases synchronously mount heavy scenes (the
 // SMIL-reduce case renders 5 scenes in a loop, tokyo-night ~180 windows). The
@@ -25,6 +26,7 @@ vi.setConfig({ testTimeout: 20_000 });
 
 afterEach(() => {
   cleanup();
+  resetSettings();
   vi.restoreAllMocks();
 });
 
@@ -70,6 +72,14 @@ describe('ThemeBg reduced-motion SMIL gate', () => {
       expect(smilNodes(container).length).toBe(0);
       cleanup();
     }
+  });
+
+  it('marks all CSS scene motion disabled when the in-app control requests reduced motion', () => {
+    stubMatchMedia(false);
+    setSceneMotion('reduced');
+    const { container } = render(() => <ThemeBg theme="nord" />);
+
+    expect(container.querySelector('.theme-bg-shell')).toHaveAttribute('data-scene-motion', 'reduced');
   });
 });
 

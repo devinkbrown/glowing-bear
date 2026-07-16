@@ -21,7 +21,7 @@ import {
   uiState,
   upsertBuffer,
 } from '@/state';
-import { joinRoom, startCall } from '@/state/media';
+import { requestRoomJoin, requestStartCall } from '@/state/media';
 import { MAX_FORMAT_LENGTH } from '@/lib/irc-classic/formatter';
 import Header from './Header';
 
@@ -42,11 +42,15 @@ vi.mock('@/state/media', () => ({
     spotlightNick: null,
     error: null,
     mediaAvailable: true,
+    preflight: { open: false },
   },
   joinRoom: vi.fn(),
   leaveRoom: vi.fn(),
   startCall: vi.fn(),
   acceptCall: vi.fn(),
+  requestRoomJoin: vi.fn(),
+  requestStartCall: vi.fn(),
+  requestAcceptCall: vi.fn(),
   rejectCall: vi.fn(),
   hangup: vi.fn(),
   toggleMute: vi.fn(),
@@ -75,12 +79,29 @@ vi.mock('@/lib/weechat/client', () => {
     sendInput(_pointer: string, _text: string): void {}
     requestHistory(_pointer: string, _count: number): void {}
     requestNicklist(_pointer: string): void {}
+    diagnostics() {
+      return {
+        phase: 'idle',
+        transport: 'ws',
+        protocolMode: 'none',
+        authMode: 'none',
+        serverVersion: '',
+        compression: 'off',
+        hashAlgorithm: 'none',
+        totp: false,
+        handshake: 'unknown',
+        canDecodeCompression: false,
+        reconnectReason: 'none',
+        reconnectAttempt: 0,
+        reconnectDelayMs: 0,
+      };
+    }
   }
   return { WeeRelayClient };
 });
 
-const joinRoomMock = vi.mocked(joinRoom);
-const startCallMock = vi.mocked(startCall);
+const joinRoomMock = vi.mocked(requestRoomJoin);
+const startCallMock = vi.mocked(requestStartCall);
 
 function makeBuffer(id: string, over: Partial<WeeChatBuffer> = {}): WeeChatBuffer {
   return {

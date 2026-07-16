@@ -15,7 +15,7 @@ interface Props {
 const SHORTCUTS = [
   { keys: 'Alt + 1-9', desc: 'Switch to buffer 1-9' },
   { keys: 'Alt + Up/Down', desc: 'Previous / next buffer' },
-  { keys: 'Alt + A', desc: 'Jump to next highlight' },
+  { keys: 'Alt + A', desc: 'Open activity inbox' },
   { keys: 'Ctrl + K', desc: 'Quick buffer switcher' },
   { keys: 'Ctrl + B', desc: 'Toggle sidebar' },
   { keys: 'Ctrl + U', desc: 'Toggle user list' },
@@ -28,6 +28,8 @@ const SHORTCUTS = [
   { keys: 'Ctrl+I (input)', desc: 'Italic text' },
   { keys: 'Ctrl+U (input)', desc: 'Underline text' },
   { keys: 'Escape', desc: 'Close modal / panel' },
+  { keys: 'M / D / V / S', desc: 'Call mute / deafen / camera / share' },
+  { keys: 'C / H', desc: 'Call transcript / hang up' },
 ];
 
 const IRCX_COMMANDS = [
@@ -36,7 +38,7 @@ const IRCX_COMMANDS = [
   { cmd: '/access #channel', desc: 'View IRCX access list' },
   { cmd: '/chaninfo [#channel]', desc: 'Open channel info panel' },
   { cmd: '/profile nick', desc: 'Open user profile card' },
-  { cmd: '/services', desc: 'Open NickServ/ChanServ/Memo' },
+  { cmd: '/services', desc: 'Open Orochi account, channel, and memo services' },
   { cmd: '/monitor add|del nick', desc: 'MONITOR online tracking' },
   { cmd: '/pushset key value', desc: 'Configure push notifications' },
 ];

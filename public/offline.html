@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#070a10" />
+    <meta http-equiv="cache-control" content="no-store" />
+    <title>DarkBear is offline</title>
+    <link rel="icon" href="/darkbear/favicon.svg" type="image/svg+xml" />
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+          max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+        background:
+          radial-gradient(circle at 50% 18%, rgba(129, 140, 248, 0.18), transparent 34rem),
+          #070a10;
+        color: #f4f6fb;
+      }
+      main {
+        width: min(100%, 520px);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 28px;
+        padding: clamp(28px, 7vw, 48px);
+        background: rgba(13, 17, 27, 0.92);
+        box-shadow: 0 28px 90px rgba(0,0,0,0.48);
+      }
+      .mark {
+        width: 48px;
+        height: 48px;
+        display: grid;
+        place-items: center;
+        border-radius: 15px;
+        background: rgba(129,140,248,0.16);
+        color: #c9ceff;
+        font-size: 24px;
+        font-weight: 900;
+      }
+      .eyebrow {
+        margin: 24px 0 8px;
+        color: #aeb5d8;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+      h1 { margin: 0; font-size: clamp(30px, 8vw, 44px); line-height: 1.05; letter-spacing: -0.035em; }
+      p { margin: 16px 0 0; color: #c7ccda; font-size: 15px; line-height: 1.65; }
+      .privacy { color: #969eb4; font-size: 13px; }
+      .status {
+        margin-top: 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #f3d58b;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: #f3c969; box-shadow: 0 0 16px rgba(243,201,105,0.5); }
+      a {
+        margin-top: 28px;
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+        padding: 0 18px;
+        background: #dfe2ff;
+        color: #101426;
+        font-size: 14px;
+        font-weight: 850;
+        text-decoration: none;
+      }
+      a:focus-visible { outline: 3px solid #aeb5ff; outline-offset: 4px; }
+      @media (prefers-reduced-motion: no-preference) {
+        .dot { animation: breathe 1.8s ease-in-out infinite; }
+        @keyframes breathe { 50% { opacity: 0.45; transform: scale(0.82); } }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">D</div>
+      <p class="eyebrow">Connection paused</p>
+      <h1>DarkBear is offline</h1>
+      <p>The interactive client needs the network. This safe shell will reconnect to the current release when your connection returns.</p>
+      <p class="privacy">No transcript, draft, decrypted message, account data, or relay response is stored in this offline page.</p>
+      <div class="status" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="offline-status">Waiting for network</span>
+      </div>
+      <a href="/darkbear/">Try again</a>
+    </main>
+    <script src="/darkbear/offline.js"></script>
+  </body>
+</html>

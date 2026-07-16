@@ -25,7 +25,8 @@
  *     — Tear down reader and encoder; worker exits after this.
  *
  * Worker → Main:
- *   { type: 'encoded', data: Uint8Array, ftype: 'KEYFRAME'|'FRAME' }
+ *   { type: 'encoded', data: Uint8Array, ftype: 'KEYFRAME'|'FRAME',
+ *     encodeMs: number, frameBudgetMs: number }
  *     — One encoded kaguravis frame. `data.buffer` is transferred (zero-copy).
  *
  *   { type: 'ready' }
@@ -54,37 +55,11 @@
 import { OpcodecWasm, KaguraVisEncoder, rgbaToYuv420 } from './OpcodecWasm';
 import type { KaguraVisProfile } from './OpcodecWasm';
 import type { NetworkQualityTier } from './types';
+import { buildEncoder, tierDimensions } from './videoEncoderProfile';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tier → capped resolution table
 // ─────────────────────────────────────────────────────────────────────────────
-
-type TierResolution = { width: number; height: number };
-
-const TIER_RESOLUTIONS: Record<NetworkQualityTier, TierResolution> = {
-  0: { width: Infinity, height: Infinity },  // use full profile resolution
-  1: { width: 1920,     height: 1080 },
-  2: { width: 1280,     height:  720 },
-  3: { width:  854,     height:  480 },
-};
-
-export function tierDimensions(
-  tier: NetworkQualityTier,
-  profileWidth: number,
-  profileHeight: number,
-): TierResolution {
-  const cap = TIER_RESOLUTIONS[tier];
-  if (cap.width === Infinity) return { width: profileWidth, height: profileHeight };
-  // Maintain aspect ratio; cap by width, derive height proportionally.
-  const aspectRatio = profileHeight / profileWidth;
-  const w = Math.min(profileWidth, cap.width);
-  // Force even dimensions (YUV420 planes require even w/h).
-  const rawH = Math.min(profileHeight, cap.height === Infinity ? profileHeight : Math.round(w * aspectRatio));
-  return {
-    width:  w % 2 === 0 ? w : w - 1,
-    height: rawH % 2 === 0 ? rawH : rawH - 1,
-  };
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Worker state
@@ -101,6 +76,7 @@ interface WorkerState {
   encProfile:   KaguraVisProfile;
   tier:         NetworkQualityTier;
   forceKey:     boolean;
+  frameCount:   number;
   stopped:      boolean;
 }
 
@@ -109,64 +85,6 @@ let state: WorkerState | null = null;
 // ─────────────────────────────────────────────────────────────────────────────
 // Encoder initialisation (also called on tier change)
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Resolutions the kaguravis WASM encoder is known to accept, largest first. Used as
- * a fallback ladder: the codec rejects some sizes (notably ≥1600 wide and a few
- * small/odd ones), returning a null handle that makes KaguraVisEncoder throw. When
- * the requested size is rejected we step down to the next known-good size so the
- * worker still produces frames instead of silently disabling video. The capture
- * loop always draws into `enc.width × enc.height`, so the canvas follows.
- */
-const ENCODER_FALLBACK_SIZES: ReadonlyArray<{ width: number; height: number }> = [
-  { width: 1280, height: 720 },
-  { width: 1024, height: 576 },
-  { width:  640, height: 360 },
-  { width:  320, height: 240 },
-];
-
-function tryCreateEncoder(
-  wasm: OpcodecWasm,
-  width: number,
-  height: number,
-  quality: number,
-  encProfile: KaguraVisProfile,
-  fps: number,
-): KaguraVisEncoder | null {
-  try {
-    return wasm.videoEncoder(width, height, quality, encProfile, fps);
-  } catch {
-    return null;
-  }
-}
-
-export function buildEncoder(
-  wasm: OpcodecWasm,
-  tier: NetworkQualityTier,
-  profileWidth: number,
-  profileHeight: number,
-  profileQuality: number,
-  encProfile: KaguraVisProfile,
-  profileFps: number,
-): KaguraVisEncoder {
-  const { width, height } = tierDimensions(tier, profileWidth, profileHeight);
-  const direct = tryCreateEncoder(wasm, width, height, profileQuality, encProfile, profileFps);
-  if (direct) return direct;
-
-  /* Requested size rejected by the codec — walk the known-good ladder, keeping
-   * even dimensions and never upscaling past the requested width. */
-  for (const size of ENCODER_FALLBACK_SIZES) {
-    if (size.width > width) continue;
-    const fb = tryCreateEncoder(wasm, size.width, size.height, profileQuality, encProfile, profileFps);
-    if (fb) return fb;
-  }
-  /* Last attempt: smallest ladder entry regardless of requested width, so a
-   * tiny requested size that itself was rejected still yields a usable encoder.
-   * If even this throws, the error propagates to the caller (reported, not a
-   * crash). */
-  const smallest = ENCODER_FALLBACK_SIZES[ENCODER_FALLBACK_SIZES.length - 1]!;
-  return wasm.videoEncoder(smallest.width, smallest.height, profileQuality, encProfile, profileFps);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main capture loop — runs until stopped or reader closes
@@ -200,6 +118,13 @@ async function captureLoop(s: WorkerState): Promise<void> {
 
     const frame = result.value;
 
+    s.frameCount += 1;
+    const skipMod = s.tier === 0 ? 1 : s.tier === 1 ? 2 : 4;
+    if (s.frameCount % skipMod !== 0) {
+      frame.close();
+      continue;
+    }
+
     /* Rebuild canvas + encoder if the tier's target size differs from what the
      * encoder is currently using. We compare against the encoder's ACTUAL
      * dimensions (s.enc.width/height) rather than the tier target, because the
@@ -226,6 +151,8 @@ async function captureLoop(s: WorkerState): Promise<void> {
 
     if (!ctx) { frame.close(); continue; }
 
+    const encodeStartedAt = performance.now();
+
     /* Draw the VideoFrame into the (possibly downscaled) OffscreenCanvas. */
     ctx.drawImage(frame as unknown as ImageBitmap, 0, 0, drawW, drawH);
     frame.close();
@@ -239,7 +166,8 @@ async function captureLoop(s: WorkerState): Promise<void> {
     }
     const { y, u, v } = rgbaToYuv420(imageData.data, drawW, drawH);
 
-    const forceKey = s.forceKey;
+    const periodicRecoveryKey = s.tier >= 2 && s.frameCount % Math.max(1, s.profileFps) === 0;
+    const forceKey = s.forceKey || periodicRecoveryKey;
     s.forceKey = false;
 
     /* Encode via WASM. The keyframe flag is also driven internally by
@@ -253,13 +181,20 @@ async function captureLoop(s: WorkerState): Promise<void> {
     if (!encoded.length) continue;
 
     const ftype: 'KEYFRAME' | 'FRAME' = encoded[0] === 0xFF ? 'KEYFRAME' : 'FRAME';
+    if (s.tier >= 2 && ftype !== 'KEYFRAME') continue;
 
     /* Transfer the buffer to avoid a copy across the thread boundary.
      * Use the WindowPostMessageOptions overload so TypeScript accepts the
      * transfer list in a DOM-typed module context. */
     const transfer = encoded.buffer.slice(0) as ArrayBuffer;
     self.postMessage(
-      { type: 'encoded', data: new Uint8Array(transfer), ftype },
+      {
+        type: 'encoded',
+        data: new Uint8Array(transfer),
+        ftype,
+        encodeMs: performance.now() - encodeStartedAt,
+        frameBudgetMs: 1000 / Math.max(1, s.profileFps),
+      },
       { transfer: [transfer] },
     );
   }
@@ -354,6 +289,7 @@ self.onmessage = async (event: MessageEvent) => {
         encProfile,
         tier,
         forceKey: false,
+        frameCount: 0,
         stopped:  false,
       };
 

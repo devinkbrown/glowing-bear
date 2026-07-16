@@ -30,6 +30,12 @@ body {
   text-size-adjust: 100%;
 }
 
+/* Selected sidebar scope buttons must stay readable across every accent theme. */
+.darkbear-mode-button-active {
+  background-color: color-mix(in srgb, var(--role-primary, #818cf8) 40%, #05070d);
+  color: #fff;
+}
+
 /* ── Self-hosted webfonts ──────────────────────────────────────────────────
    Inter (UI/body) + JetBrains Mono (code/relay) are shipped as subsetted latin
    woff2 under public/fonts/ (served at /darkbear/fonts/ — vite `base`). No
@@ -47,35 +53,35 @@ body {
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/darkbear/fonts/inter-latin-400-normal.woff2') format('woff2');
+  src: url('/fonts/inter-latin-400-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/darkbear/fonts/inter-latin-500-normal.woff2') format('woff2');
+  src: url('/fonts/inter-latin-500-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('/darkbear/fonts/inter-latin-600-normal.woff2') format('woff2');
+  src: url('/fonts/inter-latin-600-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/darkbear/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+  src: url('/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/darkbear/fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+  src: url('/fonts/jetbrains-mono-latin-500-normal.woff2') format('woff2');
 }
 
 /* ── Base vars ─────────────────────────────────────────────────────────── */
@@ -152,6 +158,93 @@ body {
 }
 
 body { font-family: var(--app-font); }
+
+/* Locale direction is owned by <html dir>. Inputs and transcript bodies use
+   plaintext bidi isolation so an Arabic UI can safely display LTR nicks,
+   commands, URLs, and mixed-direction messages without reordering siblings. */
+input, textarea, [contenteditable="true"] {
+  text-align: start;
+  unicode-bidi: plaintext;
+}
+
+.irc-msg-text {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
+html[dir="rtl"] .text-left { text-align: right; }
+html[dir="rtl"] .text-right { text-align: left; }
+html[dir="rtl"] .darkbear-sidebar {
+  border-right-width: 0 !important;
+  border-left: 1px solid rgba(255,255,255,0.06);
+}
+html[dir="rtl"] .darkbear-buffer-row::after {
+  inset: 5px auto 5px 6px;
+}
+html[dir="rtl"] .buffer-selection-rail {
+  left: auto !important;
+  right: 0;
+  border-radius: 999px 0 0 999px;
+}
+html[dir="rtl"] .sidebar-filter-icon {
+  left: auto !important;
+  right: 0.75rem;
+}
+html[dir="rtl"] .sidebar-filter-input {
+  padding-left: 0.75rem !important;
+  padding-right: 2.25rem !important;
+}
+html[dir="rtl"] .login-secret-input {
+  padding-left: 3rem !important;
+  padding-right: 1rem !important;
+}
+html[dir="rtl"] .login-secret-toggle {
+  left: 0 !important;
+  right: auto !important;
+}
+html[dir="rtl"] .user-list-panel {
+  border-left-width: 0 !important;
+  border-right: 1px solid rgba(255,255,255,0.04);
+}
+html[dir="rtl"] .user-filter-icon {
+  left: auto !important;
+  right: 0.5rem;
+}
+html[dir="rtl"] .user-filter-input {
+  padding-left: 0.75rem !important;
+  padding-right: 2rem !important;
+}
+
+@media (min-width: 640px) {
+  html[dir="rtl"] .msg-ts {
+    margin-left: 6px;
+    margin-right: 0;
+    text-align: left;
+  }
+  html[dir="rtl"] .msg-nick {
+    border-left: 1px solid rgba(255,255,255,0.05);
+    border-right: 0;
+    padding-left: 10px;
+    padding-right: 0;
+    text-align: left;
+  }
+  html[dir="rtl"] .msg-nick-spacer {
+    border-left: 1px solid rgba(255,255,255,0.05);
+    border-right: 0;
+  }
+  html[dir="rtl"] .thread-panel {
+    border-left-width: 0 !important;
+    border-right: 1px solid rgba(255,255,255,0.06);
+  }
+}
+
+html[dir="rtl"] .msg-highlight {
+  background: linear-gradient(270deg, color-mix(in srgb, var(--role-mention, #f87171) 9%, transparent) 0%, color-mix(in srgb, var(--role-mention, #f87171) 2%, transparent) 60%);
+  border-left: 0;
+  border-right: 3px solid color-mix(in srgb, var(--role-mention, #f87171) 55%, transparent);
+  padding-left: 12px;
+  padding-right: 9px;
+}
 
 /* ── App chrome: dense relay-console treatment ─────────────────────────── */
 .darkbear-sidebar {
@@ -857,6 +950,26 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   }
 }
 
+/* ── Capability-adaptive decorative quality ───────────────────────────────
+   Low-memory/core, data-saver, and 2G-class clients keep every functional
+   surface but avoid optional scene SVGs and repeated backdrop sampling. The
+   scene components are also gated in Solid, so this is a paint-cost backstop,
+   not a CSS-only illusion that still downloads and constructs the artwork. */
+html[data-performance="low"] {
+  --surface-blur: 0px;
+}
+
+html[data-performance="low"] .darkbear-sidebar,
+html[data-performance="low"] .darkbear-server-header,
+html[data-performance="low"] .db-surface,
+html[data-performance="low"] .login-card-inner,
+html[data-performance="low"] .backdrop-blur-sm,
+html[data-performance="low"] .backdrop-blur-md,
+html[data-performance="low"] .backdrop-blur-xl {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* ── Focus visibility ──────────────────────────────────────────────────────
    Inputs/controls set outline:none and signal focus only via a faint border.
    Give every keyboard-focused control a high-contrast, theme-aware ring. */
@@ -869,6 +982,13 @@ textarea:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--custom-accent, #818cf8);
   outline-offset: 1px;
+}
+.composer-textarea:focus-visible {
+  outline: none;
+}
+.composer-shell:has(.composer-textarea:focus-visible) {
+  outline: 2px solid var(--custom-accent, #818cf8);
+  outline-offset: 2px;
 }
 /* Pointer clicks should not paint the ring; only keyboard focus does. */
 :focus:not(:focus-visible) {

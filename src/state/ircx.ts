@@ -6,6 +6,7 @@
 
 import { createStore, produce } from 'solid-js/store';
 import type { PropEntry, AccessEntry, UserProfile } from '@/lib/ircx/types';
+import type { OrochiServiceFeedback } from '@/lib/irc/serviceFeedback';
 import { buffersState } from './buffers';
 import { sendTo } from './connection';
 
@@ -24,6 +25,11 @@ export interface ChannelListState {
   query: string;
   extended: boolean;
   updatedAt: number | null;
+}
+
+export interface ServiceFeedbackEntry extends OrochiServiceFeedback {
+  serverName: string;
+  receivedAt: number;
 }
 
 export interface IrcxState {
@@ -58,6 +64,8 @@ export interface IrcxState {
 
   /** Latest LIST/LISTX result set for the channel browser. */
   channelList: ChannelListState;
+  /** Bounded, session-only feedback from Orochi service commands. */
+  serviceFeedback: ServiceFeedbackEntry[];
 }
 
 function initialState(): IrcxState {
@@ -84,6 +92,7 @@ function initialState(): IrcxState {
       extended: false,
       updatedAt: null,
     },
+    serviceFeedback: [],
   };
 }
 
@@ -114,10 +123,10 @@ function getServerBufferPtr(): string | null {
   return null;
 }
 
-function sendRawToServer(cmd: string): void {
+function sendRawToServer(cmd: string): boolean {
   const ptr = getServerBufferPtr();
-  if (!ptr) return;
-  sendTo(ptr, `/quote ${cmd}`);
+  if (!ptr) return false;
+  return sendTo(ptr, `/quote ${cmd}`);
 }
 
 function activeServerName(): string {
@@ -152,13 +161,14 @@ export function isActiveOrochi(): boolean {
 // PROP
 // ---------------------------------------------------------------------------
 
-export function requestProps(target: string): void {
+export function requestProps(target: string): boolean {
+  if (!sendRawToServer(`PROP ${target} *`)) return false;
   setState({ pendingPropTarget: target, pendingPropEntries: [] });
-  sendRawToServer(`PROP ${target} *`);
+  return true;
 }
 
-export function setProp(target: string, key: string, value: string): void {
-  sendRawToServer(`PROP ${target} ${key} :${value}`);
+export function setProp(target: string, key: string, value: string): boolean {
+  return sendRawToServer(`PROP ${target} ${key} :${value}`);
 }
 
 export function addPropEntry(entry: PropEntry): void {
@@ -219,9 +229,10 @@ export function clearPropRequest(): void {
 // ACCESS
 // ---------------------------------------------------------------------------
 
-export function requestAccess(channel: string): void {
+export function requestAccess(channel: string): boolean {
+  if (!sendRawToServer(`ACCESS ${channel} LIST`)) return false;
   setState({ pendingAccessChannel: channel, pendingAccessEntries: [] });
-  sendRawToServer(`ACCESS ${channel} LIST`);
+  return true;
 }
 
 export function addAccessEntry(entry: AccessEntry): void {
@@ -240,17 +251,19 @@ export function clearAccessRequest(): void {
   setState({ pendingAccessChannel: null, pendingAccessEntries: [] });
 }
 
-export function addAccess(channel: string, level: string, mask: string, reason?: string): void {
+export function addAccess(channel: string, level: string, mask: string, reason?: string): boolean {
   const cmd = reason
     ? `ACCESS ${channel} ADD ${level} ${mask} :${reason}`
     : `ACCESS ${channel} ADD ${level} ${mask}`;
-  sendRawToServer(cmd);
+  if (!sendRawToServer(cmd)) return false;
   setTimeout(() => requestAccess(channel), 500);
+  return true;
 }
 
-export function removeAccess(channel: string, level: string, mask: string): void {
-  sendRawToServer(`ACCESS ${channel} DELETE ${level} ${mask}`);
+export function removeAccess(channel: string, level: string, mask: string): boolean {
+  if (!sendRawToServer(`ACCESS ${channel} DELETE ${level} ${mask}`)) return false;
   setTimeout(() => requestAccess(channel), 500);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +275,7 @@ export function requestChannelList(opts: {
   minUsers?: string;
   maxUsers?: string;
   extended?: boolean;
-} = {}): void {
+} = {}): boolean {
   const pattern = opts.pattern?.trim() ?? '';
   const minUsers = opts.minUsers?.trim() ?? '';
   const maxUsers = opts.maxUsers?.trim() ?? '';
@@ -271,6 +284,7 @@ export function requestChannelList(opts: {
   if (minUsers) filters.push(`>${minUsers}`);
   if (maxUsers) filters.push(`<${maxUsers}`);
   const query = [pattern, filters.join(',')].filter(Boolean).join(' ');
+  if (!sendRawToServer(extended ? 'LISTX' : `LIST${query ? ` ${query}` : ''}`)) return false;
   setState('channelList', {
     status: 'loading',
     rows: [],
@@ -278,7 +292,7 @@ export function requestChannelList(opts: {
     extended,
     updatedAt: null,
   });
-  sendRawToServer(extended ? 'LISTX' : `LIST${query ? ` ${query}` : ''}`);
+  return true;
 }
 
 export function addChannelListRow(row: ChannelListRow): void {
@@ -367,42 +381,64 @@ export function closeServicesPanel(): void {
   setState('servicesPanel', null);
 }
 
+export function recordServiceFeedback(
+  serverName: string,
+  feedback: OrochiServiceFeedback,
+  receivedAt = Date.now(),
+): void {
+  if (!serverName) return;
+  setState('serviceFeedback', (previous) => [
+    ...previous,
+    { ...feedback, serverName, receivedAt },
+  ].slice(-24));
+}
+
+export function clearServiceFeedback(serverName?: string): void {
+  if (!serverName) {
+    setState('serviceFeedback', []);
+    return;
+  }
+  setState('serviceFeedback', (previous) => previous.filter((entry) => entry.serverName !== serverName));
+}
+
 // ---------------------------------------------------------------------------
 // Services (orochi direct verbs: ACCOUNT, CHANNEL, MEMO)
 // ---------------------------------------------------------------------------
 
-export function sendAccount(cmd: string): void {
-  sendRawToServer(`ACCOUNT ${cmd}`);
+export function sendAccount(cmd: string): boolean {
+  return sendRawToServer(`ACCOUNT ${cmd}`);
 }
 
-export function sendChannel(cmd: string): void {
-  sendRawToServer(`CHANNEL ${cmd}`);
+export function sendChannel(cmd: string): boolean {
+  return sendRawToServer(`CHANNEL ${cmd}`);
 }
 
-export function sendMemo(cmd: string): void {
-  sendRawToServer(`MEMO ${cmd}`);
+export function sendMemo(cmd: string): boolean {
+  return sendRawToServer(`MEMO ${cmd}`);
 }
 
 // ---------------------------------------------------------------------------
 // Whisper / MONITOR / PUSHSET
 // ---------------------------------------------------------------------------
 
-export function sendWhisper(channel: string, nick: string, message: string): void {
-  sendRawToServer(`WHISPER ${channel} ${nick} :${message}`);
+export function sendWhisper(channel: string, nick: string, message: string): boolean {
+  return sendRawToServer(`WHISPER ${channel} ${nick} :${message}`);
 }
 
-export function monitorAdd(nick: string): void {
+export function monitorAdd(nick: string): boolean {
+  if (!sendRawToServer(`MONITOR + ${nick}`)) return false;
   setState('monitorList', nick.toLowerCase(), true);
-  sendRawToServer(`MONITOR + ${nick}`);
+  return true;
 }
 
-export function monitorRemove(nick: string): void {
+export function monitorRemove(nick: string): boolean {
+  if (!sendRawToServer(`MONITOR - ${nick}`)) return false;
   setState(produce((s) => { delete s.monitorList[nick.toLowerCase()]; }));
-  sendRawToServer(`MONITOR - ${nick}`);
+  return true;
 }
 
-export function sendPushSet(key: string, value: string): void {
-  sendRawToServer(`PUSHSET ${key} ${value}`);
+export function sendPushSet(key: string, value: string): boolean {
+  return sendRawToServer(`PUSHSET ${key} ${value}`);
 }
 
 // ---------------------------------------------------------------------------

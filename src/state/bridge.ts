@@ -9,8 +9,14 @@
 
 import { createStore, produce, reconcile } from 'solid-js/store';
 import { isEnvelope, openDm, sealDm } from '@/lib/e2ee/dmCipher';
+import {
+  dmTrustRepository,
+  fingerprintDmKey,
+  type DmTrustRecord,
+} from '@/lib/e2ee/trustRepository';
 import { settings } from './settings';
 import { addLocalSystemLine, addReaction, buffersState } from './buffers';
+import { recordDiagnosticEvent } from '@/lib/diagnosticsEvents';
 
 // ---------------------------------------------------------------------------
 // Reactive state
@@ -41,6 +47,7 @@ export { bridgeState };
 /** Internal: controller-side state updates (src/core/bridge.ts only). */
 export function _setBridgeState(partial: Partial<BridgeStateShape>): void {
   setBridgeStateStore(partial);
+  if (partial.status) recordDiagnosticEvent('bridge-state', partial.status);
   // The session is the trust boundary for E2EE key/plaintext material: as soon
   // as the bridge goes 'off' (disconnect / teardown / bridge disable) drop all
   // decrypted plaintext, cached peer keys and parked envelopes so nothing
@@ -60,9 +67,9 @@ export interface BridgeBackend {
   ownNick(): string | null;
   /** Orochi target (channel, or DM nick) for a relay buffer pointer, or null. */
   targetForBuffer(bufferPtr: string): string | null;
-  sendTagmsg(target: string, tags: Record<string, string>): void;
-  sendPrivmsg(target: string, text: string): void;
-  sendRaw(command: string, ...params: string[]): void;
+  sendTagmsg(target: string, tags: Record<string, string>): boolean;
+  sendPrivmsg(target: string, text: string): boolean;
+  sendRaw(command: string, ...params: string[]): boolean;
   /** Fire `METADATA <nick> GET ocean.dm-key` (controller throttles repeats). */
   requestPeerDmKey(nick: string): void;
   /** Run when ready — connects on demand and queues the action until 001. */
@@ -107,14 +114,16 @@ export function sendTyping(bufferPtr: string, state: 'active' | 'paused' | 'done
 
 /**
  * React to a message: `@+draft/react=<emoji>;+draft/reply=<msgid> TAGMSG`,
- * then apply the reaction locally right away (buffers.addReaction dedupes the
- * nick per emoji, so the relay/bridge echo cannot double it).
+ * then apply the reaction locally only after the socket accepts the frame
+ * (buffers.addReaction dedupes the nick per emoji, so the relay/bridge echo
+ * cannot double it).
  */
 export function sendReactionTag(bufferPtr: string, msgid: string, emoji: string): void {
   if (!backend?.ready()) return;
   const target = backend.targetForBuffer(bufferPtr);
   if (!target) return;
-  backend.sendTagmsg(target, { '+draft/react': emoji, '+draft/reply': msgid });
+  const accepted = backend.sendTagmsg(target, { '+draft/react': emoji, '+draft/reply': msgid });
+  if (!accepted) return;
   const nick = backend.ownNick() ?? bridgeState.nick;
   if (nick) addReaction(bufferPtr, msgid, emoji, nick);
 }
@@ -136,6 +145,124 @@ export function markRead(bufferPtr: string): void {
 
 /** nick (lowercased) → published device public key (METADATA ocean.dm-key). */
 const [peerKeys, setPeerKeys] = createStore<Record<string, string>>({});
+
+export type DmTrustStatus = 'unavailable' | 'loading' | 'unverified' | 'verified' | 'changed';
+
+export interface DmPeerSecurity {
+  nick: string;
+  status: DmTrustStatus;
+  currentFingerprint: string | null;
+  pinnedFingerprint: string | null;
+  verifiedAt: number | null;
+}
+
+const EMPTY_DM_SECURITY: DmPeerSecurity = {
+  nick: '',
+  status: 'unavailable',
+  currentFingerprint: null,
+  pinnedFingerprint: null,
+  verifiedAt: null,
+};
+
+/** Reactive, session-observed key state. Verified pins themselves persist in IndexedDB. */
+const [dmSecurity, setDmSecurity] = createStore<Record<string, DmPeerSecurity>>({});
+let bridgeCryptoScope = '';
+let peerKeyVersion = 0;
+const peerKeyVersions = new Map<string, number>();
+
+/** Current peer security state; safe to read from tracked Solid computations. */
+export function dmSecurityFor(nick: string): DmPeerSecurity {
+  return dmSecurity[nick.toLowerCase()] ?? { ...EMPTY_DM_SECURITY, nick };
+}
+
+/** Internal: scope trust pins to the authenticated Orochi endpoint and account. */
+export function _setBridgeCryptoScope(scope: string | null): void {
+  bridgeCryptoScope = scope?.trim() ?? '';
+  for (const [nick, key] of Object.entries(peerKeys)) void resolvePeerSecurity(nick, key);
+}
+
+function applyResolvedPeerSecurity(
+  nick: string,
+  key: string,
+  fingerprint: string | null,
+  pinned: DmTrustRecord | null,
+): void {
+  const current = peerKeys[nick];
+  if (current !== key) return;
+  const status: DmTrustStatus = !fingerprint
+    ? 'unavailable'
+    : !pinned
+      ? 'unverified'
+      : pinned.publicKey === key
+        ? 'verified'
+        : 'changed';
+  setDmSecurity(nick, {
+    nick,
+    status,
+    currentFingerprint: fingerprint,
+    pinnedFingerprint: pinned?.fingerprint ?? null,
+    verifiedAt: pinned?.verifiedAt ?? null,
+  });
+}
+
+async function resolvePeerSecurity(nick: string, key: string): Promise<void> {
+  const version = ++peerKeyVersion;
+  peerKeyVersions.set(nick, version);
+  setDmSecurity(nick, {
+    nick,
+    status: 'loading',
+    currentFingerprint: null,
+    pinnedFingerprint: null,
+    verifiedAt: null,
+  });
+  const fingerprint = await fingerprintDmKey(key);
+  const scope = bridgeCryptoScope;
+  const pinned = scope ? await dmTrustRepository.get(scope, nick) : null;
+  if (peerKeyVersions.get(nick) !== version || peerKeys[nick] !== key) return;
+  applyResolvedPeerSecurity(nick, key, fingerprint, pinned);
+}
+
+/** Pin the currently observed peer key after the user compares its fingerprint. */
+export async function verifyPeerDmKey(nick: string): Promise<boolean> {
+  const peer = nick.toLowerCase();
+  const key = peerKeys[peer];
+  const scope = bridgeCryptoScope;
+  if (!key || !scope) return false;
+  const version = ++peerKeyVersion;
+  peerKeyVersions.set(peer, version);
+  const fingerprint = await fingerprintDmKey(key);
+  if (!fingerprint || peerKeyVersions.get(peer) !== version ||
+      peerKeys[peer] !== key || bridgeCryptoScope !== scope) return false;
+  const verifiedAt = Date.now();
+  const saved = await dmTrustRepository.put({
+    scope,
+    peer,
+    publicKey: key,
+    fingerprint,
+    verifiedAt,
+  });
+  if (!saved || peerKeyVersions.get(peer) !== version ||
+      peerKeys[peer] !== key || bridgeCryptoScope !== scope) return false;
+  setDmSecurity(peer, {
+    nick: peer,
+    status: 'verified',
+    currentFingerprint: fingerprint,
+    pinnedFingerprint: fingerprint,
+    verifiedAt,
+  });
+  return true;
+}
+
+/** Remove the local trust pin without changing the peer's published key. */
+export async function forgetPeerDmTrust(nick: string): Promise<boolean> {
+  const peer = nick.toLowerCase();
+  const scope = bridgeCryptoScope;
+  if (!scope) return false;
+  const removed = await dmTrustRepository.delete(scope, peer);
+  const key = peerKeys[peer];
+  if (removed && key) void resolvePeerSecurity(peer, key);
+  return removed;
+}
 
 /**
  * Decrypted plaintext overlays keyed BOTH ways:
@@ -187,6 +314,8 @@ const MAX_PENDING_PER_PEER = 200;
  */
 export function _resetBridgeCrypto(): void {
   setPeerKeys(reconcile({}));
+  setDmSecurity(reconcile({}));
+  peerKeyVersions.clear();
   setOverlays(reconcile({}));
   overlayOrder.length = 0;
   attemptedCiphers.clear();
@@ -213,6 +342,11 @@ export function _bridgeCryptoSizes(): {
 /** True when the peer's E2EE device key is known (reactive). */
 export function canE2ee(nick: string): boolean {
   return peerKeys[nick.toLowerCase()] !== undefined;
+}
+
+/** Ask Orochi for the peer's current published device key. */
+export function refreshPeerDmKey(nick: string): void {
+  if (backend?.ready() && nick.trim()) backend.requestPeerDmKey(nick);
 }
 
 /** Internal: record a decrypted plaintext under both overlay keys. */
@@ -278,9 +412,12 @@ export function _setPeerDmKey(nick: string, keyB64: string | null): void {
   const lc = nick.toLowerCase();
   if (!keyB64) {
     setPeerKeys(produce((o) => { delete o[lc]; }));
+    setDmSecurity(produce((o) => { delete o[lc]; }));
+    peerKeyVersions.delete(lc);
     return;
   }
   setPeerKeys(lc, keyB64);
+  void resolvePeerSecurity(lc, keyB64);
   const parked = pendingByPeer.get(lc);
   if (parked) {
     pendingByPeer.delete(lc);
@@ -321,7 +458,7 @@ export async function sendE2eeDm(nick: string, text: string): Promise<boolean> {
   }
   const envelope = await sealDm(key, text);
   if (!envelope || !backend.ready()) return false;
-  backend.sendPrivmsg(nick, envelope);
+  if (!backend.sendPrivmsg(nick, envelope)) return false;
   // Our own echo (relay or bridge) carries only ciphertext — overlay it now.
   _storeDecryptedOverlay(undefined, envelope, text);
   return true;

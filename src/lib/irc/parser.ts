@@ -230,17 +230,43 @@ export function normalizeCase(value: string, casemapping: string): string {
     .replace(/\^/g, '~');
 }
 
-export type SaslMechanism = 'SCRAM-SHA-256' | 'PLAIN' | 'EXTERNAL';
+export type SaslMechanism = 'SESSION-TOKEN' | 'SCRAM-SHA-256' | 'PLAIN' | 'EXTERNAL';
 
 export function selectSaslMechanism(
   offered: string[],
-  opts: { hasPassword: boolean; hasClientCert?: boolean },
+  opts: { hasPassword: boolean; hasClientCert?: boolean; hasSessionToken?: boolean },
 ): SaslMechanism | null {
   const mechs = new Set(offered.map(m => m.toUpperCase()));
+  if (mechs.has('SESSION-TOKEN') && opts.hasSessionToken) return 'SESSION-TOKEN';
   if (mechs.has('SCRAM-SHA-256') && opts.hasPassword) return 'SCRAM-SHA-256';
   if (mechs.has('PLAIN') && opts.hasPassword) return 'PLAIN';
   if (mechs.has('EXTERNAL') && opts.hasClientCert) return 'EXTERNAL';
   return null;
+}
+
+export interface SaslSessionTokenNotice {
+  account: string;
+  token: string;
+  expiresAt: number;
+}
+
+/**
+ * Parse Orochi's TLS-only post-auth credential notice:
+ * `:server NOTICE <nick> :SESSIONTOKEN <account> <sst_...> expires=<unix>`.
+ *
+ * This is deliberately distinct from `NOTE SESSION TOKEN` / `MTOKEN`, which
+ * selects a logical session after authentication. The SASL token only proves
+ * the account on a later registration and is accepted only with an explicit
+ * finite server expiry.
+ */
+export function parseSaslSessionTokenNotice(msg: IRCMessage): SaslSessionTokenNotice | null {
+  if (msg.command !== 'NOTICE') return null;
+  const trailing = msg.params.at(-1) ?? '';
+  const match = /^SESSIONTOKEN\s+(\S+)\s+(sst_[a-f\d]{32})\s+expires=(\d+)$/i.exec(trailing);
+  if (!match?.[1] || !match[2] || !match[3]) return null;
+  const expiresAt = Number.parseInt(match[3], 10);
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= 0) return null;
+  return { account: match[1], token: match[2], expiresAt };
 }
 
 export function parseStandardReply(msg: IRCMessage): StandardReply | null {

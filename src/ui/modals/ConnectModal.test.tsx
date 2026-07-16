@@ -16,13 +16,11 @@ vi.mock('@/state', async (importOriginal) => {
   };
 });
 
-// The modal mounts two heavy, purely-decorative scene components — ThemeBg
-// (~3.7k lines of SVG/SMIL) and AstronautBear (~900 lines) — whose synchronous
+// The modal mounts a purely-decorative AstronautBear whose synchronous
 // render cost balloons under parallel CPU load and can push these tests past the
 // default per-test timeout, causing a false failure. They are irrelevant to what
 // is verified here (Connect-button gating + the connect dispatch), so we stub
 // them to keep the mount cheap and deterministic under any load.
-vi.mock('@/ui/bits/ThemeBg', () => ({ default: () => null }));
 vi.mock('@/ui/bits/AstronautBear', () => ({ default: () => null }));
 
 // Generous, load-proof safety net: even if a future child grows heavy, a real
@@ -47,6 +45,7 @@ function stubMatchMedia(matches = false): void {
 
 beforeEach(() => {
   globalThis.localStorage?.clear();
+  document.documentElement.dataset.performance = 'full';
   resetSettings();
   updateRelay({ host: '', password: '', port: 9001, tls: true, compression: true });
   state.connect.mockClear();
@@ -55,10 +54,19 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  document.documentElement.removeAttribute('data-performance');
   vi.unstubAllGlobals();
 });
 
 describe('ConnectModal', () => {
+  it('uses the compact mark and omits scene modules on the low capability tier', () => {
+    document.documentElement.dataset.performance = 'low';
+    const { getByTestId, queryByTestId } = render(() => <ConnectModal open />);
+
+    expect(getByTestId('connect-compact-mark')).toBeInTheDocument();
+    expect(queryByTestId('connect-decorative-background')).toBeNull();
+  });
+
   it('keeps Connect disabled until required fields are filled', () => {
     const { getByLabelText, getByRole } = render(() => <ConnectModal open />);
     const connect = getByRole('button', { name: /^Connect$/ });

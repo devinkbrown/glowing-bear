@@ -25,6 +25,7 @@ class FakeWebSocket {
   binaryType = 'blob';
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
+  throwOnSend = false;
   closeCode: number | null = null;
   closeReason = '';
 
@@ -39,6 +40,7 @@ class FakeWebSocket {
   }
 
   send(data: string): void {
+    if (this.throwOnSend) throw new Error('socket closing');
     this.sent.push(data);
   }
 
@@ -55,7 +57,7 @@ class FakeWebSocket {
     this.onopen?.(new Event('open'));
   }
 
-  message(data: string): void {
+  message(data: unknown): void {
     this.onmessage?.({ data } as MessageEvent);
   }
 }
@@ -140,11 +142,54 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('outbound acknowledgement', () => {
+  it('returns true only when the open socket accepts the frame', () => {
+    const onRaw = vi.fn();
+    const c = makeClient({ onRaw });
+    c.connect();
+    const ws = lastSocket();
+
+    expect(c.sendRaw('PRIVMSG', '#room', 'before open')).toBe(false);
+    expect(c.tagmsg('#room', { '+draft/react': '👍' })).toBe(false);
+    expect(onRaw).not.toHaveBeenCalledWith('PRIVMSG #room :before open', 'out');
+
+    ws.open();
+    ws.sent.length = 0;
+    onRaw.mockClear();
+    expect(c.sendRaw('PRIVMSG', '#room', 'accepted')).toBe(true);
+    expect(ws.sent).toEqual(['PRIVMSG #room accepted\r\n']);
+    expect(onRaw).toHaveBeenCalledWith('PRIVMSG #room accepted', 'out');
+
+    expect(c.tagmsg('#room', { '+draft/react': '👍' })).toBe(true);
+    expect(ws.sent.at(-1)).toBe('@+draft/react=👍 TAGMSG #room\r\n');
+
+    ws.throwOnSend = true;
+    expect(c.sendRaw('PRIVMSG', '#room', 'raced close')).toBe(false);
+    expect(c.tagmsg('#room', { '+draft/react': '👍' })).toBe(false);
+    expect(onRaw).not.toHaveBeenCalledWith('PRIVMSG #room :raced close', 'out');
+  });
+});
+
 // ── framing ───────────────────────────────────────────────────────────────────
 
 describe('frame handling', () => {
+  it('passes the exact server-authored 001 message to the connected callback', () => {
+    const onConnected = vi.fn();
+    const c = makeClient({ onConnected });
+    c.connect();
+    lastSocket().open();
+    lastSocket().message(':orochi.test 001 kain :Welcome');
+
+    expect(onConnected).toHaveBeenCalledWith(expect.objectContaining({
+      command: '001',
+      prefix: 'orochi.test',
+      params: ['kain', 'Welcome'],
+    }));
+  });
+
   it('handles a CRLF-less frame (Orochi omits the trailing newline)', () => {
     const c = makeClient();
+    expect(c.loggedIn).toBe(false);
     c.connect();
     lastSocket().open();
     lastSocket().message(':eshmaki.me 001 kain :Welcome'); // no CRLF
@@ -167,6 +212,26 @@ describe('frame handling', () => {
     lastSocket().sent.length = 0;
     lastSocket().message('\r\nPING :tok');
     expect(lastSocket().sent).toContain('PONG tok\r\n');
+  });
+
+  it('routes ArrayBuffer media frames to binary subscribers', () => {
+    const onBinary = vi.fn();
+    const subscriber = vi.fn();
+    const c = makeClient({ onBinary });
+    c.binaryHandlers.add(subscriber);
+    c.connect();
+    lastSocket().message(new Uint8Array([1, 2, 3]).buffer);
+    expect(onBinary).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]));
+    expect(subscriber).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]));
+  });
+
+  it('converts Blob media frames without parsing them as IRC text', async () => {
+    const onBinary = vi.fn();
+    const c = makeClient({ onBinary });
+    c.connect();
+    lastSocket().message(new Blob([new Uint8Array([4, 5, 6])]));
+    await vi.waitFor(() => expect(onBinary).toHaveBeenCalledWith(new Uint8Array([4, 5, 6])));
+    expect(received).toHaveLength(0);
   });
 });
 
@@ -319,6 +384,81 @@ describe('SCRAM-SHA-256 mutual auth', () => {
   });
 });
 
+// ── passwordless account re-entry ─────────────────────────────────────────────
+
+describe('SASL SESSION-TOKEN', () => {
+  const token = 'sst_0123456789abcdef0123456789abcdef';
+
+  it('authenticates with the account-bound token before replaying a password', () => {
+    const c = makeClient({
+      nick: 'display-nick',
+      account: 'alice',
+      saslSessionToken: token,
+    });
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+    ws.sent.length = 0;
+
+    ws.message(':s CAP * LS :sasl=SESSION-TOKEN,PLAIN');
+    ws.message(':s CAP * ACK :sasl');
+    expect(ws.sent).toContain('AUTHENTICATE SESSION-TOKEN\r\n');
+
+    ws.message('AUTHENTICATE +');
+    expect(ws.sent).toContain(`AUTHENTICATE ${btoa(`alice\0${token}`)}\r\n`);
+    ws.message(':s 903 display-nick :SASL authentication successful');
+    expect(c.loggedIn).toBe(true);
+    expect(c.currentNick).toBe('display-nick');
+  });
+
+  it('clears a rejected token and retries with the password mechanism', () => {
+    const rejected = vi.fn();
+    const c = makeClient({
+      saslSessionToken: token,
+      onSaslSessionTokenRejected: rejected,
+    });
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+    ws.sent.length = 0;
+
+    ws.message(':s CAP * LS :sasl=SESSION-TOKEN,PLAIN');
+    ws.message(':s CAP * ACK :sasl');
+    ws.message('AUTHENTICATE +');
+    ws.sent.length = 0;
+    ws.message(':s 904 kain :SASL authentication failed');
+
+    expect(rejected).toHaveBeenCalledOnce();
+    expect(rejected).toHaveBeenCalledWith(true);
+    expect(ws.sent).toContain('AUTHENTICATE PLAIN\r\n');
+    ws.message('AUTHENTICATE +');
+    expect(ws.sent).toContain(`AUTHENTICATE ${btoa('\0kain\0hunter2')}\r\n`);
+  });
+
+  it('fails closed when a rejected token has no password fallback', () => {
+    const rejected = vi.fn();
+    const c = makeClient({
+      password: undefined,
+      saslSessionToken: token,
+      onSaslSessionTokenRejected: rejected,
+    });
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+    ws.message(':s CAP * LS :sasl=SESSION-TOKEN,PLAIN');
+    ws.message(':s CAP * ACK :sasl');
+    ws.message('AUTHENTICATE +');
+    ws.sent.length = 0;
+    ws.message(':s 904 kain :SASL authentication failed');
+
+    expect(rejected).toHaveBeenCalledOnce();
+    expect(rejected).toHaveBeenCalledWith(false);
+    expect(ws.closeCode).toBe(4003);
+    expect(ws.sent).not.toContain('CAP END\r\n');
+    expect(errors.some((error) => /enter the account password/i.test(error))).toBe(true);
+  });
+});
+
 // ── session resume (prefers the mesh token) ────────────────────────────────────
 
 describe('session resume', () => {
@@ -333,6 +473,7 @@ describe('session resume', () => {
     ws.message(':s CAP * LS :sasl=PLAIN');
     ws.message(':s CAP * ACK :sasl');
     ws.message(':s 903 kain :SASL authentication successful');
+    expect(c.loggedIn).toBe(true);
 
     // Assert: SESSION commands are post-registration only.
     expect(ws.sent.some((line) => line.startsWith('SESSION '))).toBe(false);

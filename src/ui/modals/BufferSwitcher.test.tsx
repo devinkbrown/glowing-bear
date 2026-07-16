@@ -15,6 +15,9 @@ import {
   openModal,
   setActiveBuffer,
   setTheme,
+  createUserAction,
+  clearUserActions,
+  activeUserAction,
   uiState,
   upsertBuffer,
 } from '@/state';
@@ -79,6 +82,7 @@ beforeEach(() => {
   clearBuffers();
   closeModal();
   setTheme('darkbear');
+  clearUserActions();
   arrangeBuffers();
   openModal('bufferSwitcher');
 });
@@ -87,6 +91,7 @@ afterEach(() => {
   cleanup();
   closeModal();
   clearBuffers();
+  clearUserActions();
 });
 
 describe('BufferSwitcher command palette', () => {
@@ -142,6 +147,17 @@ describe('BufferSwitcher command palette', () => {
     expect(uiState.activeModal).toBeNull();
   });
 
+  it('does not run the highlighted command while IME composition is active', () => {
+    const { getByPlaceholderText } = renderPalette();
+    const input = getByPlaceholderText(PLACEHOLDER);
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+
+    expect(buffersState.activeBuffer).toBe('0x1');
+    expect(uiState.activeModal).toBe('bufferSwitcher');
+  });
+
   it('wraps ArrowUp from the first row to the last and dispatches it', () => {
     const setAttr = vi.spyOn(document.documentElement, 'setAttribute');
     const { getByPlaceholderText } = renderPalette();
@@ -164,6 +180,16 @@ describe('BufferSwitcher command palette', () => {
     // run() closes the palette FIRST, then opens settings — the single
     // activeModal slot ends on 'settings', not null.
     expect(uiState.activeModal).toBe('settings');
+  });
+
+  it('opens the generated argument runner for a named safe user action', () => {
+    const action = createUserAction('Who is teammate', 'whois')!;
+    const { getByText } = renderPalette();
+
+    fireEvent.click(getByText('Who is teammate'));
+
+    expect(uiState.activeModal).toBeNull();
+    expect(activeUserAction()?.id).toBe(action.id);
   });
 
   it('dispatches a buffer-scoped Mute action for the active buffer', () => {

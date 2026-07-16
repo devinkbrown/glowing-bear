@@ -17,12 +17,19 @@
 import { createEffect, createRoot, createSignal } from 'solid-js';
 import { IRCClient } from '@/lib/irc/client';
 import type { IRCMessage } from '@/lib/irc/types';
-import { parseSessionMeshTokenNote, parseSessionTokenNote } from '@/lib/irc/parser';
+import {
+  parseSaslSessionTokenNotice,
+  parseSessionMeshTokenNote,
+  parseSessionTokenNote,
+  type SaslSessionTokenNotice,
+} from '@/lib/irc/parser';
 import { NODES, nodeFromWssGateway, selectBestNode, type IrcNode } from '@/lib/irc/nodes';
 import {
+  clearSaslSessionToken,
   loadCredentials,
   saveCredentials,
   storeMeshToken,
+  storeSaslSessionToken,
   storeSessionToken,
 } from '@/lib/credentials';
 import { deviceKeys, isEnvelope } from '@/lib/e2ee/dmCipher';
@@ -40,8 +47,19 @@ import { ircxState } from '@/state/ircx';
 import { parseReadMarkerTimestamp, recordReadMarker } from '@/state/threads';
 import { settings } from '@/state/settings';
 import {
+  _collectPreferenceMetadata,
+  _finishPreferenceMetadataCollection,
+  _preferenceTransportReady,
+  _preferenceTransportUnavailable,
+  _setPreferenceSyncTransport,
+  initPreferenceSync,
+  type PreferenceSyncTransport,
+} from '@/state/preferenceSync';
+import {
   _ingestEncryptedDm,
+  _resetBridgeCrypto,
   _setBridgeBackend,
+  _setBridgeCryptoScope,
   _setBridgeState,
   _setPeerDmKey,
   type BridgeBackend,
@@ -49,9 +67,10 @@ import {
 import {
   _attachBridgeClient,
   _setMediaAvailable,
+  _setMediaTransportConnected,
   hangup as mediaHangup,
-  joinRoom as mediaJoinRoom,
-  startCall as mediaStartCall,
+  requestRoomJoin as mediaJoinRoom,
+  requestStartCall as mediaStartCall,
 } from '@/state/media';
 
 const BACKOFF_MIN_MS = 1_000;
@@ -201,6 +220,41 @@ export function randomGuestNick(): string {
   return `darkbear${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
+export function isSecureBridgeTransport(url: string): boolean {
+  try { return new URL(url).protocol === 'wss:'; } catch { return false; }
+}
+
+/** Plain WS is reserved for credential-free local development only. */
+export function isLoopbackBridgeTransport(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'ws:') return false;
+    const host = parsed.hostname.toLowerCase();
+    return host === 'localhost' || host === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
+export const INSECURE_BRIDGE_TRANSPORT_ERROR =
+  'Orochi bridge requires wss://; ws:// is allowed only for unauthenticated loopback endpoints.';
+
+/**
+ * Production endpoints must use WSS. The sole exception is a loopback WS
+ * endpoint with no password or bearer/reclaim credential attached.
+ */
+export function bridgeTransportAllowed(url: string, hasCredentials: boolean): boolean {
+  if (isSecureBridgeTransport(url)) return true;
+  if (hasCredentials) return false;
+  try {
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password) return false;
+  } catch {
+    return false;
+  }
+  return isLoopbackBridgeTransport(url);
+}
+
 // ---------------------------------------------------------------------------
 // Controller state
 // ---------------------------------------------------------------------------
@@ -213,6 +267,10 @@ let generation = 0;
 let backoffMs = BACKOFF_MIN_MS;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let currentUrl = '';
+let pendingSaslSessionToken: SaslSessionTokenNotice | null = null;
+let bridgeReauthRequired = false;
+/** Exact raw IRC prefix authenticated by this connection's 001 / SASL success. */
+let authenticatedServerPrefix: string | null = null;
 
 /** Detected orochi server names (lowercased), latched for the app session. */
 const orochiServers = new Set<string>();
@@ -246,7 +304,7 @@ function trackChannel(channel: string, ptr: string): void {
   chanToPtr.set(lc, ptr);
   chanNames.set(lc, channel);
   ptrToChan.set(ptr, channel);
-  if (!known && welcomed && client) client.join(channel);
+  if (!known && welcomed && client && !client.sessionSyncActive) client.join(channel);
 }
 
 function noteOrochiServer(serverName: string, wssGateway?: string): void {
@@ -279,18 +337,39 @@ function resolveIdentityNick(): string {
 }
 
 function connectTo(url: string): void {
-  currentUrl = url;
+  pendingSaslSessionToken = null;
+  bridgeReauthRequired = false;
+  authenticatedServerPrefix = null;
   const nick = resolveIdentityNick();
   const account = settings.bridge.account.trim();
   const password = settings.bridge.password;
-  const useSasl = Boolean(account && password);
   const creds = loadCredentials(url, nick);
+  const hasCredentials = Boolean(
+    password || creds?.saslSessionToken || creds?.sessionToken || creds?.meshToken,
+  );
+  if (!bridgeTransportAllowed(url, hasCredentials)) {
+    currentUrl = '';
+    pendingActions.length = 0;
+    _setBridgeState({ status: 'error', error: INSECURE_BRIDGE_TRANSPORT_ERROR });
+    return;
+  }
+  currentUrl = url;
+  const secureTransport = isSecureBridgeTransport(url);
+  const tokenMatchesAccount = Boolean(
+    secureTransport && creds?.saslSessionToken &&
+    (!account || !creds.saslAccount || creds.saslAccount.toLowerCase() === account.toLowerCase()),
+  );
+  const saslSessionToken = tokenMatchesAccount ? creds?.saslSessionToken : undefined;
+  const authAccount = saslSessionToken ? (creds?.saslAccount || account || nick) : account;
+  const usePassword = Boolean(account && password);
 
   const c = new IRCClient({
     url,
     nick,
+    account: authAccount || undefined,
     realname: `${nick} (DarkBear bridge)`,
-    password: useSasl ? password : undefined,
+    password: usePassword ? password : undefined,
+    saslSessionToken,
     sessionToken: creds?.sessionToken,
     meshToken: creds?.meshToken,
     // The primary handler is unused — everything routes through the
@@ -299,6 +378,10 @@ function connectTo(url: string): void {
     onConnected: onWelcome,
     onDisconnected: onDrop,
     onError: (err) => { _setBridgeState({ error: err }); },
+    onSaslSessionTokenRejected: (willRetryWithPassword) => {
+      clearSaslSessionToken(url, nick);
+      bridgeReauthRequired = !willRetryWithPassword;
+    },
     onNickChanged: (n) => { _setBridgeState({ nick: n }); },
     onReadMarker: foldReadMarker,
   });
@@ -317,6 +400,8 @@ async function startBridge(): Promise<void> {
     if (!pinned || currentUrl === pinned) return; // already running
     // Pinned endpoint changed — swap sessions.
     teardownClient();
+    _setBridgeCryptoScope(null);
+    _resetBridgeCrypto();
   }
   if (starting) return;
   starting = true;
@@ -344,6 +429,8 @@ async function startBridge(): Promise<void> {
 
 function teardownClient(): void {
   welcomed = false;
+  authenticatedServerPrefix = null;
+  _preferenceTransportUnavailable();
   if (client) {
     client.extraMessageHandlers.delete(onBridgeMessage);
     _attachBridgeClient(null);
@@ -362,6 +449,7 @@ function stopBridge(): void {
   backoffMs = BACKOFF_MIN_MS;
   pendingActions.length = 0;
   teardownClient();
+  _setBridgeCryptoScope(null);
   _setBridgeState({ status: 'off', error: null, e2eeReady: false });
 }
 
@@ -377,29 +465,70 @@ function scheduleReconnect(): void {
   }, delay);
 }
 
-function onWelcome(): void {
+function serverPrefix(msg: IRCMessage): string | null {
+  const prefix = msg.prefix;
+  // Compare the raw prefix. Do not use parser nick/host classification here:
+  // that classification's dotted-name heuristic is for display, not trust.
+  if (!prefix || prefix.includes('!') || prefix.includes('@')) return null;
+  return prefix;
+}
+
+function targetsCurrentNick(msg: IRCMessage): boolean {
+  const target = msg.params[0];
+  return Boolean(target && client && target.toLowerCase() === client.currentNick.toLowerCase());
+}
+
+function onWelcome(welcome: IRCMessage): void {
   const c = client;
   if (!c) return;
+  // IRCClient invokes this callback only from its 001 handler. Bind the exact
+  // raw prefix so user-authored NOTICEs cannot mint stored bearer credentials.
+  if (welcome.command === '001' && targetsCurrentNick(welcome)) {
+    authenticatedServerPrefix = serverPrefix(welcome);
+  }
   welcomed = true;
   backoffMs = BACKOFF_MIN_MS;
+  const trustAccount = settings.bridge.account.trim() || c.currentNick;
+  _setBridgeCryptoScope(`${currentUrl}\n${trustAccount.toLowerCase()}`);
   _setBridgeState({ status: 'ready', error: null, nick: c.currentNick });
   _setMediaAvailable(true);
+  _setMediaTransportConnected(true);
 
   // Live voice/video presence rides the IRCX EVENT plane (membership-gated
   // server-side, so `*` only yields calls in channels we are in).
   c.sendRaw('EVENT', 'ADD', 'MEDIA', '*');
 
   publishDeviceKey(c);
+  _preferenceTransportReady(
+    c.negotiatedCaps.has('draft/metadata-2') && c.loggedIn,
+  );
 
   // Persist credentials so Orochi session tokens (NOTE SESSION TOKEN/MTOKEN)
   // have a home; tokens only ever arrive on SASL-authenticated sessions.
   const account = settings.bridge.account.trim();
   if (account && settings.bridge.password) {
-    saveCredentials({ nick: c.currentNick, server: currentUrl, password: settings.bridge.password });
+    saveCredentials({
+      nick: c.currentNick,
+      server: currentUrl,
+      password: settings.bridge.password,
+      rememberPassword: settings.rememberBridgePassword,
+    });
+  }
+  if (pendingSaslSessionToken) {
+    storeSaslSessionToken(
+      pendingSaslSessionToken.token,
+      pendingSaslSessionToken.expiresAt,
+      pendingSaslSessionToken.account,
+    );
+    pendingSaslSessionToken = null;
   }
 
-  // Mirror every relay channel buffer on this session (JOIN is idempotent).
-  for (const name of chanNames.values()) c.join(name);
+  // With Orochi session-sync, the server restores channel membership and
+  // history after authentication. A client-side JOIN storm races that replay
+  // and can duplicate NAMES/history; only mirror explicitly on older servers.
+  if (!c.sessionSyncActive) {
+    for (const name of chanNames.values()) c.join(name);
+  }
 
   // Flush media actions queued during the on-demand connect.
   const queued = pendingActions.splice(0, pendingActions.length);
@@ -414,8 +543,18 @@ function onWelcome(): void {
 
 function onDrop(reason: string): void {
   welcomed = false;
+  authenticatedServerPrefix = null;
   _setMediaAvailable(false);
   if (!client) return; // intentional teardown
+  _setMediaTransportConnected(false);
+  if (bridgeReauthRequired) {
+    teardownClient();
+    _setBridgeState({
+      status: 'error',
+      error: 'Orochi session expired. Enter the account password to reconnect.',
+    });
+    return;
+  }
   _setBridgeState({ status: 'connecting', error: reason || null });
   scheduleReconnect();
 }
@@ -518,6 +657,32 @@ function handleMetadataKV(target: string | undefined, key: string | undefined, v
 }
 
 function onBridgeMessage(msg: IRCMessage): void {
+  // Orochi issues the fresh SESSIONTOKEN immediately after the pre-registration
+  // 903, before 001 can arrive. At this point IRCClient has already validated
+  // the SASL state transition and set loggedIn, making this exact numeric
+  // prefix robust protocol evidence for the server on this socket.
+  if (
+    !welcomed && !authenticatedServerPrefix && msg.command === '903' &&
+    client?.loggedIn && targetsCurrentNick(msg)
+  ) {
+    authenticatedServerPrefix = serverPrefix(msg);
+  }
+
+  if (
+    msg.command === 'NOTICE' && isSecureBridgeTransport(currentUrl) &&
+    authenticatedServerPrefix !== null && msg.prefix === authenticatedServerPrefix &&
+    targetsCurrentNick(msg)
+  ) {
+    const saslToken = parseSaslSessionTokenNotice(msg);
+    if (saslToken) {
+      pendingSaslSessionToken = saslToken;
+      client?.setSaslSessionToken(saslToken.token);
+      // Existing profiles can persist immediately. First-login profiles do not
+      // have a credential record until 001, so onWelcome repeats this safely.
+      storeSaslSessionToken(saslToken.token, saslToken.expiresAt, saslToken.account);
+      return;
+    }
+  }
   switch (msg.command) {
     case 'TAGMSG':
       handleTagmsg(msg);
@@ -534,13 +699,24 @@ function onBridgeMessage(msg: IRCMessage): void {
       return;
     // RPL_KEYVALUE (GET reply): :server 761 <me> <Target> <Key> <Vis> [:<Value>]
     case '761':
+      if (_collectPreferenceMetadata(msg.params[2] ?? '', msg.params[4] ?? '')) return;
       handleMetadataKV(msg.params[1], msg.params[2], msg.params[4] ?? '');
+      return;
+    case '762':
+      _finishPreferenceMetadataCollection();
       return;
     // ERR_KEYNOTSET — the peer has not published a key.
     case '766':
       handleMetadataKV(msg.params[1], msg.params[2], '');
       return;
     case 'NOTE': {
+      // SESSION reclaim tokens are bearer credentials. Accept them only from
+      // the exact server prefix bound by this socket's authenticated 001 and
+      // only on WSS; a user-shaped or unrelated NOTE must never reach storage.
+      if (
+        !welcomed || !isSecureBridgeTransport(currentUrl) ||
+        authenticatedServerPrefix === null || msg.prefix !== authenticatedServerPrefix
+      ) return;
       const token = parseSessionTokenNote(msg);
       if (token) {
         storeSessionToken(token);
@@ -580,15 +756,15 @@ const backend: BridgeBackend = {
   },
 
   sendTagmsg(target, tags) {
-    client?.tagmsg(target, tags);
+    return client?.tagmsg(target, tags) ?? false;
   },
 
   sendPrivmsg(target, text) {
-    client?.privmsg(target, text);
+    return client?.privmsg(target, text) ?? false;
   },
 
   sendRaw(command, ...params) {
-    client?.sendRaw(command, ...params);
+    return client?.sendRaw(command, ...params) ?? false;
   },
 
   requestPeerDmKey(nick) {
@@ -613,6 +789,25 @@ const backend: BridgeBackend = {
     }
     pendingActions.push(action);
     void startBridge(); // on-demand connect; queue flushes on welcome
+  },
+};
+
+const preferenceTransport: PreferenceSyncTransport = {
+  ready: () => welcomed && client !== null,
+  supported: () => Boolean(
+    welcomed &&
+    client?.negotiatedCaps.has('draft/metadata-2') &&
+    client.loggedIn,
+  ),
+  list() {
+    return client?.sendRaw('METADATA', '*', 'LIST') ?? false;
+  },
+  set(key, value) {
+    // `secret` keeps even non-secret preferences account-private on the wire.
+    return client?.sendRaw('METADATA', '*', 'SET', key, 'secret', value) ?? false;
+  },
+  clear(key) {
+    return client?.sendRaw('METADATA', '*', 'SET', key) ?? false;
   },
 };
 
@@ -669,8 +864,7 @@ export function sendReply(bufferPtr: string, text: string, replyMsgid: string): 
   if (!welcomed || !client) return false;
   const args = replyRawArgs(backend.targetForBuffer(bufferPtr), text, replyMsgid);
   if (!args) return false;
-  client.sendRaw(...args);
-  return true;
+  return client.sendRaw(...args);
 }
 
 // ---------------------------------------------------------------------------
@@ -709,6 +903,8 @@ export function initBridge(): void {
   });
 
   _setBridgeBackend(backend);
+  _setPreferenceSyncTransport(preferenceTransport);
+  initPreferenceSync();
 
   // Initial sweep: the relay may have detected orochi servers (and opened
   // channel buffers) before initBridge ran.
@@ -717,6 +913,9 @@ export function initBridge(): void {
   // Settings are a Solid store — reactive tracking needs an owner scope.
   createRoot(() => {
     createEffect(() => {
+      // Credential edits retrigger a token-expiry recovery after teardown.
+      void settings.bridge.account;
+      void settings.bridge.password;
       const active = bridgeShouldRun(
         settings.bridge.enabled,
         orochiDetected(),

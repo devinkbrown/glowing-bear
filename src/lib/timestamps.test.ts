@@ -6,11 +6,13 @@ import {
   parseServerTime,
   relativeTime,
 } from './timestamps';
+import { applyLocalePreference } from './i18n';
 
 const NOW = new Date('2026-07-12T12:00:00.000Z');
 
 describe('timestamps', () => {
   beforeEach(() => {
+    applyLocalePreference('en');
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
   });
@@ -102,7 +104,14 @@ describe('timestamps', () => {
 
       const formatted = formatFullTimestamp(date);
 
-      expect(formatted).toBe(date.toLocaleString());
+      expect(formatted).toBe(date.toLocaleString('en'));
     });
+  });
+
+  it('uses the active locale for relative units', () => {
+    applyLocalePreference('de');
+    const twoMinutesAgo = new Date(NOW.getTime() - 2 * 60 * 1000);
+
+    expect(relativeTime(twoMinutesAgo)).toBe('vor 2 Minuten');
   });
 });

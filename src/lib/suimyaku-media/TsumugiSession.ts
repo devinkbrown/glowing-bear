@@ -1,5 +1,5 @@
 /*
- * TsumugiSession.ts — Browser-side TSUMUGI encrypted media session.
+ * TsumugiSession.ts — Browser-side TSUMUGI encrypted-audio session.
  *
  * Implements the TSUMUGI_HANDSHAKE / TSUMUGI_RATCHET / TSUMUGI_DATA protocol
  * using Web Crypto (P-256 ECDH + HKDF + AES-256-GCM).
@@ -35,6 +35,7 @@ export class TsumugiSession {
   private readonly replay = new ReplayWindow();
   private ratchetEpoch = 0;
   private destroyed = false;
+  private peerPublicKey: Uint8Array | null = null;
 
   private constructor(kp: CryptoKeyPair) {
     this.keyPair = kp;
@@ -97,6 +98,7 @@ export class TsumugiSession {
 
     this.sendKey = await deriveGcmKey(hkdfKey, salt, `${info}:media:${localDirection}`);
     this.receiveKey = await deriveGcmKey(hkdfKey, salt, `${info}:media:${peerDirection}`);
+    this.peerPublicKey = peerBytes;
     this.ratchetEpoch = 0;
     this.replay.clear();
   }
@@ -135,6 +137,7 @@ export class TsumugiSession {
     this.receiveKey = null;
     this.replay.clear();
     this.ratchetEpoch = 0;
+    this.peerPublicKey = null;
     this.destroyed = true;
   }
 
@@ -214,6 +217,14 @@ export class TsumugiSession {
     this.assertLive();
     const raw   = await crypto.subtle.exportKey('raw', this.keyPair.publicKey);
     const hash  = await crypto.subtle.digest('SHA-256', raw);
+    return tsumugiBase58(new Uint8Array(hash)).slice(0, 12).padStart(12, '1');
+  }
+
+  /** Short fingerprint of the established peer key, never our local identity. */
+  async getPeerFingerprint(): Promise<string | null> {
+    this.assertLive();
+    if (!this.peerPublicKey) return null;
+    const hash = await crypto.subtle.digest('SHA-256', toArrayBuffer(this.peerPublicKey));
     return tsumugiBase58(new Uint8Array(hash)).slice(0, 12).padStart(12, '1');
   }
 }

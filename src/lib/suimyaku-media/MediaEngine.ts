@@ -14,11 +14,13 @@ import { KaguraCodec, type KaguraCodecTag, type KaguraFrame, decodeKaguraFrame, 
 import { appendMediaMac, importMediaMacKey, mediaMacTag, mediaMacEqual, MEDIA_MAC_TAG_BYTES } from './mediaMac';
 import { MediaStreamRouter, mediaStreamId, type MediaStreamSource } from './mediaStream';
 import { bumpDrop } from './mediaDropCounter';
+import { buildEncoder } from './videoEncoderProfile';
+import { AdaptiveQualityController, PacketLossTracker } from './callHealth';
 import type { IRCMessage } from '@/lib/irc/types';
 import type {
   CallState, VoiceCallState, MediaKind,
   SuimyakuPeerState, SuimyakuRoomStats, NetworkQualityTier,
-  SuimyakuMediaCallbacks, SuimyakuChannelInfo,
+  SuimyakuMediaCallbacks, SuimyakuChannelInfo, SuimyakuCallHealth,
 } from './types';
 
 // WS media-plane Kagura band ids: media bands are >= 64. band_id discriminates
@@ -26,6 +28,19 @@ import type {
 const WS_BAND_AUDIO = 64;          // kaguravox audio, plaintext
 const WS_BAND_VIDEO = 65;          // kaguravis video
 const WS_BAND_TSUMUGI_AUDIO = 66;  // kaguravox audio, TSUMUGI group-encrypted ciphertext
+
+/**
+ * Production audio E2EE is intentionally disabled until its signalling, KDF,
+ * replay, ratchet, and membership lifecycle are complete. Keep the crypto
+ * primitives and fail-closed paths available for unit work, but do not let
+ * partial or attacker-supplied controls activate them in a live call.
+ */
+export const TSUMUGI_AUDIO_E2EE_ENABLED = false;
+
+function isTsumugiAudioControl(value: string): boolean {
+  const normalized = value.trim().toUpperCase().replaceAll('-', '_');
+  return normalized === 'TSUMUGI' || normalized.startsWith('TSUMUGI_');
+}
 
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -57,7 +72,7 @@ export async function verifyMediaDatagramMac(
   return mediaMacEqual(tag, expected);
 }
 
-export type { CallState, VoiceCallState, MediaKind, SuimyakuPeerState, SuimyakuRoomStats, NetworkQualityTier, SuimyakuMediaCallbacks, SuimyakuChannelInfo };
+export type { CallState, VoiceCallState, MediaKind, SuimyakuPeerState, SuimyakuRoomStats, NetworkQualityTier, SuimyakuMediaCallbacks, SuimyakuChannelInfo, SuimyakuCallHealth };
 
 // The mounted engine is a cross-module singleton. It MUST live on globalThis,
 // not a module-local `let`: the store (getMounted…) and the useSuimyakuMedia hook
@@ -105,6 +120,27 @@ const SPEAKING_POLL_MS = 120;
 // message (workers cannot read import.meta.env) — OpcodecWasm derives the
 // sibling `.wasm` fetch URL from this JS URL in both paths.
 const WASM_URL   = `${import.meta.env.BASE_URL}opcodec_wasm.js`;
+const AUDIO_WORKLET_URL = `${import.meta.env.BASE_URL}kaguravox-capture-worklet.js`;
+
+/**
+ * Load the shipped codec bundle and instantiate both call-path encoders.
+ * Preflight uses this before capture is committed so a missing/broken WASM
+ * artifact is discovered before the user appears to enter a room.
+ */
+export async function runSuimyakuCodecSelfTest(): Promise<void> {
+  const wasm = await OpcodecWasm.load(WASM_URL);
+  const audio = wasm.audioEncoder(SAMPLE_RATE, AUDIO_QUALITY, false);
+  let video: KaguraVisEncoder | null = null;
+  try {
+    // Probe the same shared fallback constructor used by live video at the
+    // call-path profile accepted by the shipped KaguraVis binary. Smaller
+    // profiles are not consistently supported by that binary across engines.
+    video = buildEncoder(wasm, 0, 1280, 720, VIDEO_QUALITY, 'camera', VIDEO_FPS);
+  } finally {
+    video?.destroy();
+    audio.destroy();
+  }
+}
 
 type VideoCaptureProfile = {
   width: number;
@@ -151,11 +187,11 @@ const SCREEN_PROFILE_1080P60: VideoCaptureProfile = {
   screenShare: true,
 };
 
-/* Adaptive bitrate thresholds */
-const BW_TIER_GOOD  = 300_000;
-const BW_TIER_FAIR  = 150_000;
-const BW_TIER_POOR  =  60_000;
-const BW_AUDIO_ONLY =  30_000;
+const HEALTH_POLL_MS = 1000;
+const ABR_REPORT_MIN_MS = 2500;
+const LOSS_KEYFRAME_THRESHOLD = 0.03;
+const REJOIN_DELAY_MS = 500;
+const RECONNECT_GRACE_MS = 20_000;
 
 // -------------------------------------------------------------------
 // Minimal msgpack helpers
@@ -170,15 +206,6 @@ function msgpackArray3(a: string, b: string, c: number): Uint8Array {
   out[i++] = 0xa0 | (aB.length & 0x1f); out.set(aB, i); i += aB.length;
   out[i++] = 0xa0 | (bB.length & 0x1f); out.set(bB, i); i += bB.length;
   out[i++] = 0xcd; out[i++] = (c >> 8) & 0xff; out[i] = c & 0xff;
-  return out;
-}
-
-function msgpackArray1(a: string): Uint8Array {
-  const enc = new TextEncoder();
-  const aB = enc.encode(a);
-  const out = new Uint8Array(1 + 1 + aB.length);
-  let i = 0;
-  out[i++] = 0x91; out[i++] = 0xa0 | (aB.length & 0x1f); out.set(aB, i);
   return out;
 }
 
@@ -262,6 +289,7 @@ export class SuimyakuMediaEngine {
   private vidFrameTimer: ReturnType<typeof setInterval> | null = null;
   private vidCanvas:    HTMLCanvasElement | null = null;
   private vidCapture:   HTMLVideoElement | null  = null;
+  private vidEncoderTier: NetworkQualityTier = 0;
 
   /* Worker-path state (Chromium: MediaStreamTrackProcessor + OffscreenCanvas) */
   private vidWorker:    Worker | null = null;
@@ -275,6 +303,9 @@ export class SuimyakuMediaEngine {
 
   /** One-shot timer that re-announces the room after a WS reconnect. */
   private rejoinTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  private transportConnected = false;
+  private reconnectAttempt = 0;
 
   private readonly registry = new PeerRegistry({
     sampleRate:   SAMPLE_RATE,
@@ -297,6 +328,7 @@ export class SuimyakuMediaEngine {
   private tsumugiGroupKeyPromise: Promise<TsumugiGroup> | null = null;
   private tsumugiIdentity: TsumugiIdentity | null = null;
   private tsumugiIdentityPromise: Promise<TsumugiIdentity> | null = null;
+  private audioEncryptionFailureReported = false;
   private incomingKind: MediaKind;
 
   /* PTT */
@@ -315,9 +347,18 @@ export class SuimyakuMediaEngine {
   private prevNetworkTier: NetworkQualityTier = 0;
   private videoSkipCount   = 0;
   private audioQuality: KaguraVoxQuality = AUDIO_QUALITY;
-
-  private lastLossRate  = 0;
-  private lastDecodeAt  = 0;
+  private readonly packetLoss = new PacketLossTracker();
+  private readonly qualityController = new AdaptiveQualityController();
+  private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private lastLossRate = 0;
+  private roundTripMs = 0;
+  private encodePressure = 0;
+  private roomStats: SuimyakuRoomStats | null = null;
+  private mediaBytesSinceSample = 0;
+  private measuredBps = 0;
+  private throughputSampleAt = Date.now();
+  private lastAbrReportAt = 0;
+  private forceNextVideoKeyframe = false;
 
   constructor(callbacks: SuimyakuMediaCallbacks, options: { kind: MediaKind } = { kind: 'video' }) {
     this.cb          = callbacks;
@@ -330,8 +371,8 @@ export class SuimyakuMediaEngine {
   }
 
   setClient(client: IRCClient | null) {
-    const prev = this.client;
     this.client = client;
+    if (!client) this.transportConnected = false;
     // Move the media-plane subscriptions to the new client (binary datagrams +
     // EVENT MEDIA control), tolerating repeat calls with the same client.
     if (this.boundMediaClient && this.boundMediaClient !== client) {
@@ -344,25 +385,47 @@ export class SuimyakuMediaEngine {
       client.extraMessageHandlers.add(this.onMediaServerMessageBound);
       this.boundMediaClient = client;
     }
-    if (!client && this.callState !== 'idle') { this.setIdle(); return; }
-    if (client && !prev && this.callState === 'in_call' && this.activeRoom) {
-      const room = this.activeRoom;
-      if (this.rejoinTimer) clearTimeout(this.rejoinTimer);
-      this.rejoinTimer = setTimeout(() => {
-        this.rejoinTimer = null;
-        if (this.client && this.activeRoom === room) {
-          this.mediaframeCmd(room, 'VOICE_JOIN', `${SAMPLE_RATE} ${AUDIO_CHANNELS}`);
-          if (this.localKind === 'video' || this.localKind === 'screen') {
-            const profile = this.localVideoProfile ?? videoProfileFor(this.localKind);
-            this.mediaframeCmd(
-              room,
-              'VIDEO_JOIN',
-              `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}${profile.screenShare ? ' screen' : ''}`,
-            );
-          }
-          this.mediaframeCmd(room, 'ROSTER');
+    // A null client is an intentional bridge teardown. Transient network drops
+    // keep the same client object and arrive through setTransportConnected().
+    if (!client && this.callState !== 'idle') this.setIdle();
+  }
+
+  /**
+   * Report transient bridge connectivity without detaching the engine client.
+   * Active capture/decoder pipelines survive a short outage; intentional client
+   * detach still takes the full setIdle path above.
+   */
+  setTransportConnected(connected: boolean): void {
+    const changed = this.transportConnected !== connected;
+    this.transportConnected = connected;
+    if (!changed) return;
+
+    if (!connected && this.callState === 'in_call' && this.activeRoom) {
+      this.reconnectAttempt += 1;
+      this.wsMediaKey = null;
+      this.wsStreamMacKeys.clear();
+      this.wsMyNick = '';
+      this.streamRouter.clear();
+      if (this.rejoinTimer) { clearTimeout(this.rejoinTimer); this.rejoinTimer = null; }
+      if (this.reconnectGraceTimer) clearTimeout(this.reconnectGraceTimer);
+      this.reconnectGraceTimer = setTimeout(() => {
+        this.reconnectGraceTimer = null;
+        if (!this.transportConnected && this.callState === 'in_call') {
+          this.cb.onError('Media bridge did not recover in time');
+          this.setIdle();
         }
-      }, 500);
+      }, RECONNECT_GRACE_MS);
+      this.emitCallHealth();
+      return;
+    }
+
+    if (connected) {
+      if (this.reconnectGraceTimer) {
+        clearTimeout(this.reconnectGraceTimer);
+        this.reconnectGraceTimer = null;
+      }
+      if (this.callState === 'in_call' && this.activeRoom) this.scheduleRoomRejoin();
+      this.emitCallHealth();
     }
   }
 
@@ -370,7 +433,7 @@ export class SuimyakuMediaEngine {
     suggestedBps: number; tier: NetworkQualityTier;
     jitterMs: number; lossRate: number;
     framesEncoded: number; framesDecoded: number;
-    dtxSuppressedCount: number; noiseDb: number;
+    dtxSuppressedCount: number; noiseDb: number; encodePressure: number;
   } {
     return {
       suggestedBps:       this.suggestedBps,
@@ -381,6 +444,7 @@ export class SuimyakuMediaEngine {
       framesDecoded:      this.registry.totalFramesDecoded(),
       dtxSuppressedCount: this.audEnc?.dtxSuppressedCount ?? 0,
       noiseDb:            this.audEnc?.getNoiseDb() ?? -100,
+      encodePressure:     this.encodePressure,
     };
   }
 
@@ -540,9 +604,9 @@ export class SuimyakuMediaEngine {
     const FRAME = KAGURAVOX_FRAME_48K * AUDIO_CHANNELS;
     let useWorklet = false;
     try {
-      await ctx.audioWorklet.addModule(
-        'data:application/javascript,' + encodeURIComponent(AUDIO_WORKLET_CODE),
-      );
+      // A same-origin static module satisfies the app CSP. Data-URL worklets
+      // are rejected (and logged as page errors) by Firefox and WebKit.
+      await ctx.audioWorklet.addModule(AUDIO_WORKLET_URL);
       useWorklet = true;
     } catch { /* fallback */ }
 
@@ -587,25 +651,73 @@ export class SuimyakuMediaEngine {
     if (!this.audEnc || !this.activeRoom) return;
     const encoded = this.audEnc.encode(i16);
     if (!encoded || !encoded.length) return;
+    const room = this.activeRoom;
+    if (!TSUMUGI_AUDIO_E2EE_ENABLED) {
+      this.sendFrame(room, 'AUDIO', encoded);
+      return;
+    }
+    this.sendProtectedAudioFrame(encoded, room);
+  }
+
+  /** Dormant fail-closed send path, kept covered while production E2EE is gated. */
+  private sendProtectedAudioFrame(encoded: Uint8Array, room: string): void {
+    if (!TSUMUGI_AUDIO_E2EE_ENABLED) {
+      bumpDrop('tsumugi-disabled-send');
+      return;
+    }
+    this.sendEncryptedAudioFrame(encoded, room);
+  }
+
+  /** Feature-internal implementation covered independently of the release gate. */
+  private sendEncryptedAudioFrame(encoded: Uint8Array, room: string): void {
     /* Use TSUMUGI group encryption if a group key is established (multi-party room) */
     if (this.tsumugiGroupKey) {
-      this.tsumugiGroupKey.encrypt(encoded).then(ct => {
-        if (this.activeRoom) this.sendFrame(this.activeRoom, 'TSUMUGI_DATA', ct);
-      }).catch(() => { if (this.activeRoom) this.sendFrame(this.activeRoom, 'AUDIO', encoded); });
+      const groupKey = this.tsumugiGroupKey;
+      void Promise.resolve()
+        .then(() => groupKey.encrypt(encoded))
+        .then(ct => {
+          if (this.activeRoom === room) this.sendFrame(room, 'TSUMUGI_DATA', ct);
+        })
+        .catch(() => this.dropEncryptedAudio(room, 'tsumugi-group-encrypt'));
       return;
     }
     /* Use per-peer TSUMUGI for 1:1 (no active room participants besides 1 peer) */
-    const [singleNick, singleVs] = this.tsumugiSessions.size === 1
-      ? [...this.tsumugiSessions.entries()][0]!
-      : [null, null];
-    if (singleVs?.established && !this.activeRoom.startsWith('#')) {
-      singleVs.encrypt(encoded).then((ct: Uint8Array) => {
-        if (this.activeRoom) this.sendFrame(this.activeRoom, 'TSUMUGI_DATA', ct);
-      }).catch(() => { if (this.activeRoom) this.sendFrame(this.activeRoom, 'AUDIO', encoded); });
-      void singleNick; // suppress unused warning
+    const establishedSessions = [...this.tsumugiSessions.values()].filter(session => session.established);
+    const singleVs = establishedSessions.length === 1 ? establishedSessions[0]! : null;
+    const isChannel = room.startsWith('#') || room.startsWith('&');
+    if (singleVs && !isChannel) {
+      void Promise.resolve()
+        .then(() => singleVs.encrypt(encoded))
+        .then((ct: Uint8Array) => {
+          if (this.activeRoom === room) this.sendFrame(room, 'TSUMUGI_DATA', ct);
+        })
+        .catch(() => this.dropEncryptedAudio(room, 'tsumugi-peer-encrypt'));
       return;
     }
-    this.sendFrame(this.activeRoom, 'AUDIO', encoded);
+    /*
+     * Once any audio encryption session has been established, an unavailable
+     * group key or ambiguous direct peer is not permission to downgrade. Drop
+     * until an encrypting path is ready. Plaintext remains possible only before
+     * any TSUMUGI session/key has been established for this call.
+    */
+    if (establishedSessions.length > 0) {
+      // A room group key can be briefly unavailable while distribution is in
+      // flight. Record the protected drop without presenting it as a crypto
+      // operation failure; a rejected encrypt path below surfaces the error.
+      bumpDrop('tsumugi-audio-key-unavailable');
+      return;
+    }
+    this.sendFrame(room, 'AUDIO', encoded);
+  }
+
+  private dropEncryptedAudio(room: string, reason: string): void {
+    bumpDrop(reason);
+    // Do not surface a late rejection from a call that has already ended or
+    // been replaced. The frame remains dropped either way.
+    if (this.activeRoom !== room) return;
+    if (this.audioEncryptionFailureReported) return;
+    this.audioEncryptionFailureReported = true;
+    this.cb.onError('Audio encryption failed. The audio frame was dropped instead of being sent as plaintext.');
   }
 
   private stopAudioCapture() {
@@ -688,6 +800,8 @@ export class SuimyakuMediaEngine {
         data?: Uint8Array;
         ftype?: 'KEYFRAME' | 'FRAME';
         msg?: string;
+        encodeMs?: number;
+        frameBudgetMs?: number;
       };
       if (msg.type === 'ready') {
         this.workerReady = true;
@@ -698,6 +812,9 @@ export class SuimyakuMediaEngine {
         return;
       }
       if (msg.type === 'encoded' && msg.data && msg.ftype && this.activeRoom) {
+        if (typeof msg.encodeMs === 'number' && typeof msg.frameBudgetMs === 'number') {
+          this.noteEncodePressure(msg.encodeMs, msg.frameBudgetMs);
+        }
         /* Keyframe gate: when tier >= 2 only forward keyframes. */
         if (this.networkTier >= 2 && msg.ftype !== 'KEYFRAME') return;
         this.sendFrame(this.activeRoom, msg.ftype, msg.data);
@@ -784,19 +901,22 @@ export class SuimyakuMediaEngine {
     profile: VideoCaptureProfile,
   ): Promise<void> {
     const wasm = await this.ensureWasm();
-    this.vidEnc = wasm.videoEncoder(
+    this.vidEnc = buildEncoder(
+      wasm,
+      this.networkTier,
       profile.width,
       profile.height,
       profile.quality,
       profile.profile,
       profile.fps,
     );
+    this.vidEncoderTier = this.networkTier;
     const video = document.createElement('video');
     video.srcObject = stream; video.muted = true;
     await video.play();
     this.vidCapture = video;
     const canvas = document.createElement('canvas');
-    canvas.width = profile.width; canvas.height = profile.height;
+    canvas.width = this.vidEnc.width; canvas.height = this.vidEnc.height;
     this.vidCanvas = canvas;
     this.vidFrameTimer = setInterval(() => this.onVideoTick(), 1000 / profile.fps);
   }
@@ -817,33 +937,35 @@ export class SuimyakuMediaEngine {
     this.videoSkipCount++;
     const skipMod = this.networkTier === 0 ? 1 : this.networkTier === 1 ? 2 : 4;
     if (this.videoSkipCount % skipMod !== 0) return;
+    const profile = this.localVideoProfile!;
+    const periodicRecoveryKey = this.networkTier >= 2 &&
+      this.videoSkipCount % Math.max(1, profile.fps) === 0;
+    const forceKeyframe = this.forceNextVideoKeyframe || periodicRecoveryKey;
+    this.forceNextVideoKeyframe = false;
     const keyframeOnly = this.networkTier >= 2;
+    const encodeStartedAt = performance.now();
 
     /* Adaptive downscale: resize the draw canvas to the tier resolution cap.
      * This reduces getImageData payload and speeds up rgbaToYuv420 proportionally. */
-    const profile = this.localVideoProfile!;
-    const capW =
-      this.networkTier === 0 ? profile.width
-      : this.networkTier === 1 ? Math.min(profile.width, 1920)
-      : this.networkTier === 2 ? Math.min(profile.width, 1280)
-      : Math.min(profile.width, 854);
-    const aspectRatio = profile.height / profile.width;
-    const rawH = Math.round(capW * aspectRatio);
-    /* Force even dimensions (YUV420 planes require even width/height). */
-    const drawW = capW % 2 === 0 ? capW : capW - 1;
-    const drawH = rawH % 2 === 0 ? rawH : rawH - 1;
-
-    if (this.vidCanvas.width !== drawW || this.vidCanvas.height !== drawH) {
-      /* Dimensions changed — rebuild canvas and encoder at new size. */
-      if (this.wasm) {
-        this.vidEnc.destroy();
-        this.vidEnc = this.wasm.videoEncoder(
-          drawW, drawH, profile.quality, profile.profile, profile.fps,
-        );
-      }
-      this.vidCanvas.width  = drawW;
-      this.vidCanvas.height = drawH;
+    if (this.wasm && this.vidEncoderTier !== this.networkTier) {
+      const replacement = buildEncoder(
+        this.wasm,
+        this.networkTier,
+        profile.width,
+        profile.height,
+        profile.quality,
+        profile.profile,
+        profile.fps,
+      );
+      this.vidEnc.destroy();
+      this.vidEnc = replacement;
+      this.vidEncoderTier = this.networkTier;
+      this.vidCanvas.width = replacement.width;
+      this.vidCanvas.height = replacement.height;
     }
+
+    const drawW = this.vidCanvas.width;
+    const drawH = this.vidCanvas.height;
 
     const ctx = this.vidCanvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
@@ -852,7 +974,8 @@ export class SuimyakuMediaEngine {
       ctx.getImageData(0, 0, drawW, drawH).data,
       drawW, drawH,
     );
-    const encoded = this.vidEnc.encode(y, u, v, keyframeOnly);
+    const encoded = this.vidEnc.encode(y, u, v, forceKeyframe);
+    this.noteEncodePressure(performance.now() - encodeStartedAt, 1000 / Math.max(1, profile.fps));
     if (!encoded.length) return;
     const ftype = encoded[0] === 0xFF ? 'KEYFRAME' : 'FRAME';
     if (keyframeOnly && ftype !== 'KEYFRAME') return;
@@ -872,6 +995,7 @@ export class SuimyakuMediaEngine {
     this.vidFrameTimer = null;
     this.vidCapture?.pause(); this.vidCapture = null; this.vidCanvas = null;
     this.vidEnc?.destroy(); this.vidEnc = null;
+    this.vidEncoderTier = 0;
     this.localVideoProfile = null;
   }
 
@@ -924,6 +1048,10 @@ export class SuimyakuMediaEngine {
    * on servers without the WS media plane this stays the historical no-op.
    */
   private sendFrame(channel: string, ftype: string, data: Uint8Array) {
+    if (ftype === 'TSUMUGI_DATA' && !TSUMUGI_AUDIO_E2EE_ENABLED) {
+      bumpDrop('tsumugi-disabled-send');
+      return;
+    }
     const client = this.client;
     if (!client || !this.wsMediaKey || channel !== this.activeRoom || !this.wsMyNick) return;
     if (!data.length) return;
@@ -955,7 +1083,12 @@ export class SuimyakuMediaEngine {
 
     const key = this.wsMediaKey;
     appendMediaMac(key, frame)
-      .then((datagram) => { if (this.client === client) client.sendBinary(datagram); })
+      .then((datagram) => {
+        if (this.client === client && this.transportConnected) {
+          this.mediaBytesSinceSample += datagram.length;
+          client.sendBinary(datagram);
+        }
+      })
       .catch(() => { bumpDrop('mac-append'); /* a MAC failure drops one media frame; loss-tolerant */ });
   }
 
@@ -998,12 +1131,16 @@ export class SuimyakuMediaEngine {
       if (arg) {
         const kind: MediaKind = detail === 'video' || detail === 'screen' ? detail : 'voice';
         this.streamRouter.addParticipant(arg);
-        const pm = this.registry.getOrCreate(arg, channel, kind);
-        if (kind === 'video' || kind === 'screen') pm.state.hasVideo = true;
-        this.cb.onPeerState?.(pm.state);
+        if (arg.toLowerCase() !== (this.client?.currentNick ?? '').toLowerCase()) {
+          const pm = this.registry.getOrCreate(arg, channel, kind);
+          if (kind === 'video' || kind === 'screen') pm.state.hasVideo = true;
+          this.cb.onPeerState?.(pm.state);
+        }
       }
     } else if (verb === 'LEAVE') {
       if (arg) {
+        this.packetLoss.remove(mediaStreamId(channel, arg, 'audio'));
+        this.packetLoss.remove(mediaStreamId(channel, arg, 'video'));
         this.streamRouter.removeParticipant(arg);
         this.registry.remove(arg);
         this.cb.onHand?.(arg, false);
@@ -1044,6 +1181,8 @@ export class SuimyakuMediaEngine {
     if (!frame) return;
     const src = this.streamRouter.resolve(frame.streamId);
     if (!src) return; // unknown stream (not a current roster participant)
+    this.mediaBytesSinceSample += data.length;
+    this.packetLoss.observe(frame.streamId, frame.sequence);
 
     // Authenticity: when we hold the MAC key for this stream, verify the trailing
     // tag and DROP the datagram on mismatch — never process an unauthenticated
@@ -1064,24 +1203,74 @@ export class SuimyakuMediaEngine {
   /** Route a verified/SFU-trusted decoded frame to the sending peer's decoder. */
   private dispatchDecodedFrame(frame: KaguraFrame, src: MediaStreamSource, room: string) {
     if (frame.bandId === WS_BAND_TSUMUGI_AUDIO) {
-      const groupKey = this.tsumugiGroupKey;
-      if (!groupKey) return; // can't decrypt without the group key
-      const payload = frame.payload;
-      groupKey.decrypt(payload)
-        .then((pcm) => {
-          const pm = this.registry.getOrCreate(src.nick, room, 'voice');
-          void this.registry.decodeAudio(pm, pcm);
-        })
-        .catch(() => { bumpDrop('tsumugi-group-decrypt'); });
+      if (!TSUMUGI_AUDIO_E2EE_ENABLED) {
+        bumpDrop('tsumugi-disabled-data');
+        return;
+      }
+      this.decryptProtectedAudio(src.nick, room, frame.payload);
       return;
     }
     if (src.kind === 'audio') {
+      if (!this.allowInboundPlaintextAudio()) return;
       const pm = this.registry.getOrCreate(src.nick, room, 'voice');
       void this.registry.decodeAudio(pm, frame.payload);
     } else {
       const pm = this.registry.getOrCreate(src.nick, room, 'video');
       void this.registry.decodeVideo(pm, frame.payload, frame.keyframe ? 'KEYFRAME' : 'FRAME');
     }
+  }
+
+  /**
+   * Central downgrade guard for every inbound plaintext-audio transport.
+   * Decrypted frames bypass this helper and enter dispatchFrame directly.
+   */
+  private allowInboundPlaintextAudio(): boolean {
+    // The disabled production feature cannot create a valid protection context;
+    // stale/partial keys must not turn ordinary call audio into silence.
+    if (!TSUMUGI_AUDIO_E2EE_ENABLED) return true;
+    return this.allowInboundPlaintextAudioWithProtection();
+  }
+
+  /** Feature-internal downgrade policy for the future enabled path. */
+  private allowInboundPlaintextAudioWithProtection(): boolean {
+    const protectionEstablished = this.tsumugiGroupKey !== null ||
+      [...this.tsumugiSessions.values()].some(session => session.established);
+    if (!protectionEstablished) return true;
+    bumpDrop('tsumugi-plaintext-audio-downgrade');
+    return false;
+  }
+
+  private dispatchPlaintextAudio(nick: string, channel: string, frame: Uint8Array): void {
+    if (!this.allowInboundPlaintextAudio()) return;
+    this.dispatchFrame(nick, channel, 'AUDIO', frame);
+  }
+
+  /** Select exactly one decrypt mode from the active call shape; never guess. */
+  private decryptProtectedAudio(nick: string, channel: string, ciphertext: Uint8Array): void {
+    if (!TSUMUGI_AUDIO_E2EE_ENABLED) {
+      bumpDrop('tsumugi-disabled-data');
+      return;
+    }
+    this.decryptEncryptedAudio(nick, channel, ciphertext);
+  }
+
+  /** Feature-internal implementation covered independently of the release gate. */
+  private decryptEncryptedAudio(nick: string, channel: string, ciphertext: Uint8Array): void {
+    const isChannel = channel.startsWith('#') || channel.startsWith('&');
+    const decryptor = isChannel
+      ? this.tsumugiGroupKey
+      : this.tsumugiSessions.get(nick.toLowerCase());
+    if (!decryptor || (!isChannel && !('established' in decryptor && decryptor.established))) {
+      bumpDrop(isChannel ? 'tsumugi-group-key-missing' : 'tsumugi-peer-key-missing');
+      return;
+    }
+    const reason = isChannel ? 'tsumugi-group-decrypt' : 'tsumugi-peer-decrypt';
+    void Promise.resolve()
+      .then(() => decryptor.decrypt(ciphertext))
+      .then(plaintext => {
+        if (this.activeRoom === channel) this.dispatchFrame(nick, channel, 'AUDIO', plaintext);
+      })
+      .catch(() => { bumpDrop(reason); });
   }
 
   private mediaframeCmd(channel: string, subtype: string, payload = '') {
@@ -1182,7 +1371,9 @@ export class SuimyakuMediaEngine {
     this.cb.onLocalStream(this.localStream);
   }
 
-  requestKeyframe(channel: string) { this.mediaframeCmd(channel, 'VIDEO_KEYREQ'); }
+  requestKeyframe(channel: string) {
+    if (channel === this.activeRoom) this.reportAbr(true);
+  }
 
   // ----------------------------------------------------------------
   // Wave-2 public API
@@ -1361,7 +1552,13 @@ export class SuimyakuMediaEngine {
       if (isNaN(fid) || isNaN(n) || isNaN(total)) return;
       const chunk = Uint8Array.from(atob(payload), c => c.charCodeAt(0));
       const frame = this.assembler.ingest(senderNick!, ftype!, fid, n, total, chunk);
-      if (frame) this.dispatchFrame(senderNick!, channel, ftype!, frame);
+      if (frame) {
+        if (ftype === 'AUDIO') this.dispatchPlaintextAudio(senderNick!, channel, frame);
+        // Chunked protected control/data aliases remain disabled as a class.
+        // Never let an unimplemented alias fall through to generic media decode.
+        else if (isTsumugiAudioControl(ftype!)) bumpDrop('tsumugi-disabled-control');
+        else this.dispatchFrame(senderNick!, channel, ftype!, frame);
+      }
       return;
     }
 
@@ -1371,15 +1568,17 @@ export class SuimyakuMediaEngine {
         const ftype = legacyType === 'AUDIO_FRAME'
           ? 'AUDIO'
           : legacyType === 'VIDEO_KEYFRAME' ? 'KEYFRAME' : 'FRAME';
-        this.dispatchFrame(senderNick, channel, ftype,
-                           Uint8Array.from(atob(payload), c => c.charCodeAt(0)));
+        const frame = Uint8Array.from(atob(payload), c => c.charCodeAt(0));
+        if (ftype === 'AUDIO') this.dispatchPlaintextAudio(senderNick, channel, frame);
+        else this.dispatchFrame(senderNick, channel, ftype, frame);
         return;
       }
     }
 
     if (subtype === 'AUDIO' || subtype === 'KEYFRAME' || subtype === 'FRAME') {
-      this.dispatchFrame(fromNick, channel, subtype,
-                         Uint8Array.from(atob(payload), c => c.charCodeAt(0)));
+      const frame = Uint8Array.from(atob(payload), c => c.charCodeAt(0));
+      if (subtype === 'AUDIO') this.dispatchPlaintextAudio(fromNick, channel, frame);
+      else this.dispatchFrame(fromNick, channel, subtype, frame);
       return;
     }
 
@@ -1387,6 +1586,10 @@ export class SuimyakuMediaEngine {
   }
 
   private handleControl(fromNick: string, channel: string, subtype: string, payload: string) {
+    if (!TSUMUGI_AUDIO_E2EE_ENABLED && isTsumugiAudioControl(subtype)) {
+      bumpDrop('tsumugi-disabled-control');
+      return;
+    }
     switch (subtype) {
       case 'VOICE_JOIN': {
         const pm = this.registry.getOrCreate(fromNick, channel, 'voice');
@@ -1420,23 +1623,7 @@ export class SuimyakuMediaEngine {
         break;
       }
       case 'VIDEO_KEYREQ':
-        /* Worker path: forward a keyreq message; the worker will force the
-         * next encode to be a keyframe. */
-        if (this.vidWorker) {
-          this.vidWorker.postMessage({ type: 'keyreq' });
-        } else if (this.vidEnc && this.activeRoom && this.vidCapture && this.vidCanvas) {
-          /* Fallback path: encode a keyframe synchronously on the main thread. */
-          const ctx = this.vidCanvas.getContext('2d', { willReadFrequently: true });
-          const w = this.vidCanvas.width;
-          const h = this.vidCanvas.height;
-          if (ctx) {
-            ctx.drawImage(this.vidCapture, 0, 0, w, h);
-            const { y, u, v } = rgbaToYuv420(
-              ctx.getImageData(0, 0, w, h).data, w, h);
-            const encoded = this.vidEnc.encode(y, u, v, true);
-            if (encoded.length) this.sendFrame(this.activeRoom, 'KEYFRAME', encoded);
-          }
-        }
+        this.forceLocalKeyframe();
         break;
       case 'MUTE':
       case 'VOICE_MUTE': {
@@ -1471,7 +1658,11 @@ export class SuimyakuMediaEngine {
         break;
       }
       case 'STATS': {
-        try { this.cb.onRoomStats?.(channel, JSON.parse(payload) as SuimyakuRoomStats); } catch { /* */ }
+        try {
+          this.roomStats = JSON.parse(payload) as SuimyakuRoomStats;
+          this.cb.onRoomStats?.(channel, this.roomStats);
+          this.emitCallHealth();
+        } catch { /* */ }
         break;
       }
       case 'MEDIA_STATS': {
@@ -1480,6 +1671,13 @@ export class SuimyakuMediaEngine {
           const bps = typeof val === 'number' ? val : typeof val?.suggested_bps === 'number' ? val.suggested_bps : 0;
           if (bps > 0) this.applyNetworkBitrate(bps);
         } catch { /* */ }
+        break;
+      }
+      case 'ABR': {
+        const bitrate = /(?:^|\s)bitrate=(\d+)/.exec(payload)?.[1];
+        const keyframe = /(?:^|\s)keyframe=true(?:\s|$)/.test(payload);
+        if (bitrate) this.applyNetworkBitrate(Number(bitrate) * 1000);
+        if (keyframe) this.forceLocalKeyframe();
         break;
       }
       case 'NEGO_OFFER': {
@@ -1509,10 +1707,10 @@ export class SuimyakuMediaEngine {
       case 'SCREEN_DATA': {
         const frame = Uint8Array.from(atob(payload), c => c.charCodeAt(0));
         const pm = this.registry.getOrCreate(fromNick, channel, 'screen');
-        this.ensureWasm().then(() => {
+        void this.ensureWasm().then(() => {
           this.registry.decodeScreenVideo(pm, frame, 'FRAME').catch(err =>
             this.cb.onDecodeError?.(fromNick, 'screen', err));
-        });
+        }).catch(() => { bumpDrop('screen-wasm-init'); });
         break;
       }
       case 'SCREEN_MUTE': {
@@ -1584,7 +1782,10 @@ export class SuimyakuMediaEngine {
       case 'MEDIA_PONG2': {
         try {
           const sentAt = parseInt(subtype === 'MEDIA_PONG2' ? payload.split(':')[0]! : payload, 10);
-          if (!isNaN(sentAt)) this.cb.onNetworkQuality?.(this.networkTier, Date.now() - sentAt);
+          if (!isNaN(sentAt)) {
+            this.roundTripMs = Math.max(0, Date.now() - sentAt);
+            this.emitCallHealth();
+          }
         } catch { /* */ }
         break;
       }
@@ -1604,8 +1805,8 @@ export class SuimyakuMediaEngine {
             void ourPub;
           }
           if (this.cb.onTsumugiState) {
-            const fp = await vs.getFingerprint();
-            this.cb.onTsumugiState(fromNick, vs.epoch, fp);
+            const fp = await vs.getPeerFingerprint();
+            if (fp) this.cb.onTsumugiState(fromNick, vs.epoch, fp);
           }
           /* When all known peers have TSUMUGI sessions and we're in a room,
            * create/refresh the group key and distribute it. */
@@ -1617,29 +1818,15 @@ export class SuimyakuMediaEngine {
         const vs = this.tsumugiSessions.get(fromNick.toLowerCase());
         if (vs) vs.ratchet().then(async () => {
           if (this.cb.onTsumugiState) {
-            const fp = await vs.getFingerprint();
-            this.cb.onTsumugiState(fromNick, vs.epoch, fp);
+            const fp = await vs.getPeerFingerprint();
+            if (fp) this.cb.onTsumugiState(fromNick, vs.epoch, fp);
           }
         }).catch(() => { bumpDrop('tsumugi-ratchet'); });
         break;
       }
       case 'TSUMUGI_DATA': {
         const ct = Uint8Array.from(atob(payload), c => c.charCodeAt(0));
-        /* Try group key first (multi-party) */
-        if (this.tsumugiGroupKey) {
-          this.tsumugiGroupKey.decrypt(ct)
-            .then(pt => this.dispatchFrame(fromNick, channel, 'AUDIO', pt))
-            .catch(() => {
-              /* Fall back to per-peer session */
-              const vs = this.tsumugiSessions.get(fromNick.toLowerCase());
-              if (vs?.established)
-                vs.decrypt(ct).then(pt => this.dispatchFrame(fromNick, channel, 'AUDIO', pt)).catch(() => { bumpDrop('tsumugi-peer-decrypt'); });
-            });
-        } else {
-          const vs = this.tsumugiSessions.get(fromNick.toLowerCase());
-          if (!vs?.established) break;
-          vs.decrypt(ct).then(pt => this.dispatchFrame(fromNick, channel, 'AUDIO', pt)).catch(() => { bumpDrop('tsumugi-peer-decrypt'); });
-        }
+        this.decryptProtectedAudio(fromNick, channel, ct);
         break;
       }
       case 'TSUMUGI_GROUP_KEY': {
@@ -1659,8 +1846,11 @@ export class SuimyakuMediaEngine {
         break;
       }
       case 'VOICE_DATA':
-        this.dispatchFrame(fromNick, channel, 'AUDIO',
-                           Uint8Array.from(atob(payload), c => c.charCodeAt(0)));
+        this.dispatchPlaintextAudio(
+          fromNick,
+          channel,
+          Uint8Array.from(atob(payload), c => c.charCodeAt(0)),
+        );
         break;
       case 'VIDEO_DATA':
         this.dispatchFrame(fromNick, channel, 'FRAME',
@@ -1719,7 +1909,9 @@ export class SuimyakuMediaEngine {
 
   private dispatchFrame(nick: string, channel: string, ftype: string, frame: Uint8Array) {
     if (!this.wasmReady) {
-      this.ensureWasm().then(() => this.dispatchFrame(nick, channel, ftype, frame));
+      void this.ensureWasm()
+        .then(() => this.dispatchFrame(nick, channel, ftype, frame))
+        .catch(() => { bumpDrop('dispatch-wasm-init'); });
       return;
     }
     const kind: MediaKind = ftype === 'AUDIO' ? 'voice' : 'video';
@@ -1749,13 +1941,17 @@ export class SuimyakuMediaEngine {
 
   private setActiveRoom(channel: string) {
     this.activeRoom = channel;
-    this.setCallState('in_call', '', channel);
     // Drop any prior call's MAC key/stream map; the new call's MACKEY repopulates.
     this.wsMediaKey = null;
     this.wsStreamMacKeys.clear();
     this.wsAudSeq = 0;
     this.wsVidSeq = 0;
     this.streamRouter.clear();
+    this.packetLoss.clear();
+    this.throughputSampleAt = Date.now();
+    this.mediaBytesSinceSample = 0;
+    this.startHealthTelemetry();
+    this.setCallState('in_call', '', channel);
     if (!this.audioLevelTimer) {
       this.audioLevelTimer = setInterval(() => {
         for (const [nick, level] of this.registry.peerLevels)
@@ -1794,6 +1990,7 @@ export class SuimyakuMediaEngine {
   }
 
   private async sendTsumugiHandshake(target: string): Promise<void> {
+    if (!TSUMUGI_AUDIO_E2EE_ENABLED) return;
     if (!this.client || !target) return;
     const id = await this.ensureTsumugiIdentity();
     const pub = await id.exportPublicKey();
@@ -1804,11 +2001,17 @@ export class SuimyakuMediaEngine {
     this.callState = state; this.callWith = nick;
     if (channel !== null) this.activeRoom = channel;
     this.cb.onCallState(state, nick, channel ?? this.activeRoom);
+    if (state === 'in_call' && this.activeRoom) {
+      this.startHealthTelemetry();
+      this.emitCallHealth();
+    }
   }
 
   private setIdle() {
     this.clearRingTimer();
     if (this.rejoinTimer) { clearTimeout(this.rejoinTimer); this.rejoinTimer = null; }
+    if (this.reconnectGraceTimer) { clearTimeout(this.reconnectGraceTimer); this.reconnectGraceTimer = null; }
+    if (this.healthTimer) { clearInterval(this.healthTimer); this.healthTimer = null; }
     this.stopAudioCapture(); this.stopVideoCapture(); this.stopSpeakingMeter();
     if (this.audioLevelTimer) { clearInterval(this.audioLevelTimer); this.audioLevelTimer = null; }
     this.registry.peerLevels.clear();
@@ -1816,6 +2019,7 @@ export class SuimyakuMediaEngine {
     this.tsumugiSessions.clear();
     this.tsumugiGroupKey = null;
     this.tsumugiGroupKeyPromise = null;
+    this.audioEncryptionFailureReported = false;
     // WS media plane teardown.
     this.wsMediaKey = null;
     this.wsStreamMacKeys.clear();
@@ -1824,7 +2028,11 @@ export class SuimyakuMediaEngine {
     this.wsVidSeq = 0;
     this.streamRouter.clear();
     if (this.gcTimer) { clearInterval(this.gcTimer); this.gcTimer = null; }
-    this.suggestedBps = 0; this.networkTier = 0; this.videoSkipCount = 0;
+    this.suggestedBps = 0; this.measuredBps = 0; this.networkTier = 0; this.prevNetworkTier = 0; this.videoSkipCount = 0;
+    this.lastLossRate = 0; this.roundTripMs = 0; this.encodePressure = 0;
+    this.roomStats = null; this.reconnectAttempt = 0; this.lastAbrReportAt = 0;
+    this.mediaBytesSinceSample = 0; this.forceNextVideoKeyframe = false;
+    this.packetLoss.clear(); this.qualityController.reset();
     this.audioQuality = AUDIO_QUALITY; this.nearCapacityFired = false;
     this.pttMode = false; this.pttActive = false;
     if (this.recorder) { this.recorder.stop(); this.recorder = null; this.recChunks = []; }
@@ -1836,6 +2044,7 @@ export class SuimyakuMediaEngine {
     this.releaseMedia();
     this.callState = 'idle'; this.callWith = ''; this.activeRoom = null;
     this.cb.onCallState('idle', '', null);
+    this.emitCallHealth();
   }
 
   private startRingTimer(target: string) {
@@ -1852,47 +2061,147 @@ export class SuimyakuMediaEngine {
     this.ringTimer = null;
   }
 
+  private scheduleRoomRejoin(): void {
+    const room = this.activeRoom;
+    if (!room) return;
+    if (this.rejoinTimer) clearTimeout(this.rejoinTimer);
+    this.rejoinTimer = setTimeout(() => {
+      this.rejoinTimer = null;
+      if (!this.client || !this.transportConnected || this.activeRoom !== room || this.callState !== 'in_call') return;
+      this.mediaframeCmd(room, 'VOICE_JOIN', `${SAMPLE_RATE} ${AUDIO_CHANNELS}`);
+      if (this.localKind === 'video' || this.localKind === 'screen') {
+        const profile = this.localVideoProfile ?? videoProfileFor(this.localKind);
+        this.mediaframeCmd(
+          room,
+          'VIDEO_JOIN',
+          `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}${profile.screenShare ? ' screen' : ''}`,
+        );
+      }
+      this.mediaframeCmd(room, 'ROSTER');
+      this.forceLocalKeyframe();
+      this.emitCallHealth();
+    }, REJOIN_DELAY_MS);
+  }
+
+  private noteEncodePressure(encodeMs: number, frameBudgetMs: number): void {
+    if (!Number.isFinite(encodeMs) || !Number.isFinite(frameBudgetMs) || frameBudgetMs <= 0) return;
+    const sample = Math.max(0, Math.min(4, encodeMs / frameBudgetMs));
+    this.encodePressure = this.encodePressure === 0
+      ? sample
+      : this.encodePressure * 0.85 + sample * 0.15;
+  }
+
+  private forceLocalKeyframe(): void {
+    this.forceNextVideoKeyframe = true;
+    this.vidWorker?.postMessage({ type: 'keyreq' });
+  }
+
+  private startHealthTelemetry(): void {
+    if (this.healthTimer) return;
+    this.healthTimer = setInterval(() => this.sampleCallHealth(), HEALTH_POLL_MS);
+  }
+
+  private sampleCallHealth(): void {
+    if (this.callState !== 'in_call' || !this.activeRoom) return;
+    const now = Date.now();
+    const elapsed = Math.max(1, now - this.throughputSampleAt);
+    this.measuredBps = Math.round((this.mediaBytesSinceSample * 8 * 1000) / elapsed);
+    this.mediaBytesSinceSample = 0;
+    this.throughputSampleAt = now;
+    this.lastLossRate = this.packetLoss.lossRate();
+
+    const result = this.qualityController.observe({
+      suggestedBps: this.suggestedBps > 0 ? this.suggestedBps : null,
+      lossRate: this.lastLossRate,
+      encodePressure: this.encodePressure,
+    });
+    if (result.changed) this.applyNetworkTier(result.tier);
+    if (this.lastLossRate >= LOSS_KEYFRAME_THRESHOLD) this.reportAbr(false);
+    this.emitCallHealth();
+  }
+
+  /** Report receiver health through Orochi's supported MEDIA ABR control path. */
+  private reportAbr(force: boolean): void {
+    const now = Date.now();
+    if (!this.client || !this.transportConnected || !this.activeRoom) return;
+    if (!force && now - this.lastAbrReportAt < ABR_REPORT_MIN_MS) return;
+    this.lastAbrReportAt = now;
+    const currentKbps = Math.max(1, Math.round((this.measuredBps || this.suggestedBps || 64_000) / 1000));
+    const availableKbps = Math.max(currentKbps, Math.round((this.suggestedBps || this.measuredBps || 64_000) / 1000));
+    const lossPercent = Math.max(0, Math.min(100, Math.round(this.lastLossRate * 100)));
+    const rttMs = Math.max(0, Math.min(65_535, Math.round(this.roundTripMs)));
+    this.client.sendRaw('MEDIA', 'ABR', this.activeRoom, String(currentKbps), String(availableKbps), String(lossPercent), String(rttMs), '0');
+    // Until the ABR response arrives, make our own outbound stream independently
+    // decodable as well. This is harmless in voice-only rooms.
+    if (force || this.lastLossRate >= LOSS_KEYFRAME_THRESHOLD) this.forceLocalKeyframe();
+  }
+
+  private emitCallHealth(): void {
+    const active = this.callState === 'in_call' && this.activeRoom !== null;
+    const status: SuimyakuCallHealth['status'] = !active
+      ? 'idle'
+      : !this.transportConnected
+        ? 'reconnecting'
+        : this.networkTier >= 2 || this.lastLossRate >= 0.05 || this.encodePressure >= 1
+          ? 'degraded'
+          : 'healthy';
+    this.cb.onCallHealth?.({
+      status,
+      transportConnected: this.transportConnected,
+      tier: this.networkTier,
+      suggestedBps: this.suggestedBps || this.measuredBps,
+      jitterMs: this.registry.lastJitterMs,
+      lossRate: this.lastLossRate,
+      roundTripMs: this.roundTripMs,
+      encodePressure: this.encodePressure,
+      roomStats: this.roomStats ? { ...this.roomStats } : null,
+      reconnectAttempt: this.reconnectAttempt,
+      updatedAt: Date.now(),
+    });
+  }
+
   private applyNetworkBitrate(bps: number) {
     this.suggestedBps = bps;
-    const tier: NetworkQualityTier =
-      bps >= BW_TIER_GOOD ? 0 : bps >= BW_TIER_FAIR ? 1 : bps >= BW_TIER_POOR ? 2 : 3;
-    if (tier !== this.networkTier) {
-      this.prevNetworkTier = this.networkTier;
-      this.networkTier = tier;
-      this.cb.onNetworkQuality?.(tier, bps);
+    const result = this.qualityController.observe({
+      suggestedBps: bps,
+      lossRate: this.lastLossRate,
+      encodePressure: this.encodePressure,
+    });
+    if (result.changed) this.applyNetworkTier(result.tier);
+    else this.emitCallHealth();
+  }
 
-      /* Notify the encode worker of the new tier so it can update its draw
-       * canvas resolution.  The fallback path reads this.networkTier directly
-       * inside onVideoTick(). */
-      if (this.vidWorker) {
-        this.vidWorker.postMessage({ type: 'tier', tier });
-      }
+  private applyNetworkTier(tier: NetworkQualityTier): void {
+    if (tier === this.networkTier) return;
+    this.prevNetworkTier = this.networkTier;
+    this.networkTier = tier;
+    this.cb.onNetworkQuality?.(tier, this.suggestedBps || this.measuredBps);
 
-      if (tier < this.prevNetworkTier && this.activeRoom) {
-        for (const pm of this.registry.all()) {
-          if (pm.vidDec) this.sendFrame(this.activeRoom, 'VIDEO_KEYREQ', msgpackArray1(pm.state.nick));
-        }
-      }
-      if (this.localKind === 'screen' && this.localStream) {
-        const videoTrack = this.localStream.getVideoTracks()[0];
-        if (videoTrack) {
-          const c: MediaTrackConstraints =
-            tier === 0 ? {} : tier === 1 ? { width: 1280, height: 720 }
+    /* Notify the encode worker of the new tier so it can update its draw
+     * canvas resolution. The fallback path reads this.networkTier directly. */
+    this.vidWorker?.postMessage({ type: 'tier', tier });
+    if (tier < this.prevNetworkTier) this.forceLocalKeyframe();
+
+    if (this.localKind === 'screen' && this.localStream) {
+      const videoTrack = this.localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        const constraints: MediaTrackConstraints =
+          tier === 0 ? {} : tier === 1 ? { width: 1280, height: 720 }
             : tier === 2 ? { width: 854, height: 480 } : { width: 640, height: 360 };
-          videoTrack.applyConstraints(c).catch(() => { bumpDrop('screen-constraints'); });
-        }
+        videoTrack.applyConstraints(constraints).catch(() => { bumpDrop('screen-constraints'); });
       }
-      const targetQ: KaguraVoxQuality = tier <= 1 ? 2 : tier === 2 ? 1 : 0;
-      if (targetQ !== this.audioQuality && this.audEnc && this.wasm) {
-        this.audioQuality = targetQ;
-        this.audEnc.destroy();
-        this.audEnc = this.wasm.audioEncoder(SAMPLE_RATE, targetQ);
-      }
-      if (bps < BW_AUDIO_ONLY && (this.vidEnc || this.vidWorker)) this.stopVideoCapture();
     }
+    const targetQuality: KaguraVoxQuality = tier <= 1 ? 2 : tier === 2 ? 1 : 0;
+    if (targetQuality !== this.audioQuality && this.audEnc && this.wasm) {
+      this.audioQuality = targetQuality;
+      this.audEnc.destroy();
+      this.audEnc = this.wasm.audioEncoder(SAMPLE_RATE, targetQuality);
+    }
+    this.emitCallHealth();
   }
 
   private async maybeDistributeTsumugiGroup() {
+    if (!TSUMUGI_AUDIO_E2EE_ENABLED) return;
     if (!this.activeRoom || !this.client) return;
     const established = [...this.tsumugiSessions.entries()].filter(([, vs]) => vs.established);
     if (established.length === 0) return;
@@ -1936,53 +2245,6 @@ export class SuimyakuMediaEngine {
     }
   }
 }
-
-// ----------------------------------------------------------------
-// AudioWorklet processor (inlined as data-URL)
-// ----------------------------------------------------------------
-
-const AUDIO_WORKLET_CODE = `
-class KaguraVoxCapture extends AudioWorkletProcessor {
-  constructor(opts) {
-    super();
-    // frameSize is the interleaved-stereo sample count the encoder expects
-    // (KAGURAVOX_FRAME_48K * 2). The mic delivers MONO, so accumulate half that
-    // many mono samples per frame, then duplicate each into L and R. The
-    // previous code accumulated the full stereo count of mono samples and
-    // copied 1:1, which the encoder read as alternating L/R — decimating
-    // each channel to 24 kHz with aliasing.
-    const stereoFrame = opts.processorOptions.frameSize || 1920;
-    this._mono = stereoFrame >> 1;
-    this._buf = new Float32Array(this._mono);
-    this._pos = 0;
-  }
-  process(inputs) {
-    const ch = inputs[0]?.[0];
-    if (!ch) return true;
-    let i = 0;
-    while (i < ch.length) {
-      const take = Math.min(ch.length - i, this._mono - this._pos);
-      for (let k = 0; k < take; k++) {
-        const v = Math.max(-1, Math.min(1, ch[i + k]));
-        this._buf[this._pos + k] = v;
-      }
-      this._pos += take; i += take;
-      if (this._pos === this._mono) {
-        const i16 = new Int16Array(this._mono * 2);
-        for (let j = 0; j < this._mono; j++) {
-          const s = this._buf[j] * 32767;
-          i16[j * 2]     = s;
-          i16[j * 2 + 1] = s;
-        }
-        this.port.postMessage(i16, [i16.buffer]);
-        this._pos = 0;
-      }
-    }
-    return true;
-  }
-}
-registerProcessor('kaguravox-capture', KaguraVoxCapture);
-`;
 
 // ----------------------------------------------------------------
 // Convenience subclasses

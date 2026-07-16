@@ -7,7 +7,7 @@ import {
 	type WeeChatLine,
 	type WeeChatNick,
 } from './types';
-import { parseIrcv3Tags } from '@/lib/irc-classic/tags';
+import { parseIrcv3Tags, replyParentFromTags } from '@/lib/irc-classic/tags';
 import { stripColors } from './strip-colors';
 import { canDecodeRelayCompression, WeeRelayParser } from './parser';
 import {
@@ -23,6 +23,7 @@ import {
 	quitCmd,
 	syncCmd,
 	type HandshakeResult,
+	type PasswordHashAlgo,
 } from './serializer';
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,49 @@ export interface BufferSwitchedEvent { id: string }
 export interface AuthenticatedEvent { version: string }
 export interface StateChangedEvent { state: ConnectionState }
 export interface RelayErrorEvent { message: string }
+
+export type RelayPhase =
+	| 'idle'
+	| 'opening-socket'
+	| 'negotiating-handshake'
+	| 'deriving-password-hash'
+	| 'authenticating'
+	| 'synchronizing'
+	| 'ready'
+	| 'reconnect-wait'
+	| 'failed';
+
+export type RelayProtocolMode = 'none' | 'pending' | 'password-hash' | 'legacy-init';
+export type RelayReconnectReason = 'none' | 'network' | 'authentication' | 'server-close';
+export type RelayHandshakeSupport = 'unknown' | 'available' | 'unavailable';
+export type RelayCompressionMode = 'off' | 'zlib' | 'unknown';
+
+/**
+ * Whitelist-only relay health snapshot. It intentionally contains no endpoint,
+ * close reason, username, password, or raw protocol/error text.
+ */
+export interface RelayDiagnostics {
+	phase: RelayPhase;
+	transport: 'ws' | 'wss';
+	protocolMode: RelayProtocolMode;
+	authMode: 'pending' | 'hashed' | 'legacy' | 'none';
+	serverVersion: string;
+	compression: RelayCompressionMode;
+	hashAlgorithm: PasswordHashAlgo | 'none';
+	totp: boolean;
+	handshake: RelayHandshakeSupport;
+	canDecodeCompression: boolean;
+	reconnectReason: RelayReconnectReason;
+	reconnectAttempt: number;
+	reconnectDelayMs: number;
+}
+
+export type RelayDiagnosticsChangedEvent = RelayDiagnostics;
+
+function compressionMode(value: string): RelayCompressionMode {
+	if (value === 'off' || value === 'zlib') return value;
+	return 'unknown';
+}
 
 // stripColors imported from ./strip-colors
 
@@ -134,7 +178,7 @@ function itemToLine(item: { pointers: string[]; objects: Record<string, unknown>
 	})();
 
 	const msgid = ircTags.get('msgid');
-	const replyTo = ircTags.get('+reply');
+	const replyTo = replyParentFromTags(ircTags);
 	const account = ircTags.get('account');
 
 	return {
@@ -294,6 +338,10 @@ export class WeeRelayClient extends EventTarget {
 	// Bumped on every connect() so an async hash that resolves after a reconnect
 	// can detect it belongs to a stale connection and drop its send.
 	private connectEpoch = 0;
+	private authMode: 'pending' | 'hashed' | 'legacy' = 'pending';
+	private serverVersion = '';
+	private negotiatedCompression = 'off';
+	private diagnosticState: RelayDiagnostics;
 
 	// Track recently dispatched line IDs to catch protocol-level duplicates
 	private recentLineIds = new Set<string>();
@@ -309,6 +357,21 @@ export class WeeRelayClient extends EventTarget {
 	constructor(settings: RelaySettings) {
 		super();
 		this.settings = { ...settings };
+		this.diagnosticState = {
+			phase: 'idle',
+			transport: settings.tls ? 'wss' : 'ws',
+			protocolMode: 'none',
+			authMode: 'none',
+			serverVersion: '',
+			compression: 'off',
+			hashAlgorithm: 'none',
+			totp: false,
+			handshake: 'unknown',
+			canDecodeCompression: this.canDecodeCompression,
+			reconnectReason: 'none',
+			reconnectAttempt: 0,
+			reconnectDelayMs: 0,
+		};
 	}
 
 	// -----------------------------------------------------------------------
@@ -328,8 +391,20 @@ export class WeeRelayClient extends EventTarget {
 		this.authStarted = false;
 		this.handshakeAttempted = false;
 		this.authFailed = false;
+		this.authMode = 'pending';
 		this.connectEpoch += 1;
 		this.cancelHandshakeTimer();
+		this.updateDiagnostics({
+			phase: 'opening-socket',
+			transport: this.settings.tls ? 'wss' : 'ws',
+			protocolMode: 'pending',
+			authMode: 'pending',
+			compression: 'off',
+			hashAlgorithm: 'none',
+			totp: false,
+			handshake: 'unknown',
+			reconnectDelayMs: 0,
+		});
 		this.setState(ConnectionState.CONNECTING);
 
 		const scheme = this.settings.tls ? 'wss' : 'ws';
@@ -341,7 +416,7 @@ export class WeeRelayClient extends EventTarget {
 		} catch (err) {
 			this.emitError(`WebSocket creation failed: ${String(err)}`);
 			this.setState(ConnectionState.ERROR);
-			this.scheduleReconnect();
+			this.scheduleReconnect('network');
 			return;
 		}
 
@@ -396,25 +471,36 @@ export class WeeRelayClient extends EventTarget {
 			this.cancelHandshakeTimer();
 			this.ws = null;
 			this.resetAccumulator();
-			if (this.cleanDisconnect) {
-				this.setState(ConnectionState.DISCONNECTED);
-				return;
-			}
+				if (this.cleanDisconnect) {
+					this.updateDiagnostics({ phase: 'idle', reconnectReason: 'none', reconnectDelayMs: 0 });
+					this.setState(ConnectionState.DISCONNECTED);
+					return;
+				}
 			if (this.authFailed) {
 				// Both auth paths failed pre-authentication: the relay rejected the
 				// password. Stop reconnecting (cancel any pending timer) and surface a
 				// clear, actionable error instead of cycling silently forever. A manual
 				// connect() resets authFailed and retries.
 				this.cancelReconnect();
-				this.emitError(
-					'Authentication failed — the relay rejected the password (check your relay password)'
-				);
-				this.setState(ConnectionState.ERROR);
-				return;
-			}
-			if (ev.code === 1000 && !hadError) {
-				this.setState(ConnectionState.DISCONNECTED);
-			} else {
+					this.emitError(
+						'Authentication failed — the relay rejected the password (check your relay password)'
+					);
+					this.updateDiagnostics({
+						phase: 'failed',
+						reconnectReason: 'authentication',
+						reconnectDelayMs: 0,
+					});
+					this.setState(ConnectionState.ERROR);
+					return;
+				}
+				if (ev.code === 1000 && !hadError) {
+					this.updateDiagnostics({
+						phase: 'idle',
+						reconnectReason: 'server-close',
+						reconnectDelayMs: 0,
+					});
+					this.setState(ConnectionState.DISCONNECTED);
+				} else {
 				// Build a helpful error message from the close event.
 				// If we've already authenticated once, TLS/network errors are likely
 				// background-tab disconnects — don't show the self-signed cert advice.
@@ -431,12 +517,17 @@ export class WeeRelayClient extends EventTarget {
 				} else if (ev.reason && !this._wasAuthenticated) {
 					msg = `Disconnected: ${ev.reason} (code ${ev.code})`;
 				}
-				// Only emit error if there's a meaningful message.
-				// Reconnects after working sessions are silent.
-				if (msg) this.emitError(msg);
-				this.setState(ConnectionState.RECONNECTING);
-				this.scheduleReconnect();
-			}
+					// Only emit error if there's a meaningful message.
+					// Reconnects after working sessions are silent.
+					if (msg) this.emitError(msg);
+					const reconnectReason: RelayReconnectReason = hadError
+						? 'network'
+						: this.state === ConnectionState.AUTHENTICATING
+							? 'authentication'
+							: 'server-close';
+					this.setState(ConnectionState.RECONNECTING);
+					this.scheduleReconnect(reconnectReason);
+				}
 		};
 	}
 
@@ -457,20 +548,37 @@ export class WeeRelayClient extends EventTarget {
 			clearTimeout(this.recentLineTimer);
 			this.recentLineTimer = null;
 		}
+		this.updateDiagnostics({
+			phase: 'idle',
+			protocolMode: 'none',
+			authMode: 'none',
+			reconnectReason: 'none',
+			reconnectAttempt: 0,
+			reconnectDelayMs: 0,
+		});
 		this.setState(ConnectionState.DISCONNECTED);
 	}
 
-	send(text: string): void {
-		if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-		try { this.ws.send(text); } catch { /* closing race */ }
+	send(text: string): boolean {
+		if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+		try {
+			this.ws.send(text);
+			return true;
+		} catch {
+			// The socket can enter CLOSING between the readyState check and send.
+			return false;
+		}
 	}
 
 	sendPing(arg: string): void {
 		this.send(pingCmd(arg));
 	}
 
-	sendInput(buffer: string, text: string): void {
-		this.send(inputCmd(buffer, text));
+	sendInput(buffer: string, text: string): boolean {
+		// WebSocket.OPEN is not sufficient: the socket is already open during
+		// handshake/authentication, when relay input would be ignored or rejected.
+		if (this.state !== ConnectionState.CONNECTED) return false;
+		return this.send(inputCmd(buffer, text));
 	}
 
 	requestHistory(buffer: string, count = 100): void {
@@ -499,16 +607,28 @@ export class WeeRelayClient extends EventTarget {
 		this.send(nicklistCmd(ID_NICKLIST, buffer));
 	}
 
+	diagnostics(): RelayDiagnostics {
+		return { ...this.diagnosticState };
+	}
+
 	// -----------------------------------------------------------------------
 	// Post-auth bootstrap
 	// -----------------------------------------------------------------------
 
 	private onAuthenticated(version: string): void {
+		this.serverVersion = version;
 		this._wasAuthenticated = true;
 		this.reconnectAttempts = 0;
 		// A genuinely working session is the ONLY thing that clears the handshake
 		// close-strike counter — not a mere `_handshake` reply (see onHandshakeReply).
 		this.handshakeCloseStrikes = 0;
+		this.updateDiagnostics({
+			phase: 'synchronizing',
+			serverVersion: version.slice(0, 40),
+			reconnectReason: 'none',
+			reconnectAttempt: 0,
+			reconnectDelayMs: 0,
+		});
 		this.setState(ConnectionState.CONNECTED);
 		this.dispatch('authenticated', { version } satisfies AuthenticatedEvent);
 
@@ -562,6 +682,12 @@ export class WeeRelayClient extends EventTarget {
 			this.startLegacyAuth();
 			return;
 		}
+		this.updateDiagnostics({
+			phase: 'negotiating-handshake',
+			protocolMode: 'pending',
+			authMode: 'pending',
+			handshake: 'unknown',
+		});
 		this.handshakeAttempted = true;
 		this.send(handshakeCmd(this.settings.compression, this.canDecodeCompression));
 		this.cancelHandshakeTimer();
@@ -606,6 +732,16 @@ export class WeeRelayClient extends EventTarget {
 			this.startLegacyAuth();
 			return;
 		}
+		this.negotiatedCompression = result.compression;
+		this.updateDiagnostics({
+			phase: 'deriving-password-hash',
+			protocolMode: 'password-hash',
+			authMode: 'pending',
+			compression: compressionMode(result.compression),
+			hashAlgorithm: result.algo,
+			totp: result.totp,
+			handshake: 'available',
+		});
 
 		// NOTE: a `_handshake` reply is NOT authentication success — the relay can
 		// still REJECT the `init password_hash` we are about to send and close the
@@ -629,6 +765,13 @@ export class WeeRelayClient extends EventTarget {
 			// so force the legacy send directly rather than routing through the guard.
 			this.emitError(`Relay password hashing failed (${String(err)}); using legacy auth`);
 			if (epoch !== this.connectEpoch) return; // stale connection
+			this.authMode = 'legacy';
+			this.updateDiagnostics({
+				phase: 'authenticating',
+				protocolMode: 'legacy-init',
+				authMode: 'legacy',
+				hashAlgorithm: 'none',
+			});
 			this.send(initCmd(this.settings.password, this.settings.compression, this.canDecodeCompression));
 			this.send(infoCmd(ID_VERSION, 'version'));
 			return;
@@ -638,6 +781,8 @@ export class WeeRelayClient extends EventTarget {
 		// handshake) would fail the salt/nonce check. Drop it if the connection
 		// generation moved.
 		if (epoch !== this.connectEpoch) return;
+		this.authMode = 'hashed';
+		this.updateDiagnostics({ phase: 'authenticating', authMode: 'hashed' });
 		this.send(initLine);
 		this.send(infoCmd(ID_VERSION, 'version'));
 	}
@@ -646,6 +791,18 @@ export class WeeRelayClient extends EventTarget {
 	private startLegacyAuth(): void {
 		if (this.authStarted) return;
 		this.authStarted = true;
+		this.authMode = 'legacy';
+		const compression = this.settings.compression && this.canDecodeCompression ? 'zlib' : 'off';
+		this.negotiatedCompression = compression;
+		this.updateDiagnostics({
+			phase: 'authenticating',
+			protocolMode: 'legacy-init',
+			authMode: 'legacy',
+			compression,
+			hashAlgorithm: 'none',
+			totp: false,
+			handshake: 'unavailable',
+		});
 		this.send(initCmd(this.settings.password, this.settings.compression, this.canDecodeCompression));
 		this.send(infoCmd(ID_VERSION, 'version'));
 	}
@@ -851,6 +1008,9 @@ export class WeeRelayClient extends EventTarget {
 		this.dispatch('buffersLoaded', {
 			buffers: Array.from(this.buffers.values()),
 		} satisfies BuffersLoadedEvent);
+		if (this.state === ConnectionState.CONNECTED) {
+			this.updateDiagnostics({ phase: 'ready' });
+		}
 	}
 
 	private routeHotlist(objects: Array<{ type: string; value: unknown }>): void {
@@ -1043,10 +1203,16 @@ export class WeeRelayClient extends EventTarget {
 	// Reconnect scheduling
 	// -----------------------------------------------------------------------
 
-	private scheduleReconnect(): void {
+	private scheduleReconnect(reason: RelayReconnectReason): void {
 		this.cancelReconnect();
 		const delay = backoff(this.reconnectAttempts);
 		this.reconnectAttempts += 1;
+		this.updateDiagnostics({
+			phase: 'reconnect-wait',
+			reconnectReason: reason,
+			reconnectAttempt: this.reconnectAttempts,
+			reconnectDelayMs: delay,
+		});
 		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null;
 			this.connect();
@@ -1068,6 +1234,21 @@ export class WeeRelayClient extends EventTarget {
 		if (this.state === s) return;
 		this.state = s;
 		this.dispatch('stateChanged', { state: s } satisfies StateChangedEvent);
+	}
+
+	private updateDiagnostics(patch: Partial<RelayDiagnostics>): void {
+		let changed = false;
+		for (const [key, value] of Object.entries(patch) as Array<
+			[keyof RelayDiagnostics, RelayDiagnostics[keyof RelayDiagnostics]]
+		>) {
+			if (this.diagnosticState[key] !== value) {
+				changed = true;
+				break;
+			}
+		}
+		if (!changed) return;
+		this.diagnosticState = { ...this.diagnosticState, ...patch };
+		this.dispatch('diagnosticsChanged', this.diagnostics() satisfies RelayDiagnosticsChangedEvent);
 	}
 
 	private emitError(message: string): void {

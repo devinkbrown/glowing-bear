@@ -16,6 +16,14 @@ async function pair(): Promise<[TsumugiSession, TsumugiSession]> {
 }
 
 describe('TsumugiSession', () => {
+  it('reports the established peer fingerprint rather than the local identity', async () => {
+    const a = await TsumugiSession.create();
+    const b = await TsumugiSession.create();
+    await a.ingestPeerKey(await b.exportPublicKey());
+    expect(await a.getPeerFingerprint()).toBe(await b.getFingerprint());
+    expect(await a.getPeerFingerprint()).not.toBe(await a.getFingerprint());
+  });
+
   it('exports a 65-byte uncompressed P-256 public key', async () => {
     const s = await TsumugiSession.create();
     const pub = await s.exportPublicKey();

@@ -33,6 +33,8 @@ export interface PeerMedia {
   screenH:        number;
   videoFps:       number;
   screenFps:      number;
+  /** Last decoded audio arrival for this peer; never mix interleaved peers. */
+  lastAudioDecodeAt: number;
   /** Cached ImageData for camera video rendering — avoids per-frame allocation. */
   vidImageData:   ImageData | null;
   /** Cached ImageData for screen video rendering — avoids per-frame allocation. */
@@ -53,7 +55,6 @@ export class PeerRegistry {
 
   /** Accumulated inter-arrival jitter (EMA) */
   lastJitterMs = 0;
-  private lastDecodeAt = 0;
 
   private wasm: OpcodecWasm | null = null;
   private readonly sampleRate: number;
@@ -96,6 +97,7 @@ export class PeerRegistry {
       panner: null, outputGain: null, lastKeyW: 0, lastKeyH: 0, lastScreenKeyW: 0, lastScreenKeyH: 0,
       videoW: this.videoW, videoH: this.videoH, screenW: this.videoW, screenH: this.videoH,
       videoFps: 60, screenFps: 60,
+      lastAudioDecodeAt: 0,
       vidImageData: null, screenImageData: null,
     };
   }
@@ -182,6 +184,7 @@ export class PeerRegistry {
     pm.state.canvas  = null;
     pm.vidImageData   = null;
     pm.screenImageData = null;
+    pm.lastAudioDecodeAt = 0;
     this.decodeErrors.set(nick.toLowerCase(), 0);
   }
 
@@ -195,6 +198,7 @@ export class PeerRegistry {
 
   clear() {
     for (const nick of Array.from(this.peers.keys())) this.remove(nick);
+    this.lastJitterMs = 0;
   }
 
   getScreenStream(nick: string): MediaStream | null {
@@ -298,13 +302,13 @@ export class PeerRegistry {
 
     /* Inter-arrival jitter (EMA) */
     const now = Date.now();
-    if (this.lastDecodeAt > 0) {
-      const iat      = now - this.lastDecodeAt;
+    if (pm.lastAudioDecodeAt > 0) {
+      const iat      = now - pm.lastAudioDecodeAt;
       const expected = (KAGURAVOX_FRAME_48K / this.sampleRate) * 1000;
       const diff     = Math.abs(iat - expected);
       this.lastJitterMs = this.lastJitterMs * 0.9 + diff * 0.1;
     }
-    this.lastDecodeAt = now;
+    pm.lastAudioDecodeAt = now;
 
     const prevSpeaking = pm.state.speaking;
     pm.state.speaking  = rms > this.speakingRms;

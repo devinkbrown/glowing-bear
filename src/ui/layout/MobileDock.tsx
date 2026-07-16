@@ -5,12 +5,15 @@ import {
   getTotalHighlights,
   getTotalUnread,
   openModal,
+  openActivityPanel,
+  activityUnreadCount,
   setSidebarOpen,
   setUserListOpen,
   toggleSearch,
   uiState,
 } from '@/state';
 import { bufferKind } from '@/lib/bufferKind';
+import { t } from '@/lib/i18n';
 
 const BADGE_MAX = 99;
 
@@ -75,7 +78,7 @@ export default function MobileDock() {
   const activeName = createMemo(() => {
     const ptr = buffersState.activeBuffer;
     const entry = ptr ? buffersState.buffers[ptr] : undefined;
-    return entry?.buffer.shortName || entry?.buffer.name || 'No buffer';
+    return entry?.buffer.shortName || entry?.buffer.name || t('mobile.noBuffer');
   });
 
   return (
@@ -95,9 +98,9 @@ export default function MobileDock() {
           </span>
         </Show>
       </div>
-      <div class="mx-auto grid max-w-[520px] grid-cols-5 gap-1 rounded-xl border border-white/[0.07] bg-black/25 p-0.5 shadow-2xl shadow-black/30">
+      <div class="mx-auto grid max-w-[520px] grid-cols-6 gap-1 rounded-xl border border-white/[0.07] bg-black/25 p-0.5 shadow-2xl shadow-black/30">
         <DockButton
-          label="Buffers"
+          label={t('mobile.buffers')}
           expanded={uiState.sidebarOpen}
           active={uiState.sidebarOpen}
           badge={mentions() > 0 ? mentions() : unread()}
@@ -114,7 +117,7 @@ export default function MobileDock() {
         </DockButton>
 
         <DockButton
-          label="Search"
+          label={t('mobile.search')}
           active={uiState.searchOpen}
           onClick={() => {
             closeModal();
@@ -130,7 +133,7 @@ export default function MobileDock() {
         </DockButton>
 
         <DockButton
-          label="Channels"
+          label={t('mobile.channels')}
           active={uiState.activeModal === 'channelList'}
           onClick={() => {
             setSidebarOpen(false);
@@ -144,7 +147,7 @@ export default function MobileDock() {
         </DockButton>
 
         <DockButton
-          label="Users"
+          label={t('mobile.users')}
           active={uiState.userListOpen}
           disabled={!isChannel()}
           onClick={() => {
@@ -161,7 +164,7 @@ export default function MobileDock() {
         </DockButton>
 
         <DockButton
-          label="Settings"
+          label={t('mobile.settings')}
           active={uiState.activeModal === 'settings'}
           onClick={() => {
             setSidebarOpen(false);
@@ -172,6 +175,22 @@ export default function MobileDock() {
           <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="8" cy="8" r="2.4" />
             <path d="M8 1.6v1.5M8 12.9v1.5M1.6 8h1.5M12.9 8h1.5M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1" />
+          </svg>
+        </DockButton>
+
+        <DockButton
+          label={t('mobile.activity')}
+          active={false}
+          badge={activityUnreadCount()}
+          hot={activityUnreadCount() > 0}
+          onClick={() => {
+            setSidebarOpen(false);
+            setUserListOpen(false);
+            openActivityPanel();
+          }}
+        >
+          <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <path d="M3 5a5 5 0 0110 0v3l1.5 2H1.5L3 8zM6 13h4" />
           </svg>
         </DockButton>
       </div>

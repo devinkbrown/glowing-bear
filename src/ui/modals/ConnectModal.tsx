@@ -1,7 +1,7 @@
 // ConnectModal — full-screen login / relay connection screen.
 //
-// Faithful port of the old React ConnectModal: AstronautBear hero over an
-// animated theme-aware background, horizontal theme picker (all 19 themes),
+// Faithful port of the old React ConnectModal: AstronautBear hero over a
+// lightweight animated theme-aware washes, horizontal theme picker (all 19 themes),
 // saved profile chips, host/port/TLS/password form (show-password toggle),
 // Advanced section (compression toggle, TOTP toggle + 6-digit code appended
 // to the password at connect time only, orochi bridge card), Connect button
@@ -13,7 +13,7 @@
 // `open` defaults to true (conditional-mount usage); omit `onClose` to hide
 // the "Back to chat" button (e.g. before the first successful connection).
 
-import { For, Index, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Index, Show, Suspense, createEffect, createSignal, lazy, onCleanup, onMount } from 'solid-js';
 import type { JSX } from 'solid-js';
 import {
   ConnectionState,
@@ -26,10 +26,15 @@ import {
   settings,
   updateBridge,
   updateRelay,
+  updateSettings,
 } from '@/state';
 import type { ThemeId } from '@/state';
-import AstronautBear from '@/ui/bits/AstronautBear';
-import ThemeBg from '@/ui/bits/ThemeBg';
+import { isImeComposing } from '@/primitives/ime';
+import { t } from '@/lib/i18n';
+import { currentPerformanceTier } from '@/lib/performance';
+import { createMediaQuery } from '@/primitives/mediaQuery';
+
+const AstronautBear = lazy(() => import('@/ui/bits/AstronautBear'));
 
 const THEME_LIST: { id: ThemeId; name: string; accent: string }[] = [
   { id: 'darkbear', name: 'DarkBear', accent: '#818cf8' },
@@ -86,10 +91,18 @@ interface Props {
 
 function useCopy(): [() => boolean, (text: string) => void] {
   const [copied, setCopied] = createSignal(false);
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => {
+    if (copiedTimer) clearTimeout(copiedTimer);
+  });
   const copy = (text: string) => {
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      if (copiedTimer) clearTimeout(copiedTimer);
+      copiedTimer = setTimeout(() => {
+        copiedTimer = undefined;
+        setCopied(false);
+      }, 1500);
     });
   };
   return [copied, copy];
@@ -560,7 +573,7 @@ const GUIDE_SECTIONS: GuideSection[] = [
         </Callout>
 
         <Callout type="info">
-          DarkBear stores your connection details in <strong class="text-gray-300">localStorage</strong> only. Nothing is sent to any third-party server. The entire app is static HTML/JS served from your own host.
+          DarkBear keeps passwords for this browser session unless you explicitly choose Remember on this device. Nothing is sent to any third-party server. The entire app is static HTML/JS served from your own host.
         </Callout>
       </div>
     ),
@@ -704,10 +717,18 @@ export default function ConnectModal(props: Props) {
 }
 
 function ConnectScreen(props: { onClose?: () => void }) {
+  const lowDecorativeQuality = currentPerformanceTier() === 'low';
+  const prefersReducedMotion = createMediaQuery('(prefers-reduced-motion: reduce)');
+  const decorativeMotionEnabled = () =>
+    !lowDecorativeQuality &&
+    !prefersReducedMotion() &&
+    settings.animateThemes &&
+    settings.sceneMotion !== 'reduced';
   const [host, setHost] = createSignal(settings.relay.host);
   const [port, setPort] = createSignal(settings.relay.port);
   const [tls, setTls] = createSignal(settings.relay.tls);
   const [password, setPassword] = createSignal(settings.relay.password);
+  const [rememberPassword, setRememberPassword] = createSignal(settings.rememberRelayPassword);
   const [compression, setCompression] = createSignal(settings.relay.compression);
   const [totp, setTotp] = createSignal('');
   const [useTotp, setUseTotp] = createSignal(false);
@@ -719,6 +740,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
   const [bridgeEnabled, setBridgeEnabled] = createSignal(settings.bridge.enabled);
   const [bridgeAccount, setBridgeAccount] = createSignal(settings.bridge.account);
   const [bridgePassword, setBridgePassword] = createSignal(settings.bridge.password);
+  const [rememberBridgePassword, setRememberBridgePassword] = createSignal(settings.rememberBridgePassword);
 
   let hostRef: HTMLInputElement | undefined;
   let themeScrollRef: HTMLDivElement | undefined;
@@ -768,6 +790,10 @@ function ConnectScreen(props: { onClose?: () => void }) {
     // the augmented password swapped in just for the dial.
     updateRelay({ host: host(), port: port(), tls: tls(), password: password(), compression: compression() });
     updateBridge({ enabled: bridgeEnabled(), account: bridgeAccount(), password: bridgePassword() });
+    updateSettings({
+      rememberRelayPassword: rememberPassword(),
+      rememberBridgePassword: rememberBridgePassword(),
+    });
     saveSettings();
     updateRelay({ password: fullPassword });
     connect();
@@ -781,6 +807,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
     setPort(p.relay.port);
     setTls(p.relay.tls);
     setPassword(p.relay.password);
+    setRememberPassword(p.rememberPassword);
     setCompression(p.relay.compression);
   };
 
@@ -788,7 +815,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
     const name = profileName().trim();
     if (!name) return;
     updateRelay({ host: host(), port: port(), tls: tls(), password: password(), compression: compression() });
-    saveProfile(name);
+    saveProfile(name, rememberPassword());
     setShowSaveProfile(false);
     setProfileName('');
   };
@@ -802,6 +829,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
   };
 
   const handleTotpKeyDown = (index: number, e: KeyboardEvent) => {
+    if (isImeComposing(e)) return;
     if (e.key === 'Backspace' && !totp()[index] && index > 0) totpRefs[index - 1]?.focus();
     if (e.key === 'ArrowLeft' && index > 0) totpRefs[index - 1]?.focus();
     if (e.key === 'ArrowRight' && index < 5) totpRefs[index + 1]?.focus();
@@ -809,6 +837,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
 
   onMount(() => {
     function onKeydown(e: KeyboardEvent) {
+      if (isImeComposing(e)) return;
       if (e.key === 'Escape' && props.onClose) props.onClose();
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doConnect();
     }
@@ -817,8 +846,8 @@ function ConnectScreen(props: { onClose?: () => void }) {
   });
 
   const statusText = () =>
-    connectionState() === ConnectionState.CONNECTING ? 'Establishing connection...' :
-    connectionState() === ConnectionState.AUTHENTICATING ? 'Authenticating...' :
+    connectionState() === ConnectionState.CONNECTING ? t('connect.establishing') :
+    connectionState() === ConnectionState.AUTHENTICATING ? t('connect.authenticating') :
     null;
 
   const tc = () => THEME_ACCENT[settings.theme];
@@ -829,21 +858,38 @@ function ConnectScreen(props: { onClose?: () => void }) {
       <div class="fixed inset-0" style={{ background: `radial-gradient(ellipse at 30% 20%, ${tc().bg1} 0%, ${tc().bg2} 50%, ${tc().bg3} 100%)` }} />
 
       {/* Animated theme background */}
-      <div class="fixed inset-0 pointer-events-none">
-        <ThemeBg theme={settings.theme} />
+      <Show when={decorativeMotionEnabled()}>
+        <div
+          data-testid="connect-decorative-background"
+          class="darkbear-decorative-scene fixed inset-0 pointer-events-none"
+        >
+          {/* One static multi-radial star texture keeps the entry distinctive
+              without constructing hundreds of nodes before credentials work. */}
+          <div
+            class="absolute inset-0 opacity-40"
+            style={{
+              'background-image': [
+                'radial-gradient(circle at 12% 18%, rgba(255,255,255,.65) 0 1px, transparent 1.5px)',
+                'radial-gradient(circle at 72% 28%, rgba(180,195,255,.55) 0 1px, transparent 1.5px)',
+                'radial-gradient(circle at 38% 76%, rgba(255,220,190,.45) 0 1px, transparent 1.5px)',
+              ].join(','),
+              'background-size': '97px 113px, 149px 131px, 181px 167px',
+            }}
+          />
 
-        {/* Nebula clouds — colored to theme accent */}
-        <div class="absolute w-[600px] h-[600px] sm:w-[900px] sm:h-[900px] -top-[200px] -right-[200px] rounded-full opacity-[0.06]"
-          style={{ background: `radial-gradient(circle, ${tc().accent}, transparent 50%)`, animation: 'login-float-a 30s ease-in-out infinite' }} />
-        <div class="absolute w-[500px] h-[500px] sm:w-[800px] sm:h-[800px] -bottom-[250px] -left-[200px] rounded-full opacity-[0.04]"
-          style={{ background: `radial-gradient(circle, ${tc().accent}88, transparent 50%)`, animation: 'login-float-b 35s ease-in-out infinite' }} />
-        <div class="absolute w-[300px] h-[300px] top-[30%] right-[15%] rounded-full opacity-[0.03]"
-          style={{ background: `radial-gradient(circle, ${tc().accent}66, transparent 55%)`, animation: 'login-float-c 22s ease-in-out infinite' }} />
+          {/* Nebula clouds — colored to theme accent */}
+          <div class="absolute w-[600px] h-[600px] sm:w-[900px] sm:h-[900px] -top-[200px] -right-[200px] rounded-full opacity-[0.06]"
+            style={{ background: `radial-gradient(circle, ${tc().accent}, transparent 50%)`, animation: 'login-float-a 30s ease-in-out infinite' }} />
+          <div class="absolute w-[500px] h-[500px] sm:w-[800px] sm:h-[800px] -bottom-[250px] -left-[200px] rounded-full opacity-[0.04]"
+            style={{ background: `radial-gradient(circle, ${tc().accent}88, transparent 50%)`, animation: 'login-float-b 35s ease-in-out infinite' }} />
+          <div class="absolute w-[300px] h-[300px] top-[30%] right-[15%] rounded-full opacity-[0.03]"
+            style={{ background: `radial-gradient(circle, ${tc().accent}66, transparent 55%)`, animation: 'login-float-c 22s ease-in-out infinite' }} />
 
-        {/* Noise grain */}
-        <div class="absolute inset-0 opacity-[0.03]"
-          style={{ 'background-image': `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")` }} />
-      </div>
+          {/* Noise grain */}
+          <div class="absolute inset-0 opacity-[0.03]"
+            style={{ 'background-image': `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")` }} />
+        </div>
+      </Show>
 
       {/* Content */}
       <div class="min-h-dvh flex flex-col relative z-10">
@@ -852,12 +898,27 @@ function ConnectScreen(props: { onClose?: () => void }) {
         {/* Astronaut Bear — floating */}
         <div class="flex flex-col items-center px-6 pb-2 sm:pb-4 select-none"
           style={{ animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both' }}>
-          <div class="relative" style={{ animation: 'astro-float 6s ease-in-out infinite' }}>
-            {/* Glow behind astronaut */}
-            <div class="absolute -inset-6 sm:-inset-8 rounded-full"
-              style={{ background: `radial-gradient(circle, ${tc().accent}1a 0%, transparent 60%)`, animation: 'pulse-glow 4s ease-in-out infinite' }} />
-            <AstronautBear size={120} class="sm:w-[150px] sm:h-[150px]" accent={tc().accent} theme={settings.theme} />
-          </div>
+          <Show
+            when={decorativeMotionEnabled()}
+            fallback={
+              <div
+                data-testid="connect-compact-mark"
+                class="flex h-20 w-20 items-center justify-center rounded-[26px] border border-white/[0.08] bg-white/[0.035] font-mono text-lg font-black tracking-[0.18em] text-gray-300 shadow-2xl shadow-black/30"
+                aria-hidden="true"
+              >
+                DB
+              </div>
+            }
+          >
+            <div class="relative">
+              {/* Glow behind astronaut */}
+              <div class="absolute -inset-6 sm:-inset-8 rounded-full"
+                style={{ background: `radial-gradient(circle, ${tc().accent}1a 0%, transparent 60%)` }} />
+              <Suspense fallback={<div class="h-[120px] w-[120px] sm:h-[150px] sm:w-[150px]" />}>
+                <AstronautBear animated={false} size={120} class="sm:w-[150px] sm:h-[150px]" accent={tc().accent} theme={settings.theme} />
+              </Suspense>
+            </div>
+          </Show>
           <h1 class="text-[26px] sm:text-[32px] font-bold tracking-tight text-gray-100 mt-1 sm:mt-2"
             style={{ animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both' }}>
             DarkBear
@@ -946,7 +1007,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
 
               {/* Error */}
               <Show when={connectionError()}>
-                <div class="flex items-start gap-3 bg-red-500/8 border border-red-500/15 rounded-xl p-4 text-[13px] text-red-300 mb-5 leading-snug"
+                <div role="alert" class="flex items-start gap-3 bg-red-500/8 border border-red-500/15 rounded-xl p-4 text-[13px] text-red-300 mb-5 leading-snug"
                   style={{ animation: 'login-shake 0.4s ease-out, fadeIn 0.25s ease-out' }}>
                   <div class="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0 mt-[-2px]">
                     <svg class="w-4 h-4 text-red-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -964,7 +1025,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                       <rect x="1" y="4" width="14" height="8" rx="2" /><circle cx="4.5" cy="8" r="1" fill="currentColor" stroke="none" /><path d="M8 6v4M11 6v4" />
                     </svg>
-                    Hostname
+                    {t('connect.hostname')}
                   </label>
                   <div class="relative">
                     <input ref={(el) => (hostRef = el)} id="c-host" type="text" value={host()} onInput={(e) => setHost(e.currentTarget.value)}
@@ -985,7 +1046,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                       <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                         <path d="M3 4h10M3 8h10M3 12h6" />
                       </svg>
-                      Port
+                      {t('connect.port')}
                     </label>
                     <input id="c-port" type="number" value={port()} onInput={(e) => setPort(Number(e.currentTarget.value))}
                       min={1} max={65535} class="login-input" />
@@ -1010,15 +1071,15 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                       <rect x="2" y="7" width="12" height="7" rx="2" /><path d="M5 7V5a3 3 0 016 0v2" /><circle cx="8" cy="11" r="1" fill="currentColor" stroke="none" />
                     </svg>
-                    Password
+                    {t('connect.password')}
                   </label>
                   <div class="relative">
                     <input id="c-pass" type={showPassword() ? 'text' : 'password'} value={password()} onInput={(e) => setPassword(e.currentTarget.value)}
-                      placeholder="Relay password" autocomplete="new-password"
-                      class="login-input !pr-12" />
+                      placeholder={t('connect.relayPassword')} autocomplete="new-password"
+                      class="login-input login-secret-input !pr-12" />
                     <button type="button" onClick={() => setShowPassword(!showPassword())} tabindex={-1}
-                      aria-label={showPassword() ? 'Hide password' : 'Show password'}
-                      class="absolute right-0 top-0 bottom-0 w-11 flex items-center justify-center text-gray-600 hover:text-gray-400 transition-colors">
+                      aria-label={showPassword() ? t('connect.hideSecret') : t('connect.showSecret')}
+                      class="login-secret-toggle absolute right-0 top-0 bottom-0 w-11 flex items-center justify-center text-gray-600 hover:text-gray-400 transition-colors">
                       <Show
                         when={showPassword()}
                         fallback={
@@ -1033,6 +1094,20 @@ function ConnectScreen(props: { onClose?: () => void }) {
                       </Show>
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setRememberPassword(!rememberPassword())}
+                    aria-pressed={rememberPassword()}
+                    class="mt-2 flex items-center gap-2 text-left text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    <span class={`login-toggle ${rememberPassword() ? 'login-toggle-on' : ''}`}>
+                      <span class="login-toggle-dot" />
+                    </span>
+                    <span>
+                      {t('connect.remember')}
+                      <span class="block text-[9px] text-gray-700">{t('connect.sessionOnly')}</span>
+                    </span>
+                  </button>
                 </div>
 
                 {/* Advanced toggle */}
@@ -1042,7 +1117,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     <svg class={`w-2.5 h-2.5 transition-transform duration-200 ${showAdvanced() ? 'rotate-90' : ''}`}
                       viewBox="0 0 8 8" fill="currentColor"><path d="M2 1l4 3-4 3z" /></svg>
                   </div>
-                  Advanced options
+                  {t('connect.advanced')}
                 </button>
 
                 {/* Advanced section */}
@@ -1053,7 +1128,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                         <svg class="w-3.5 h-3.5 text-gray-600" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                           <path d="M4 2v12M12 2v12M4 5h8M4 8h8M4 11h8" />
                         </svg>
-                        <span class="text-[13px] text-gray-400">Compression</span>
+                        <span class="text-[13px] text-gray-400">{t('connect.compression')}</span>
                       </div>
                       <button type="button" onClick={() => setCompression(!compression())}
                         aria-pressed={compression()}
@@ -1068,9 +1143,10 @@ function ConnectScreen(props: { onClose?: () => void }) {
                           <svg class="w-3.5 h-3.5 text-gray-600" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                             <circle cx="8" cy="8" r="6" /><path d="M8 4v4l2.5 1.5" />
                           </svg>
-                          <span class="text-[13px] text-gray-400">TOTP</span>
+                          <span class="text-[13px] text-gray-400">{t('connect.totp')}</span>
                         </div>
                         <button type="button" onClick={() => setUseTotp(!useTotp())}
+                          aria-label={t('connect.enableTotp')}
                           aria-pressed={useTotp()}
                           class={`login-toggle ${useTotp() ? 'login-toggle-on' : ''}`}>
                           <div class="login-toggle-dot" />
@@ -1090,7 +1166,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                                 onKeyDown={(e) => handleTotpKeyDown(i, e)}
                                 onFocus={(e) => e.currentTarget.select()}
                                 autocomplete="one-time-code"
-                                aria-label={`TOTP digit ${i + 1}`}
+                                aria-label={t('connect.totpDigit', { index: i + 1 })}
                                 class="login-totp-digit"
                                 style={{ 'animation-delay': `${i * 40}ms` }}
                               />
@@ -1107,26 +1183,39 @@ function ConnectScreen(props: { onClose?: () => void }) {
                           <svg class="w-3.5 h-3.5 text-gray-600" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                             <rect x="1.5" y="4" width="9" height="8" rx="2" /><path d="M10.5 7l4-2.5v7l-4-2.5" />
                           </svg>
-                          <span class="text-[13px] text-gray-400">Orochi bridge <span class="text-[10px] text-gray-600">(voice/video)</span></span>
+                          <span class="text-[13px] text-gray-400">
+                            {t('connect.orochiBridge')} <span class="text-[10px] text-gray-600">({t('connect.voiceVideo')})</span>
+                          </span>
                         </div>
                         <button type="button" onClick={() => setBridgeEnabled(!bridgeEnabled())}
+                          aria-label={t('connect.enableBridge')}
                           aria-pressed={bridgeEnabled()}
                           class={`login-toggle ${bridgeEnabled() ? 'login-toggle-on' : ''}`}>
                           <div class="login-toggle-dot" />
                         </button>
                       </div>
                       <p class="text-[10px] text-gray-600 leading-relaxed">
-                        Adds realtime voice/video, typing, reactions and E2EE DMs by opening a direct
-                        session to the IRCXNet orochi server alongside your relay.
+                        {t('connect.bridgeDescription')}
                       </p>
                       <Show when={bridgeEnabled()}>
                         <div class="flex flex-col gap-2 animate-fade-in">
                           <input type="text" value={bridgeAccount()} onInput={(e) => setBridgeAccount(e.currentTarget.value)}
-                            placeholder="Account (nick)" autocomplete="off" spellcheck={false}
-                            class="login-input !h-[40px] !text-[13px]" aria-label="Bridge account" />
+                            placeholder={t('connect.accountNick')} autocomplete="off" spellcheck={false}
+                            class="login-input !h-[40px] !text-[13px]" aria-label={t('connect.bridgeAccount')} />
                           <input type="password" value={bridgePassword()} onInput={(e) => setBridgePassword(e.currentTarget.value)}
-                            placeholder="Account password" autocomplete="new-password"
-                            class="login-input !h-[40px] !text-[13px]" aria-label="Bridge password" />
+                            placeholder={t('connect.accountPassword')} autocomplete="new-password"
+                            class="login-input !h-[40px] !text-[13px]" aria-label={t('connect.bridgePassword')} />
+                          <button
+                            type="button"
+                            onClick={() => setRememberBridgePassword(!rememberBridgePassword())}
+                            aria-pressed={rememberBridgePassword()}
+                            class="flex items-center gap-2 text-left text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                          >
+                            <span class={`login-toggle ${rememberBridgePassword() ? 'login-toggle-on' : ''}`}>
+                              <span class="login-toggle-dot" />
+                            </span>
+                            {t('connect.rememberBridge')}
+                          </button>
                         </div>
                       </Show>
                     </div>
@@ -1152,7 +1241,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                             <svg class="w-4 h-4 transition-transform group-hover:translate-x-0.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                               <path d="M2 8h12M10 4l4 4-4 4" />
                             </svg>
-                            Connect
+                            {t('connect.connect')}
                           </>
                         }
                       >
@@ -1180,25 +1269,26 @@ function ConnectScreen(props: { onClose?: () => void }) {
                       <svg class="w-3.5 h-3.5 text-gray-700 group-hover:text-gray-500 transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                         <path d="M8 3v10M3 8h10" />
                       </svg>
-                      Save as profile
+                      {t('connect.saveProfile')}
                     </button>
                   }
                 >
                   <div class="flex gap-2 items-center animate-fade-in">
                     <input type="text" value={profileName()} onInput={(e) => setProfileName(e.currentTarget.value)}
-                      placeholder="Profile name" maxlength={32}
+                      placeholder={t('connect.profileName')} maxlength={32}
                       ref={(el) => queueMicrotask(() => el.focus())}
                       onKeyDown={(e) => {
+                        if (isImeComposing(e)) return;
                         if (e.key === 'Enter') doSaveProfile();
                         if (e.key === 'Escape') { e.stopPropagation(); setShowSaveProfile(false); setProfileName(''); }
                       }}
                       class="login-input flex-1 !h-[44px]" />
                     <button onClick={doSaveProfile} disabled={!profileName().trim()}
                       class="px-4 h-[44px] text-[13px] font-semibold bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] rounded-xl hover:bg-[var(--custom-accent,#818cf8)]/25 disabled:opacity-30 shrink-0 transition-colors">
-                      Save
+                      {t('connect.save')}
                     </button>
                     <button onClick={() => { setShowSaveProfile(false); setProfileName(''); }}
-                      aria-label="Cancel saving profile"
+                      aria-label={t('connect.cancelProfile')}
                       class="w-[44px] h-[44px] flex items-center justify-center text-gray-500 rounded-xl hover:text-gray-300 hover:bg-white/[0.04] shrink-0 transition-colors">
                       <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                         <path d="M4 4l8 8M12 4l-8 8" />
@@ -1214,7 +1304,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                       <path d="M10 4l-4 4 4 4" />
                     </svg>
-                    Back to chat
+                    {t('connect.backToChat')}
                   </button>
                 </Show>
               </div>

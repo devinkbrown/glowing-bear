@@ -19,6 +19,8 @@ import { closeModal } from '@/state';
 import Modal from '@/ui/bits/Modal';
 import { buildPaletteCommands, type PaletteCommand, type PaletteGroup } from '@/ui/palette/commands';
 import { rankCommands } from '@/ui/palette/fuzzy';
+import { isImeComposing } from '@/primitives/ime';
+import { t } from '@/lib/i18n';
 
 const LISTBOX_ID = 'cmdk-listbox';
 
@@ -58,8 +60,8 @@ export default function BufferSwitcher() {
     ordered.forEach((c, i) => indexOf.set(c.id, i));
 
     const sections: Section[] = [];
-    if (buffers.length) sections.push({ key: 'buffers', label: 'Buffers', items: buffers });
-    if (actions.length) sections.push({ key: 'actions', label: 'Actions', items: actions });
+    if (buffers.length) sections.push({ key: 'buffers', label: t('palette.buffers'), items: buffers });
+    if (actions.length) sections.push({ key: 'actions', label: t('palette.actions'), items: actions });
 
     return { ordered, indexOf, sections };
   });
@@ -108,6 +110,7 @@ export default function BufferSwitcher() {
   // so there is exactly one close path — the shell also restores focus to the
   // opener, which a local closeModal() here would bypass.
   const onKeyDown = (e: KeyboardEvent): void => {
+    if (isImeComposing(e)) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       move(1);
@@ -135,22 +138,22 @@ export default function BufferSwitcher() {
             aria-expanded="true"
             aria-controls={LISTBOX_ID}
             aria-activedescendant={activeId()}
-            aria-label="Search buffers and actions"
+            aria-label={t('palette.search')}
             autocomplete="off"
             spellcheck={false}
             value={query()}
             onInput={(e) => setQuery(e.currentTarget.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search buffers and actions..."
+            placeholder={t('palette.placeholder')}
             class="flex-1 bg-transparent text-[15px] sm:text-[14px] text-gray-100 outline-none placeholder:text-gray-600"
           />
           <kbd class="text-[10px] font-mono text-gray-600 bg-white/[0.04] border border-white/[0.06] rounded px-1.5 py-0.5 hidden sm:inline">esc</kbd>
         </div>
 
         {/* Results */}
-        <div ref={(el) => (listRef = el)} id={LISTBOX_ID} role="listbox" aria-label="Commands" class="max-h-[60vh] sm:max-h-[340px] overflow-y-auto py-1">
+        <div ref={(el) => (listRef = el)} id={LISTBOX_ID} role="listbox" aria-label={t('palette.commands')} class="max-h-[60vh] sm:max-h-[340px] overflow-y-auto py-1">
           <Show when={view().ordered.length === 0}>
-            <div class="px-4 py-8 text-center text-gray-600 text-[14px] sm:text-[13px]">No matches</div>
+            <div class="px-4 py-8 text-center text-gray-600 text-[14px] sm:text-[13px]">{t('palette.noMatches')}</div>
           </Show>
           <For each={view().sections}>
             {(section) => (

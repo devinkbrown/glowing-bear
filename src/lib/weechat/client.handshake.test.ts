@@ -167,6 +167,15 @@ describe('handshake auth against a modern relay', () => {
 			}),
 		);
 		await waitFor(() => ws.sent.some((s) => s.startsWith('init password_hash=')));
+		expect(client.diagnostics()).toMatchObject({
+			phase: 'authenticating',
+			protocolMode: 'password-hash',
+			hashAlgorithm: 'pbkdf2+sha256',
+			compression: 'off',
+			totp: false,
+			handshake: 'available',
+			canDecodeCompression: expect.any(Boolean),
+		});
 
 		const initLine = ws.sent.find((s) => s.startsWith('init password_hash='));
 		expect(initLine).toBeDefined();
@@ -210,6 +219,12 @@ describe('legacy fallback when the relay ignores handshake', () => {
 
 		expect(ws.sent).toContain('init password=hunter2,compression=off\n');
 		expect(ws.sent).toContain('(_version) info version\n');
+		expect(client.diagnostics()).toMatchObject({
+			phase: 'authenticating',
+			protocolMode: 'legacy-init',
+			hashAlgorithm: 'none',
+			handshake: 'unavailable',
+		});
 	});
 
 	it('does not double-authenticate if a late _handshake arrives after fallback', async () => {
@@ -255,6 +270,20 @@ describe('legacy fallback on unusable handshake reply', () => {
 // ── close-mid-handshake → skip handshake on the next connect ──────────────────
 
 describe('handshake-unsupported stickiness', () => {
+	it('reports a bounded reconnect reason, attempt, and delay without the close text', () => {
+		const ws = connectOpen();
+		ws.error();
+		ws.close(1006, 'private relay detail');
+
+		expect(client.diagnostics()).toMatchObject({
+			phase: 'reconnect-wait',
+			reconnectReason: 'network',
+			reconnectAttempt: 1,
+			reconnectDelayMs: 1000,
+		});
+		expect(JSON.stringify(client.diagnostics())).not.toContain('private relay detail');
+	});
+
 	it('still retries handshake after a SINGLE mid-handshake close (no downgrade on a blip)', () => {
 		const ws = connectOpen();
 		expect(ws.sent[0]).toContain('handshake ');

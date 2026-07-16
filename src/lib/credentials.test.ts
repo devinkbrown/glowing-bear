@@ -4,8 +4,8 @@
  * Covers the two audit fixes plus regression of the existing contract:
  *  - MEDIUM: a mesh reclaim token must never persist without a bound
  *    (conservative TTL + savedAt age-out).
- *  - LOW: bearer tokens (session/mesh) live in sessionStorage, never
- *    localStorage; the password stays in localStorage (desktop-IRC parity).
+ *  - Passwords and bearer tokens are session-only by default; passwords enter
+ *    localStorage only after an explicit remember-on-device opt-in.
  *  - Migration: a legacy localStorage blob with inline tokens is safely
  *    migrated — tokens moved to sessionStorage, stripped from localStorage.
  */
@@ -32,11 +32,13 @@ vi.hoisted(() => {
 
 import {
   clearCredentials,
+  clearSaslSessionToken,
   clearSessionToken,
   getAuthSecret,
   loadCredentials,
   saveCredentials,
   storeMeshToken,
+  storeSaslSessionToken,
   storeSessionToken,
 } from './credentials';
 
@@ -60,9 +62,22 @@ function ssBlob(): string {
   return sessionStorage.getItem(SS_KEY) ?? '';
 }
 
-describe('credentials — bearer tokens live in sessionStorage, password in localStorage', () => {
-  it('keeps the password in localStorage and out of sessionStorage', () => {
+describe('credentials — secrets are session-only by default', () => {
+  it('keeps the password in sessionStorage and out of localStorage by default', () => {
     saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
+
+    expect(lsBlob()).not.toContain('hunter2');
+    expect(sessionStorage.getItem(SS_KEY) ?? '').toContain('hunter2');
+    expect(loadCredentials('wss://irc.example/', 'kain')?.password).toBe('hunter2');
+  });
+
+  it('keeps the password in localStorage only with explicit opt-in', () => {
+    saveCredentials({
+      nick: 'kain',
+      server: 'wss://irc.example/',
+      password: 'hunter2',
+      rememberPassword: true,
+    });
 
     expect(lsBlob()).toContain('hunter2');
     expect(sessionStorage.getItem(SS_KEY) ?? '').not.toContain('hunter2');
@@ -88,6 +103,37 @@ describe('credentials — bearer tokens live in sessionStorage, password in loca
     expect(loadCredentials('wss://irc.example/', 'kain')?.meshToken).toBe('mesh-XYZ789');
   });
 
+  it('stores the SASL re-entry token and its bound only in sessionStorage', () => {
+    saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
+    const expiresAt = Math.floor(Date.now() / 1000) + 3_600;
+    storeSaslSessionToken('sst_0123456789abcdef0123456789abcdef', expiresAt, 'alice');
+
+    expect(lsBlob()).not.toContain('sst_0123456789abcdef0123456789abcdef');
+    expect(ssBlob()).toContain('sst_0123456789abcdef0123456789abcdef');
+    expect(loadCredentials('wss://irc.example/', 'kain')).toMatchObject({
+      saslSessionToken: 'sst_0123456789abcdef0123456789abcdef',
+      saslAccount: 'alice',
+      saslTokenExpiry: new Date(expiresAt * 1000).toISOString(),
+    });
+  });
+
+  it('purges only the expired SASL token while preserving password and reclaim tokens', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
+    storeSessionToken('session-reclaim');
+    storeSaslSessionToken(
+      'sst_0123456789abcdef0123456789abcdef',
+      Date.parse('2026-01-01T00:00:10Z') / 1000,
+    );
+
+    vi.setSystemTime(new Date('2026-01-01T00:00:10.001Z'));
+    const creds = loadCredentials('wss://irc.example/', 'kain');
+    expect(creds?.saslSessionToken).toBeUndefined();
+    expect(creds?.sessionToken).toBe('session-reclaim');
+    expect(creds?.password).toBe('hunter2');
+  });
+
   it('keeps tokenExpiry in sessionStorage with the bearer token, never localStorage', () => {
     const expiresAt = Math.floor(Date.now() / 1000) + 3600;
     saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
@@ -98,14 +144,14 @@ describe('credentials — bearer tokens live in sessionStorage, password in loca
     expect(ssBlob()).toContain('mesh-XYZ789');
   });
 
-  it('loads the password but no bearer token after the sessionStorage token map disappears', () => {
+  it('loads neither session-only password nor bearer token after sessionStorage disappears', () => {
     saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
     storeSessionToken('sess-abc123', Math.floor(Date.now() / 1000) + 3600);
     storeMeshToken('mesh-XYZ789');
     sessionStorage.clear();
 
     const creds = loadCredentials('wss://irc.example/', 'kain');
-    expect(creds?.password).toBe('hunter2');
+    expect(creds?.password).toBeUndefined();
     expect(creds?.sessionToken).toBeUndefined();
     expect(creds?.meshToken).toBeUndefined();
   });
@@ -235,8 +281,9 @@ describe('credentials — legacy inline-token migration', () => {
     expect(lsBlob()).not.toContain('legacy-mesh');
     expect(ssBlob()).toContain('legacy-sess');
     expect(ssBlob()).toContain('legacy-mesh');
-    // Password stays put.
-    expect(lsBlob()).toContain('hunter2');
+    // The legacy password is migrated to the session-only side too.
+    expect(lsBlob()).not.toContain('hunter2');
+    expect(ssBlob()).toContain('hunter2');
   });
 
   it('migrates a legacy single-credential blob and strips inline tokens from localStorage', () => {
@@ -285,6 +332,20 @@ describe('credentials — clear paths', () => {
     expect(creds?.meshToken).toBeUndefined();
     expect(creds?.password).toBe('hunter2');
     expect(ssBlob()).not.toContain('sess-abc123');
+  });
+
+  it('can clear only a rejected SASL token without discarding reclaim state', () => {
+    saveCredentials({ nick: 'kain', server: 'wss://irc.example/', password: 'hunter2' });
+    storeSessionToken('session-reclaim');
+    storeSaslSessionToken(
+      'sst_0123456789abcdef0123456789abcdef',
+      Math.floor(Date.now() / 1000) + 3_600,
+    );
+
+    clearSaslSessionToken('wss://irc.example/', 'kain');
+    const creds = loadCredentials('wss://irc.example/', 'kain');
+    expect(creds?.saslSessionToken).toBeUndefined();
+    expect(creds?.sessionToken).toBe('session-reclaim');
   });
 });
 

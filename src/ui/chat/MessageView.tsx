@@ -17,8 +17,11 @@
 
 import { createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack, For, Match, Show, Switch } from 'solid-js';
 import { createVirtualizer } from '@tanstack/solid-virtual';
-import { buffersState, setReadMarker, requestHistory, settings, uiState, setSearchOpen } from '@/state';
+import { buffersState, historyReceipt, setActive, setReadMarker, requestHistory, requestHistoryTotal, settings, uiState, setSearchOpen } from '@/state';
 import type { Reaction, WeeChatLine } from '@/types';
+import { searchArchive } from '@/lib/archive/client';
+import type { ArchiveSearchHit } from '@/lib/archive/types';
+import { consumeScrollRequest, requestScrollToMessage, threadsState } from '@/state/threads';
 import { bufferKind, type BufferKind } from '@/lib/bufferKind';
 import { extractEmbeds, stripFormatting, type MediaEmbed } from '@/lib/irc-classic/formatter';
 import { parseSearchQuery, type SearchQuery } from '@/lib/search/grammar';
@@ -28,6 +31,8 @@ import MessageLine from './MessageLine';
 import MessageEmbed from './MessageEmbed';
 import ReactionBar from './ReactionBar';
 import TypingIndicator from './TypingIndicator';
+import { formatDate, formatNumber, t } from '@/lib/i18n';
+import { isImeComposing } from '@/primitives/ime';
 
 export interface MessageViewProps {
   bufferPtr: string;
@@ -68,6 +73,21 @@ const HISTORY_TOP_PX = 200; // scrollTop threshold that triggers history load
 const AT_BOTTOM_PX = 40;
 const HISTORY_PAGE = 100;
 const ANNOUNCE_MAX = 30; // cap the live-region node count (old nodes are removals, unspoken)
+const ARCHIVE_JUMP_PAGE = 500;
+const ARCHIVE_JUMP_ATTEMPTS = 9;
+const ARCHIVE_JUMP_MAX_TOTAL = 100_000;
+
+interface PendingArchiveJump {
+  bufferPtr: string;
+  msgid: string;
+  requestedTotal: number;
+  attempts: number;
+  receiptNonce: number;
+}
+
+// A jump may switch buffers and remount MessageView, so the bounded pagination
+// intent lives at module scope until whichever mounted view owns the target.
+let pendingArchiveJump: PendingArchiveJump | null = null;
 
 function getDayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
@@ -278,7 +298,7 @@ function DaySeparator(props: { date: Date }) {
     <div class="flex items-center gap-3 sm:gap-4 py-3 sm:py-4 my-1 sm:my-2 px-3 sm:px-1">
       <div class="flex-1 h-px bg-white/[0.04]" />
       <span class="text-[10px] font-semibold uppercase tracking-[0.12em] sm:tracking-[0.15em] text-gray-500 select-none whitespace-nowrap px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.05]">
-        {props.date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+        {formatDate(props.date, { weekday: 'short', month: 'short', day: 'numeric' })}
       </span>
       <div class="flex-1 h-px bg-white/[0.04]" />
     </div>
@@ -291,7 +311,7 @@ function ReadMarkerRow() {
       <div class="flex-1 h-px bg-red-500/25" />
       <span class="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-red-500/40 select-none">
         <span class="w-1 h-1 rounded-full bg-red-500/40" />
-        new
+        {t('message.new')}
         <span class="w-1 h-1 rounded-full bg-red-500/40" />
       </span>
       <div class="flex-1 h-px bg-red-500/25" />
@@ -308,12 +328,12 @@ function EmptyState() {
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" />
           </svg>
         </div>
-        <p class="text-gray-500 text-[13px]">No buffer selected</p>
+        <p class="text-gray-500 text-[13px]">{t('message.noBuffer')}</p>
         <p class="text-gray-600 text-[11px] font-mono">
           <span class="hidden sm:inline">
-            <kbd class="px-1.5 py-0.5 rounded bg-white/[0.05] border border-white/[0.08] text-[10px]">Ctrl+K</kbd> to search buffers
+            <kbd class="px-1.5 py-0.5 rounded bg-white/[0.05] border border-white/[0.08] text-[10px]">Ctrl+K</kbd> {t('message.searchHint')}
           </span>
-          <span class="sm:hidden">Swipe right to open sidebar</span>
+          <span class="sm:hidden">{t('message.swipeHint')}</span>
         </p>
       </div>
     </div>
@@ -335,6 +355,7 @@ export default function MessageView(props: MessageViewProps) {
 
   let scrollEl: HTMLDivElement | undefined;
   let searchInput: HTMLInputElement | undefined;
+  let archiveResultsEl: HTMLDivElement | undefined;
   let atBottom = true;
   let lockScroll = false;
   let prevLineCount = 0;
@@ -342,6 +363,12 @@ export default function MessageView(props: MessageViewProps) {
   const [showScrollBtn, setShowScrollBtn] = createSignal(false);
   const [missedCount, setMissedCount] = createSignal(0);
   const [searchQuery, setSearchQuery] = createSignal('');
+  const [archiveHits, setArchiveHits] = createSignal<ArchiveSearchHit[]>([]);
+  const [archiveSearching, setArchiveSearching] = createSignal(false);
+  const [archiveSearchError, setArchiveSearchError] = createSignal(false);
+  const [archiveActiveIndex, setArchiveActiveIndex] = createSignal(-1);
+  let archiveSearchGeneration = 0;
+  let archiveSearchController: AbortController | null = null;
 
   // Live-region feed (SC 4.1.3): only NEW tail lines land here. History
   // prepends (requestHistory), buffer switches, and virtual row remounts must
@@ -409,6 +436,68 @@ export default function MessageView(props: MessageViewProps) {
     );
   });
 
+  // Full-history search runs wholly in the archive worker. The UI only receives
+  // the bounded result set; IndexedDB reads and filtering never share this turn.
+  createEffect(on(
+    [() => uiState.searchOpen, searchQuery, () => settings.archiveRetention],
+    ([open, raw, retention]) => {
+      const generation = ++archiveSearchGeneration;
+      archiveSearchController?.abort();
+      archiveSearchController = null;
+      setArchiveSearchError(false);
+      if (!open || retention === 'off' || raw.trim() === '') {
+        setArchiveHits([]);
+        setArchiveSearching(false);
+        return;
+      }
+      setArchiveSearching(true);
+      const timer = setTimeout(() => {
+        const controller = new AbortController();
+        archiveSearchController = controller;
+        void searchArchive({ query: raw, limit: 100 }, controller.signal)
+          .then((hits) => {
+            if (generation === archiveSearchGeneration) setArchiveHits(hits);
+          })
+          .catch((error: unknown) => {
+            if (controller.signal.aborted
+              || (error instanceof DOMException && error.name === 'AbortError')) return;
+            if (generation === archiveSearchGeneration) {
+              setArchiveHits([]);
+              setArchiveSearchError(true);
+            }
+          })
+          .finally(() => {
+            if (archiveSearchController === controller) archiveSearchController = null;
+            if (generation === archiveSearchGeneration) setArchiveSearching(false);
+          });
+      }, 180);
+      onCleanup(() => {
+        clearTimeout(timer);
+        archiveSearchController?.abort();
+        archiveSearchController = null;
+      });
+    },
+  ));
+
+  const archiveGroups = createMemo(() => {
+    const groups: Array<{ key: string; label: string; hits: ArchiveSearchHit[] }> = [];
+    const byKey = new Map<string, { key: string; label: string; hits: ArchiveSearchHit[] }>();
+    for (const hit of archiveHits()) {
+      const day = formatDate(hit.timestamp, { month: 'short', day: 'numeric', year: 'numeric' });
+      const key = `${hit.bufferKey}\0${day}`;
+      let group = byKey.get(key);
+      if (!group) {
+        group = { key, label: `${hit.bufferName} · ${day}`, hits: [] };
+        byKey.set(key, group);
+        groups.push(group);
+      }
+      group.hits.push(hit);
+    }
+    return groups;
+  });
+
+  createEffect(on(archiveHits, () => setArchiveActiveIndex(-1)));
+
   // Incremental render-item cache. buildRenderItems reuses the previously built
   // prefix by reference on a clean tail append (see its doc), so the memo below
   // only allocates item objects for the newly arrived lines.
@@ -451,6 +540,56 @@ export default function MessageView(props: MessageViewProps) {
       lockScroll = false;
     });
   };
+
+  createEffect(on([
+    () => threadsState.scrollRequest?.nonce,
+    () => entry()?.lines.length,
+    () => entry()?.lines[0]?.id,
+    () => entry()?.loading,
+    () => historyReceipt().nonce,
+  ], () => {
+    const request = threadsState.scrollRequest;
+    if (!request) return;
+    const index = renderItems().findIndex((item) => item.kind === 'msg' && item.line.msgid === request.msgid);
+    if (index >= 0) {
+      consumeScrollRequest();
+      pendingArchiveJump = null;
+      lockScroll = true;
+      virtualizer.scrollToIndex(index, { align: 'center', behavior: 'smooth' });
+      requestAnimationFrame(() => { lockScroll = false; });
+      return;
+    }
+
+    const pending = pendingArchiveJump;
+    const current = entry();
+    if (!pending || !current || pending.bufferPtr !== props.bufferPtr || current.loading) return;
+    const receipt = historyReceipt();
+    if (
+      receipt.nonce > pending.receiptNonce &&
+      receipt.bufferPtr === props.bufferPtr &&
+      receipt.returnedCount < pending.requestedTotal
+    ) {
+      pendingArchiveJump = null;
+      consumeScrollRequest();
+      return;
+    }
+    if (pending.attempts >= ARCHIVE_JUMP_ATTEMPTS || pending.requestedTotal >= ARCHIVE_JUMP_MAX_TOTAL) {
+      pendingArchiveJump = null;
+      consumeScrollRequest();
+      return;
+    }
+    const requestedTotal = Math.min(
+      ARCHIVE_JUMP_MAX_TOTAL,
+      Math.max(pending.requestedTotal + ARCHIVE_JUMP_PAGE, pending.requestedTotal * 2),
+    );
+    pendingArchiveJump = {
+      ...pending,
+      requestedTotal,
+      attempts: pending.attempts + 1,
+      receiptNonce: receipt.nonce,
+    };
+    requestHistoryTotal(requestedTotal, props.bufferPtr);
+  }));
 
   // New messages — scroll if at bottom, otherwise count them for the FAB
   createEffect(on(() => filteredLines().length, (count) => {
@@ -575,6 +714,64 @@ export default function MessageView(props: MessageViewProps) {
     setMissedCount(0);
   };
 
+  const openArchiveHit = (hit: ArchiveSearchHit) => {
+    const target = Object.values(buffersState.buffers).find((candidate) =>
+      (candidate.buffer.fullName || candidate.buffer.name) === hit.bufferKey,
+    );
+    if (!target) return;
+    setActive(target.buffer.id);
+    if (!hit.msgid) return;
+    requestScrollToMessage(hit.msgid);
+    if (target.msgIndex[hit.msgid] !== undefined) return;
+    const requestedTotal = Math.min(
+      ARCHIVE_JUMP_MAX_TOTAL,
+      target.lines.filter((line) => !line.id.startsWith('_opt_')).length + ARCHIVE_JUMP_PAGE,
+    );
+    pendingArchiveJump = {
+      bufferPtr: target.buffer.id,
+      msgid: hit.msgid,
+      requestedTotal,
+      attempts: 1,
+      receiptNonce: historyReceipt().nonce,
+    };
+    requestHistoryTotal(requestedTotal, target.buffer.id);
+  };
+
+  const focusArchiveResult = (index: number) => {
+    const count = archiveHits().length;
+    if (count === 0) return;
+    const next = Math.max(0, Math.min(count - 1, index));
+    setArchiveActiveIndex(next);
+    queueMicrotask(() => {
+      archiveResultsEl
+        ?.querySelector<HTMLButtonElement>(`button[data-archive-hit-index="${next}"]`)
+        ?.focus();
+    });
+  };
+
+  const onArchiveResultKeyDown = (event: KeyboardEvent) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-archive-hit-index]');
+    if (!button) return;
+    const current = Number(button.dataset.archiveHitIndex);
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusArchiveResult(current + 1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (current === 0) searchInput?.focus();
+      else focusArchiveResult(current - 1);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      focusArchiveResult(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      focusArchiveResult(archiveHits().length - 1);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      searchInput?.focus();
+    }
+  };
+
   // Re-pin after layout settles (iOS keyboard close, orientation change)
   onMount(() => {
     const onStable = () => {
@@ -588,6 +785,7 @@ export default function MessageView(props: MessageViewProps) {
   // from double-toggling the shared searchOpen flag)
   onMount(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isImeComposing(e)) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         if (e.defaultPrevented) return;
         e.preventDefault();
@@ -631,13 +829,17 @@ export default function MessageView(props: MessageViewProps) {
               type="text"
               value={searchQuery()}
               onInput={(e) => setSearchQuery(e.currentTarget.value)}
-              placeholder="Search messages..."
+              placeholder={t('search.messages')}
               autocomplete="off"
               spellcheck={false}
               onKeyDown={(e) => {
+                if (isImeComposing(e)) return;
                 if (e.key === 'Escape') {
                   setSearchOpen(false);
                   setSearchQuery('');
+                } else if (e.key === 'ArrowDown' && archiveHits().length > 0) {
+                  e.preventDefault();
+                  focusArchiveResult(0);
                 }
               }}
               class="flex-1 bg-transparent text-[13px] text-gray-200 placeholder-gray-600 outline-none"
@@ -645,13 +847,27 @@ export default function MessageView(props: MessageViewProps) {
             <Show when={searchMatches()}>
               {(matches) => (
                 <span class="text-[10px] text-gray-500 tabular-nums shrink-0">
-                  <Show when={(globalMatchCount() ?? matches().count) !== matches().count} fallback={<>{matches().count} found</>}>
-                    {matches().count} here · {globalMatchCount()} across buffers
+                  <Show
+                    when={(globalMatchCount() ?? matches().count) !== matches().count}
+                    fallback={<>{t('search.found', { count: formatNumber(matches().count) })}</>}
+                  >
+                    {t('search.hereAcross', {
+                      here: formatNumber(matches().count),
+                      across: formatNumber(globalMatchCount() ?? matches().count),
+                    })}
                   </Show>
                 </span>
               )}
             </Show>
+            <Show when={settings.archiveRetention !== 'off'}>
+              <span class="text-[10px] text-gray-600 tabular-nums shrink-0">
+                {archiveSearching()
+                  ? t('search.archiveSearching')
+                  : t('search.archived', { count: formatNumber(archiveHits().length) })}
+              </span>
+            </Show>
             <button
+              aria-label={t('search.close')}
               onClick={() => {
                 setSearchOpen(false);
                 setSearchQuery('');
@@ -662,6 +878,42 @@ export default function MessageView(props: MessageViewProps) {
                 <path d="M4 4l8 8M12 4l-8 8" />
               </svg>
             </button>
+          </div>
+        </Show>
+
+        <Show when={uiState.searchOpen && settings.archiveRetention !== 'off' && searchQuery().trim() !== ''}>
+          <div ref={(element) => (archiveResultsEl = element)} onKeyDown={onArchiveResultKeyDown}
+            aria-label={t('search.archiveResults')}
+            class="max-h-60 shrink-0 overflow-y-auto border-b border-white/[0.05] bg-gray-950/95 px-3 py-2 sm:px-4">
+            <Show when={!archiveSearchError()} fallback={<p class="py-2 text-[10px] text-red-300">{t('search.archiveUnavailable')}</p>}>
+              <Show when={!archiveSearching() && archiveGroups().length === 0}>
+                <p class="py-2 text-[10px] text-gray-600">{t('search.noArchivedResults')}</p>
+              </Show>
+              <For each={archiveGroups()}>
+                {(group) => (
+                  <section class="mb-2 last:mb-0">
+                    <h4 class="sticky top-0 bg-gray-950/95 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-gray-600">{group.label}</h4>
+                    <For each={group.hits}>
+                      {(hit) => {
+                        const index = () => archiveHits().findIndex((candidate) => candidate.key === hit.key);
+                        return (
+                        <button type="button" onClick={() => openArchiveHit(hit)}
+                          data-archive-hit-index={index()}
+                          aria-current={archiveActiveIndex() === index() ? 'true' : undefined}
+                          onFocus={() => setArchiveActiveIndex(index())}
+                          class="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--custom-accent,#818cf8)]">
+                          <span class="block text-[10px] font-semibold text-gray-400">
+                            {hit.sender || t('search.server')} · {formatDate(hit.timestamp, { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span class="block truncate text-[11px] text-gray-300">{hit.snippet}</span>
+                        </button>
+                        );
+                      }}
+                    </For>
+                  </section>
+                )}
+              </For>
+            </Show>
           </div>
         </Show>
 
@@ -676,7 +928,7 @@ export default function MessageView(props: MessageViewProps) {
             <div class="flex items-center justify-center py-6">
               <div class="flex items-center gap-2.5 text-gray-400 text-[12px]">
                 <span class="w-4 h-4 border-2 border-gray-600 border-t-[var(--custom-accent,#818cf8)] rounded-full animate-spin" />
-                Loading history...
+                {t('message.loadingHistory')}
               </div>
             </div>
           </Show>
@@ -765,14 +1017,14 @@ export default function MessageView(props: MessageViewProps) {
               padding: missedCount() > 0 ? '0 12px 0 10px' : '0',
               'box-shadow': '0 4px 16px color-mix(in srgb, var(--custom-accent, #818cf8) 40%, transparent)',
             }}
-            aria-label="Scroll to bottom"
+            aria-label={t('message.scrollBottom')}
           >
             <svg class="w-3.5 h-3.5 text-white shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
               <path d="M8 2v10M4 9l4 4 4-4" />
             </svg>
             <Show when={missedCount() > 0}>
               <span class="ml-1.5 text-[11px] font-semibold text-white tabular-nums">
-                {missedCount() > 99 ? '99+' : missedCount()}
+                {missedCount() > 99 ? '99+' : formatNumber(missedCount())}
               </span>
             </Show>
           </button>

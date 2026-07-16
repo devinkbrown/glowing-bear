@@ -21,9 +21,25 @@ import { formatTimestamp } from '@/lib/timestamps';
 import { formatText, stripFormatting } from '@/lib/irc-classic/formatter';
 import { stripColors } from '@/lib/weechat/strip-colors';
 import { parseEventFeedText, type ParsedEventFeed } from '@/lib/ircx/parser';
-import { settings, sendInput, isBot } from '@/state';
+import {
+  buffersState,
+  closeActivityPanel,
+  isBot,
+  isMessageSaved,
+  sendInput,
+  settings,
+  sourceFromLine,
+  toggleSavedMessage,
+} from '@/state';
 import { sendReactionTag, decryptedFor } from '@/state/bridge';
-import { setPendingReply, recordLinePreview, replyPreviewFor, requestScrollToMessage } from '@/state/threads';
+import {
+  openThread,
+  recordLinePreview,
+  replyPreviewFor,
+  requestScrollToMessage,
+  resolveThreadRoot,
+  setPendingReply,
+} from '@/state/threads';
 
 export interface MessageLineProps {
   line: WeeChatLine;
@@ -76,6 +92,11 @@ interface ContextMenuProps {
   onReact: (emoji: string) => void;
   canReply: boolean;
   onReply: () => void;
+  canOpenThread: boolean;
+  onOpenThread: () => void;
+  canSave: boolean;
+  saved: boolean;
+  onToggleSaved: () => void;
   onClose: () => void;
 }
 
@@ -116,6 +137,32 @@ function MessageContextMenu(props: ContextMenuProps) {
                   <path d="M8 4L4 8l4 4M4 8h6a4 4 0 014 4" />
                 </svg>
                 Reply
+              </button>
+            </Show>
+            <Show when={props.canOpenThread}>
+              <button
+                onClick={() => {
+                  props.onOpenThread();
+                  props.onClose();
+                }}
+                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2.5 3.5h11v7h-6l-3.5 3v-3H2.5z" />
+                </svg>
+                Open thread
+              </button>
+            </Show>
+            <Show when={props.canSave}>
+              <button
+                onClick={() => {
+                  props.onToggleSaved();
+                  props.onClose();
+                }}
+                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+              >
+                <span class="w-3.5 text-center">{props.saved ? '★' : '☆'}</span>
+                {props.saved ? 'Remove saved message' : 'Save message'}
               </button>
             </Show>
             <button
@@ -323,6 +370,38 @@ function ReplyAction(props: { nick: string; canReply: boolean; onReply: () => vo
   );
 }
 
+function ThreadAction(props: { canOpen: boolean; onOpen: () => void }) {
+  return (
+    <Show when={props.canOpen}>
+      <button
+        type="button"
+        class="reply-action ml-1 inline-flex shrink-0 items-center justify-center rounded p-0.5 align-middle text-gray-500 opacity-0 transition-opacity hover:text-gray-200 focus-visible:opacity-100 group-hover:opacity-100"
+        aria-label="Open message thread"
+        onClick={() => props.onOpen()}
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2.5 3.5h11v7h-6l-3.5 3v-3H2.5z" />
+        </svg>
+      </button>
+    </Show>
+  );
+}
+
+function SaveAction(props: { canSave: boolean; saved: boolean; onToggle: () => void }) {
+  return (
+    <Show when={props.canSave}>
+      <button
+        type="button"
+        class="reply-action ml-1 inline-flex shrink-0 items-center justify-center rounded p-0.5 align-middle text-[14px] leading-none text-gray-500 opacity-0 transition-opacity hover:text-gray-200 focus-visible:opacity-100 group-hover:opacity-100"
+        aria-label={props.saved ? 'Remove saved message' : 'Save message'}
+        onClick={() => props.onToggle()}
+      >
+        {props.saved ? '★' : '☆'}
+      </button>
+    </Show>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function MessageLine(props: MessageLineProps) {
@@ -390,6 +469,31 @@ export default function MessageLine(props: MessageLineProps) {
     setPendingReply(props.bufferPtr, { msgid, nick: props.line.nick ?? '', preview });
   };
   const canReply = () => !!props.line.msgid && props.bufferKind !== 'raw' && props.bufferKind !== 'fset' && props.bufferKind !== 'plugin';
+  const messageSource = () => {
+    const entry = buffersState.buffers[props.bufferPtr];
+    return entry ? sourceFromLine(entry, props.line) : null;
+  };
+  const canSave = () => settings.archiveRetention !== 'off' && messageSource() !== null;
+  const saved = () => {
+    const source = messageSource();
+    return source ? isMessageSaved(source) : false;
+  };
+  const toggleSaved = () => {
+    const source = messageSource();
+    if (source && settings.archiveRetention !== 'off') toggleSavedMessage(source);
+  };
+  const openLineThread = () => {
+    const entry = buffersState.buffers[props.bufferPtr];
+    if (!entry) return;
+    const rootMsgid = resolveThreadRoot(props.line, entry.msgIndex);
+    if (!rootMsgid) return;
+    closeActivityPanel();
+    openThread(
+      props.bufferPtr,
+      entry.buffer.fullName || entry.buffer.name,
+      rootMsgid,
+    );
+  };
 
   // ── Context menu triggers (right-click on desktop, long-press on touch) ──
   const openMenu = (x: number, y: number) => setMenu({ x, y });
@@ -475,6 +579,8 @@ export default function MessageLine(props: MessageLineProps) {
               <Show when={props.line.replyTo}>{(pid) => <ReplyingToIndicator parentMsgid={pid()} />}</Show>
               <span class="irc-msg-text text-[13px] text-gray-200" innerHTML={html()} onClick={onBodyClick} />
               <ReplyAction nick={nick()} canReply={canReply()} onReply={startReply} />
+              <ThreadAction canOpen={canReply()} onOpen={openLineThread} />
+              <SaveAction canSave={canSave()} saved={saved()} onToggle={toggleSaved} />
             </div>
           </div>
         }
@@ -572,6 +678,8 @@ export default function MessageLine(props: MessageLineProps) {
               <Show when={props.line.replyTo}>{(pid) => <ReplyingToIndicator parentMsgid={pid()} />}</Show>
               <span class="irc-msg-text text-[14px] leading-[1.55] text-gray-200" innerHTML={html()} onClick={onBodyClick} />
               <ReplyAction nick={nick()} canReply={canReply()} onReply={startReply} />
+              <ThreadAction canOpen={canReply()} onOpen={openLineThread} />
+              <SaveAction canSave={canSave()} saved={saved()} onToggle={toggleSaved} />
             </div>
           </div>
         </Match>
@@ -592,6 +700,11 @@ export default function MessageLine(props: MessageLineProps) {
             }}
             canReply={canReply()}
             onReply={startReply}
+            canOpenThread={canReply()}
+            onOpenThread={openLineThread}
+            canSave={canSave()}
+            saved={saved()}
+            onToggleSaved={toggleSaved}
             onClose={() => setMenu(null)}
           />
         )}

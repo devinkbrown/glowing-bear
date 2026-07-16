@@ -22,6 +22,7 @@ import {
   sendRoomReaction,
   setMinimized,
   setSpotlight,
+  setTranscriptOpen,
   toggleCamera,
   toggleDeafen,
   toggleMute,
@@ -29,6 +30,10 @@ import {
 } from '@/state/media';
 import { bridgeState, type BridgeStatus } from '@/state/bridge';
 import { nickColor } from '@/lib/nickcolor';
+import type { CallHealthStatus, NetworkQualityTier } from '@/lib/suimyaku-media/types';
+import TranscriptPanel from './TranscriptPanel';
+import { settings } from '@/state/settings';
+import { formatNumber } from '@/lib/i18n';
 
 const TIMER_TICK_MS = 1000;
 const STREAM_POLL_MS = 1000;
@@ -43,6 +48,20 @@ const BRIDGE_DOT: Record<BridgeStatus, { cls: string; label: string }> = {
   connecting: { cls: 'bg-amber-400 animate-pulse', label: 'bridge connecting' },
   error: { cls: 'bg-red-400', label: 'bridge error' },
   off: { cls: 'bg-gray-600', label: 'bridge off' },
+};
+
+const HEALTH_STYLE: Record<CallHealthStatus, { dot: string; text: string; label: string }> = {
+  idle: { dot: 'bg-gray-500', text: 'text-gray-400', label: 'Starting' },
+  healthy: { dot: 'bg-emerald-400', text: 'text-emerald-200', label: 'Healthy' },
+  degraded: { dot: 'bg-amber-400', text: 'text-amber-200', label: 'Degraded' },
+  reconnecting: { dot: 'bg-orange-400 animate-pulse', text: 'text-orange-200', label: 'Reconnecting' },
+};
+
+const QUALITY_LABEL: Record<NetworkQualityTier, string> = {
+  0: 'Full',
+  1: 'High',
+  2: 'Medium',
+  3: 'Low',
 };
 
 function formatDuration(ms: number): string {
@@ -116,6 +135,7 @@ interface PillProps {
 }
 
 function MinimizedPill(props: PillProps) {
+  const health = createMemo(() => HEALTH_STYLE[mediaState.health.status]);
   return (
     <div class="fixed right-3 bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 w-[min(92vw,320px)] rounded-2xl border border-emerald-400/20 bg-gray-950/95 shadow-2xl shadow-black/40 backdrop-blur-xl overflow-hidden animate-fade-in">
       <div class="flex items-center gap-2 pl-4 pr-2 py-2.5">
@@ -124,7 +144,10 @@ function MinimizedPill(props: PillProps) {
           class="min-w-0 flex-1 text-left"
           title="Restore call"
         >
-          <span class="block text-[12px] font-semibold text-gray-100 truncate">{props.title}</span>
+          <span class="flex items-center gap-2 text-[12px] font-semibold text-gray-100">
+            <span class={`h-2 w-2 rounded-full shrink-0 ${health().dot}`} aria-hidden="true" />
+            <span class="truncate">{props.title}</span>
+          </span>
           <span class="block text-[10px] uppercase tracking-[0.18em] text-emerald-300">
             {props.kindLabel} · <span class="font-mono tabular-nums normal-case tracking-normal">{props.elapsed ?? 'connecting…'}</span>
           </span>
@@ -160,6 +183,8 @@ function FullOverlay(props: PillProps) {
   const [reactionsOpen, setReactionsOpen] = createSignal(false);
   const [burst, setBurst] = createSignal<string | null>(null);
   let burstTimer: ReturnType<typeof setTimeout> | undefined;
+  let transcriptButton: HTMLButtonElement | undefined;
+  let transcriptWasOpen = mediaState.transcriptOpen;
   onCleanup(() => clearTimeout(burstTimer));
 
   const showReactionBurst = (emoji: string) => {
@@ -183,6 +208,12 @@ function FullOverlay(props: PillProps) {
     onCleanup(() => window.removeEventListener('darkbear:voice-reaction', onReaction));
   });
 
+  createEffect(() => {
+    const open = mediaState.transcriptOpen;
+    if (transcriptWasOpen && !open) queueMicrotask(() => transcriptButton?.focus());
+    transcriptWasOpen = open;
+  });
+
   const selfNick = createMemo(() => bridgeState.nick ?? 'you');
   const peerNicks = createMemo(() =>
     Object.keys(mediaState.peers).sort((a, b) => a.localeCompare(b)),
@@ -193,6 +224,10 @@ function FullOverlay(props: PillProps) {
     if (!ch) return mediaState.liveCaption;
     const entries = mediaState.transcripts[ch] ?? [];
     return entries[entries.length - 1] ?? null;
+  });
+  const transcriptEntries = createMemo(() => {
+    const scope = (mediaState.channel ?? mediaState.callWith)?.toLowerCase();
+    return scope ? mediaState.transcripts[scope] ?? [] : [];
   });
 
   // Spotlight target, when valid: our own nick or a live peer.
@@ -210,10 +245,12 @@ function FullOverlay(props: PillProps) {
   };
 
   const bridgeDot = createMemo(() => BRIDGE_DOT[bridgeState.status]);
+  const health = createMemo(() => HEALTH_STYLE[mediaState.health.status]);
 
   return (
     <div
       class="fixed inset-0 z-40 flex flex-col bg-[#05070c] text-gray-100"
+      aria-label="Active media call"
       style={{
         'padding-top': 'env(safe-area-inset-top)',
         'padding-bottom': 'env(safe-area-inset-bottom)',
@@ -247,22 +284,72 @@ function FullOverlay(props: PillProps) {
             </span>
           </div>
         </div>
-        <button
-          onClick={() => setMinimized(true)}
-          class="w-10 h-10 rounded-xl text-gray-400 hover:text-gray-100 hover:bg-white/[0.06] active:bg-white/[0.10] transition-colors shrink-0"
-          title="Minimize"
-        >
-          <span class="sr-only">Minimize</span>
-          <svg class="mx-auto" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-            <path d="M2 10h12" />
-          </svg>
-        </button>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button
+            ref={(element) => (transcriptButton = element)}
+            type="button"
+            onClick={() => setTranscriptOpen(!mediaState.transcriptOpen)}
+            aria-label={`Call transcript (${transcriptEntries().length})`}
+            aria-expanded={mediaState.transcriptOpen}
+            class={`flex h-10 items-center gap-1.5 rounded-xl border px-2.5 text-[10px] font-semibold transition-colors ${
+              mediaState.transcriptOpen
+                ? 'border-emerald-400/25 bg-emerald-400/12 text-emerald-200'
+                : 'border-white/[0.08] bg-white/[0.04] text-gray-300 hover:bg-white/[0.07]'
+            }`}
+          >
+            <svg class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+              <path d="M2 3.5h12M2 7.5h8M2 11.5h10" />
+            </svg>
+            <span class="hidden sm:inline">Transcript</span>
+            <span class="rounded bg-black/25 px-1 font-mono tabular-nums">{transcriptEntries().length}</span>
+          </button>
+          <CallHealthView />
+          <button
+            onClick={() => setMinimized(true)}
+            class="w-10 h-10 rounded-xl text-gray-400 hover:text-gray-100 hover:bg-white/[0.06] active:bg-white/[0.10] transition-colors shrink-0"
+            title="Minimize"
+          >
+            <span class="sr-only">Minimize</span>
+            <svg class="mx-auto" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M2 10h12" />
+            </svg>
+          </button>
+        </div>
       </header>
+
+      <Show when={mediaState.transcriptOpen}>
+        <TranscriptPanel
+          scope={mediaState.channel ?? mediaState.callWith ?? 'call'}
+          entries={transcriptEntries()}
+          onClose={() => setTranscriptOpen(false)}
+        />
+      </Show>
 
       {/* Stage */}
       <main class="relative z-[1] flex-1 min-h-0 overflow-y-auto px-4 sm:px-7 py-4 sm:py-6 flex flex-col">
+        <Show when={mediaState.health.status === 'reconnecting' || mediaState.health.status === 'degraded'}>
+          <div
+            class={`mb-4 rounded-xl border px-4 py-3 text-[12px] shrink-0 ${
+              mediaState.health.status === 'reconnecting'
+                ? 'border-orange-400/25 bg-orange-500/10 text-orange-100'
+                : 'border-amber-400/20 bg-amber-500/10 text-amber-100'
+            }`}
+            role="status"
+            aria-live="polite"
+          >
+            <span class={`inline-block mr-2 h-2 w-2 rounded-full ${health().dot}`} aria-hidden="true" />
+            {mediaState.health.status === 'reconnecting'
+              ? `Orochi bridge interrupted. Keeping media active while reconnecting (attempt ${mediaState.health.reconnectAttempt}).`
+              : mediaState.health.tier === 0
+                ? 'Packet loss or encoder pressure detected. Monitoring before reducing quality.'
+                : `Call quality reduced to ${QUALITY_LABEL[mediaState.health.tier].toLowerCase()} while conditions recover.`}
+          </div>
+        </Show>
         <Show when={mediaState.error}>
-          <div class="mb-4 rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-100 shrink-0">
+          <div
+            class="mb-4 rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-100 shrink-0"
+            role="alert"
+          >
             {mediaState.error}
           </div>
         </Show>
@@ -313,9 +400,24 @@ function FullOverlay(props: PillProps) {
 
         <Show when={latestCaption()}>
           {(caption) => (
-            <div class="mt-4 mx-auto max-w-3xl w-full rounded-xl border border-white/[0.08] bg-black/55 backdrop-blur-md px-4 py-2 text-center shadow-xl shadow-black/20">
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              class={`mt-4 mx-auto max-w-3xl w-full rounded-xl border px-4 py-2 text-center shadow-xl shadow-black/20 ${
+                settings.captionBackground === 'solid'
+                  ? 'border-white/[0.16] bg-black/90'
+                  : 'border-white/[0.08] bg-black/55 backdrop-blur-md'
+              }`}
+            >
               <span class="mr-2 text-[11px] font-semibold text-emerald-200">{caption().nick}</span>
-              <span class="text-[13px] sm:text-[14px] leading-snug text-gray-100 break-words">{caption().text}</span>
+              <span class={`leading-snug text-gray-100 break-words ${
+                settings.captionSize === 'small'
+                  ? 'text-[12px] sm:text-[13px]'
+                  : settings.captionSize === 'large'
+                    ? 'text-[18px] sm:text-[20px]'
+                    : 'text-[14px] sm:text-[15px]'
+              }`}>{caption().text}</span>
             </div>
           )}
         </Show>
@@ -400,14 +502,98 @@ function FullOverlay(props: PillProps) {
             </button>
           </div>
 
-          <div class="mt-2.5 flex items-center justify-center gap-3 text-[10px] text-gray-600 select-none">
+          <div class="mt-2.5 hidden items-center justify-center gap-3 text-[10px] text-gray-600 select-none sm:flex">
             <span><kbd class={KBD_CLASS}>M</kbd> mute</span>
+            <span><kbd class={KBD_CLASS}>D</kbd> deafen</span>
             <span><kbd class={KBD_CLASS}>V</kbd> camera</span>
             <span><kbd class={KBD_CLASS}>S</kbd> share</span>
+            <span><kbd class={KBD_CLASS}>C</kbd> captions</span>
             <span><kbd class={KBD_CLASS}>H</kbd> hang up</span>
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+// ── Compact call health inspector ──────────────────────────────────────────
+
+function formatBitrate(bps: number): string {
+  if (bps <= 0) return '—';
+  if (bps >= 1_000_000) return `${formatNumber(bps / 1_000_000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Mbps`;
+  return `${formatNumber(Math.round(bps / 1000))} kbps`;
+}
+
+function CallHealthView() {
+  const style = createMemo(() => HEALTH_STYLE[mediaState.health.status]);
+  const loss = createMemo(() => `${formatNumber(mediaState.health.lossRate * 100, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`);
+  const pressure = createMemo(() => `${formatNumber(Math.round(mediaState.health.encodePressure * 100))}%`);
+  const room = createMemo(() => mediaState.health.roomStats);
+  const observedPeerAudioKey = createMemo(() => {
+    const peer = mediaState.callWith?.toLowerCase();
+    return peer ? mediaState.observedAudioKeys[peer] ?? null : null;
+  });
+
+  return (
+    <details class="relative">
+      <summary
+        class="h-10 px-3 rounded-xl border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.07] cursor-pointer select-none flex items-center gap-2 transition-colors"
+        style={{ 'list-style': 'none' }}
+        aria-label={`Call health: ${style().label}`}
+      >
+        <span class={`h-2.5 w-2.5 rounded-full shrink-0 ${style().dot}`} aria-hidden="true" />
+        <span class={`hidden sm:inline text-[11px] font-semibold ${style().text}`}>{style().label}</span>
+        <IconChevronDown />
+      </summary>
+      <div class="absolute right-0 top-12 z-20 w-[min(88vw,320px)] rounded-2xl border border-white/[0.10] bg-gray-950/98 p-4 shadow-2xl shadow-black/50 backdrop-blur-xl">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[10px] uppercase tracking-[0.18em] text-gray-400">Call health</p>
+            <p class={`mt-1 text-[14px] font-semibold ${style().text}`}>{style().label}</p>
+          </div>
+          <span class="rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-[10px] font-mono text-gray-300">
+            {QUALITY_LABEL[mediaState.health.tier]} tier
+          </span>
+        </div>
+
+        <div class="mt-4 grid grid-cols-2 gap-2">
+          <HealthMetric label="Packet loss" value={loss()} warn={mediaState.health.lossRate >= 0.03} />
+          <HealthMetric label="Jitter" value={`${Math.round(mediaState.health.jitterMs)} ms`} warn={mediaState.health.jitterMs >= 40} />
+          <HealthMetric label="Encode load" value={pressure()} warn={mediaState.health.encodePressure >= 1} />
+          <HealthMetric label="Orochi rate" value={formatBitrate(mediaState.health.suggestedBps)} warn={mediaState.health.tier >= 2} />
+        </div>
+
+        <div class="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.07] pt-3 text-[10px] text-gray-400">
+          <span>{mediaState.health.roundTripMs > 0 ? `${Math.round(mediaState.health.roundTripMs)} ms round trip` : 'Round trip pending'}</span>
+          <Show when={room()}>
+            {(stats) => <span>{stats().active_senders} sending · {stats().total_viewers} viewing</span>}
+          </Show>
+        </div>
+        <div class="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-[9px] font-bold uppercase tracking-[0.14em] text-gray-500">Audio E2EE</span>
+            <span class="text-amber-300">Unavailable</span>
+          </div>
+          <p class="mt-1 text-[10px] leading-relaxed text-gray-500">
+            {observedPeerAudioKey()
+              ? `Peer audio key observed: ${observedPeerAudioKey()!.fingerprint} · generation ${observedPeerAudioKey()!.epoch}. Audio E2EE signalling is incomplete, so encrypted delivery is not available. Camera video and screen share are not end-to-end encrypted.`
+              : mediaState.channel
+                ? 'Room Audio E2EE signalling is incomplete, so encrypted delivery is not available. Camera video and screen share are not end-to-end encrypted.'
+                : 'Audio E2EE signalling is incomplete, so encrypted delivery is not available. Camera video and screen share are not end-to-end encrypted.'}
+          </p>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function HealthMetric(props: { label: string; value: string; warn: boolean }) {
+  return (
+    <div class="rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5">
+      <p class="text-[9px] uppercase tracking-[0.14em] text-gray-400">{props.label}</p>
+      <p class={`mt-1 font-mono text-[12px] tabular-nums ${props.warn ? 'text-amber-200' : 'text-gray-100'}`}>
+        {props.value}
+      </p>
     </div>
   );
 }
@@ -586,7 +772,7 @@ function ControlButton(props: ControlButtonProps) {
     return `h-12 min-w-12 sm:min-w-[88px] px-3 rounded-2xl border flex items-center justify-center gap-2 text-[12px] font-semibold transition-all active:scale-95 ${state}`;
   });
   return (
-    <button onClick={() => props.onClick()} class={cls()} title={props.label} aria-pressed={props.active}>
+    <button onClick={() => props.onClick()} class={cls()} title={props.label} aria-label={props.label} aria-pressed={props.active}>
       {props.children}
       <span class="hidden sm:inline">{props.label}</span>
     </button>
@@ -656,6 +842,14 @@ function IconSmile() {
       <circle cx="12" cy="12" r="9" />
       <path d="M8.5 14a4.5 4.5 0 007 0" />
       <path d="M9 9.5h.01M15 9.5h.01" />
+    </svg>
+  );
+}
+
+function IconChevronDown() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 6l4 4 4-4" />
     </svg>
   );
 }

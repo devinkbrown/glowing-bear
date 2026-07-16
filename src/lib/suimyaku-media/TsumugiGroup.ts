@@ -1,5 +1,5 @@
 /*
- * TsumugiGroup.ts — Multi-party TSUMUGI group key for encrypted channel media.
+ * TsumugiGroup.ts — Multi-party TSUMUGI group key for encrypted channel audio.
  *
  * The channel creator generates a 256-bit AES-GCM group key, encrypts it
  * pairwise for each participant using their TsumugiSession, and distributes it.

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { parseIrcv3Tags } from './tags';
+import { parseIrcv3Tags, replyParentFromTags } from './tags';
 
 describe('parseIrcv3Tags', () => {
   it('extracts IRCv3 key=value tags from a mixed WeeChat tags_array', () => {
@@ -25,6 +25,20 @@ describe('parseIrcv3Tags', () => {
     expect(tags.size).toBe(0);
   });
 
+  it('normalizes WeeChat relay irc_tag_ entries to their IRCv3 keys', () => {
+    const tags = parseIrcv3Tags([
+      'irc_privmsg',
+      'irc_tag_msgid=mid-1',
+      'irc_tag_+draft/reply=root-1',
+      'irc_tag_time=2026-07-16T12:00:00.000Z',
+    ]);
+
+    expect(tags.get('msgid')).toBe('mid-1');
+    expect(tags.get('+draft/reply')).toBe('root-1');
+    expect(tags.get('time')).toBe('2026-07-16T12:00:00.000Z');
+    expect(tags.has('irc_privmsg')).toBe(false);
+  });
+
   it('filters notify_*, nick_*, logN, and self_msg tags', () => {
     const tags = parseIrcv3Tags(['notify_highlight', 'nick_dbtA3950', 'log4', 'log12', 'self_msg']);
     expect(tags.size).toBe(0);
@@ -36,6 +50,12 @@ describe('parseIrcv3Tags', () => {
     expect(tags.get('+typing')).toBe('active');
     expect(tags.get('+draft/react')).toBe('👍');
     expect(tags.get('+draft/reply')).toBe('MSGID1');
+  });
+
+  it('prefers +draft/reply while accepting the legacy +reply spelling', () => {
+    expect(replyParentFromTags(new Map([['+draft/reply', 'current'], ['+reply', 'legacy']]))).toBe('current');
+    expect(replyParentFromTags(new Map([['+reply', 'legacy']]))).toBe('legacy');
+    expect(replyParentFromTags(new Map())).toBeUndefined();
   });
 
   it('stores value-less non-internal tags with an empty value', () => {

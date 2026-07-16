@@ -10,12 +10,14 @@
 import { createEffect, createMemo, createSignal, on, Show } from 'solid-js';
 import {
   buffersState,
+  activityUnreadCount,
   ConnectionState,
   connectionState,
   isActiveOrochi,
   lag,
   openChannelInfo,
   openModal,
+  openActivityPanel,
   openServicesPanel,
   toggleSplit,
   settings,
@@ -23,11 +25,13 @@ import {
   toggleUserList,
   uiState,
 } from '@/state';
-import { joinRoom, mediaState, startCall } from '@/state/media';
+import { mediaState, requestRoomJoin, requestStartCall } from '@/state/media';
 import { formatText } from '@/lib/irc-classic/formatter';
 import { BUFFER_KIND_LABEL, bufferKind, isIrcBuffer } from '@/lib/bufferKind';
 import { createMediaQuery } from '@/primitives/mediaQuery';
 import { useClickOutside } from '@/primitives/clickOutside';
+import DmSecurityControl from '@/ui/security/DmSecurityControl';
+import { formatNumber, t } from '@/lib/i18n';
 
 const LAG_WARN_MS = 500;
 
@@ -85,11 +89,14 @@ export default function Header() {
   useClickOutside(() => (ircxOpen() ? ircxRef : undefined), () => setIrcxOpen(false));
 
   return (
-    <header class="darkbear-topbar flex items-center gap-1 sm:gap-3 px-1.5 sm:px-4 h-12 sm:h-14 border-b border-white/[0.07] bg-gray-950/85 backdrop-blur-md shrink-0 relative">
+    <header class="darkbear-topbar z-30 flex items-center gap-1 sm:gap-3 px-1.5 sm:px-4 h-12 sm:h-14 border-b border-white/[0.07] bg-gray-950/85 backdrop-blur-md shrink-0 relative">
       {/* Buffer name + topic */}
       <div ref={(el) => (topicRef = el)} class="flex-1 min-w-0 flex flex-col justify-center relative">
         <div class="flex items-center gap-1.5 min-w-0">
           <h2 class="text-[15px] sm:text-[16px] font-bold tracking-tight text-gray-50 truncate leading-tight">{bufName()}</h2>
+          <Show when={isPrivate()}>
+            <DmSecurityControl peer={chanName()} />
+          </Show>
           <Show when={serverName()}>
             <span class="hidden sm:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-white/[0.045] text-gray-500 border border-white/[0.06] shrink-0">
               {serverName()}
@@ -103,7 +110,7 @@ export default function Header() {
           <Show when={isChannel() && nickCount() > 0}>
             <span class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-white/[0.035] text-gray-500 border border-white/[0.05] shrink-0">
               <span class="h-1.5 w-1.5 rounded-full bg-emerald-400/70" />
-              {nickCount()} users
+              {t('header.users', { count: formatNumber(nickCount()) })}
             </span>
           </Show>
           <Show when={orochi()}>
@@ -113,10 +120,11 @@ export default function Header() {
           </Show>
           <Show when={isChannel() && orochi()}>
             <button
+              type="button"
               onClick={() => openChannelInfo(chanName())}
-              class="w-5 h-5 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 transition-colors shrink-0"
-              title="Channel info (IRCX PROP + ACCESS)"
-              aria-label="Channel info"
+              class="w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 transition-colors shrink-0"
+              title={`${t('header.channelInfo')} (IRCX PROP + ACCESS)`}
+              aria-label={t('header.channelInfo')}
             >
               <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <circle cx="8" cy="8" r="7" />
@@ -128,16 +136,17 @@ export default function Header() {
           <Show when={liveHere()}>
             <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[9px] font-semibold uppercase tracking-wider shrink-0">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live
+              {t('header.live')}
             </span>
           </Show>
         </div>
         <Show when={title()}>
           <button
+            type="button"
             onClick={() => setTopicExpanded(!topicExpanded())}
-            class="group mt-0.5 flex items-center gap-1 max-w-full text-left text-[11px] font-normal leading-tight text-gray-600 sm:text-gray-500 transition-colors hover:text-gray-300 active:text-gray-400"
+            class="group mt-0.5 flex min-h-6 items-center gap-1 max-w-full text-left text-[11px] font-normal leading-tight text-gray-600 sm:text-gray-500 transition-colors hover:text-gray-300 active:text-gray-400"
             aria-expanded={topicExpanded()}
-            title={topicExpanded() ? 'Collapse topic' : 'Show full topic'}
+            title={topicExpanded() ? t('header.collapseTopic') : t('header.showTopic')}
           >
             <span class="truncate" innerHTML={title()} />
             <svg
@@ -190,10 +199,10 @@ export default function Header() {
         {/* Call buttons — voice + video, DM call or channel room join */}
         <Show when={canCall()}>
           <button
-            onClick={() => (isPrivate() ? startCall(bufName(), false) : joinRoom(chanName(), false))}
+            onClick={() => (isPrivate() ? requestStartCall(bufName(), false) : requestRoomJoin(chanName(), false))}
             class="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-[var(--custom-accent,#818cf8)] hover:bg-white/[0.04] active:bg-white/[0.06] transition-all"
-            title={isPrivate() ? 'Voice call' : 'Join voice'}
-            aria-label={isPrivate() ? 'Voice call' : 'Join voice'}
+            title={isPrivate() ? t('header.voiceCall') : t('header.joinVoice')}
+            aria-label={isPrivate() ? t('header.voiceCall') : t('header.joinVoice')}
           >
             <svg class="w-[13px] h-[13px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <rect x="9" y="2" width="6" height="11" rx="3" />
@@ -202,10 +211,10 @@ export default function Header() {
             </svg>
           </button>
           <button
-            onClick={() => (isPrivate() ? startCall(bufName(), true) : joinRoom(chanName(), true))}
+            onClick={() => (isPrivate() ? requestStartCall(bufName(), true) : requestRoomJoin(chanName(), true))}
             class="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-emerald-400 hover:bg-white/[0.04] active:bg-white/[0.06] transition-all"
-            title={isPrivate() ? 'Video call' : 'Join video'}
-            aria-label={isPrivate() ? 'Video call' : 'Join video'}
+            title={isPrivate() ? t('header.videoCall') : t('header.joinVideo')}
+            aria-label={isPrivate() ? t('header.videoCall') : t('header.joinVideo')}
           >
             <svg class="w-[13px] h-[13px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <rect x="2" y="5" width="15" height="14" rx="2" />
@@ -215,17 +224,32 @@ export default function Header() {
         </Show>
 
         {/* Channel browser */}
+        <button
+          onClick={() => openActivityPanel()}
+          class="relative flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-all hover:bg-white/[0.04] hover:text-gray-100 sm:h-7 sm:w-7"
+          title={t('header.activity')}
+          aria-label={t('header.activity')}
+        >
+          <svg class="h-[13px] w-[13px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M3 5a5 5 0 0110 0v3l1.5 2H1.5L3 8zM6 13h4" />
+          </svg>
+          <Show when={activityUnreadCount() > 0}>
+            <span class="absolute -right-1 -top-1 min-w-3.5 rounded-full bg-[var(--role-mention,#f87171)] px-1 text-[8px] font-black leading-3.5 text-gray-950">{Math.min(99, activityUnreadCount())}</span>
+          </Show>
+        </button>
+
+        {/* Channel browser */}
         <Show when={connected()}>
           <button
             onClick={() => openModal('channelList')}
             class="flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[12px] font-semibold text-gray-400 transition-all hover:bg-white/[0.04] hover:text-emerald-300 active:bg-white/[0.06] sm:h-7 sm:w-auto sm:px-2.5 sm:text-[11px]"
-            title="Browse channels"
-            aria-label="Browse channels"
+            title={t('header.browseChannels')}
+            aria-label={t('header.browseChannels')}
           >
             <svg class="h-[13px] w-[13px] sm:h-[12px] sm:w-[12px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
               <path d="M5 1 3 15M13 1l-2 14M1 5h14M1 11h14" />
             </svg>
-            <span class="hidden md:inline">Channels</span>
+            <span class="hidden md:inline">{t('header.channels')}</span>
           </button>
         </Show>
 
@@ -238,8 +262,8 @@ export default function Header() {
               'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/[0.08]': ircxOpen(),
               'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.06]': !ircxOpen(),
             }}
-            title="IRC tools"
-            aria-label="IRC tools"
+            title={t('header.ircTools')}
+            aria-label={t('header.ircTools')}
           >
             <svg class="w-[14px] h-[14px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
               <circle cx="3" cy="8" r="1.5" />
@@ -263,7 +287,7 @@ export default function Header() {
                       <circle cx="8" cy="8" r="3" />
                     </svg>
                   </span>
-                  Services
+                  {t('header.services')}
                 </button>
               </Show>
               <button
@@ -278,7 +302,7 @@ export default function Header() {
                     <path d="M5 1l-2 14M13 1l-2 14M1 5h14M1 11h14" />
                   </svg>
                 </span>
-                Channel List
+                {t('header.channelList')}
               </button>
             </div>
           </Show>
@@ -292,8 +316,8 @@ export default function Header() {
             'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10': uiState.searchOpen,
             'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.06]': !uiState.searchOpen,
           }}
-          title="Search messages (Ctrl+F)"
-          aria-label="Search messages"
+          title={t('header.searchMessagesShortcut')}
+          aria-label={t('header.searchMessages')}
         >
           <svg class="w-[13px] h-[13px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <circle cx="6.5" cy="6.5" r="5" />
@@ -310,8 +334,8 @@ export default function Header() {
               'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10': uiState.splitMode !== 'none',
               'text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.06]': uiState.splitMode === 'none',
             }}
-            title="Split view (Ctrl+\) — Alt-click a channel to open it in the split"
-            aria-label="Toggle split view"
+            title={t('header.splitViewHelp')}
+            aria-label={t('header.splitView')}
           >
             <svg class="w-[14px] h-[14px] sm:w-[12px] sm:h-[12px]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
               <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
@@ -324,6 +348,7 @@ export default function Header() {
         <Show when={isChannel()}>
           <button
             onClick={() => toggleUserList()}
+            aria-label={t('header.userList')}
             class="flex items-center justify-center gap-1 h-8 w-8 sm:h-7 sm:w-auto px-0 sm:px-2.5 rounded-full text-[12px] sm:text-[11px] font-medium transition-all"
             classList={{
               'bg-[var(--custom-accent,#818cf8)]/10 text-[var(--custom-accent,#818cf8)]': uiState.userListOpen,

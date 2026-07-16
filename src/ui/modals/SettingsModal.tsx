@@ -9,20 +9,24 @@
 //   Alerts     — desktop notifications, sound, read-on-focus, auto-reconnect.
 //   Connection — relay settings + saved profiles manager + orochi bridge
 //                (enabled, wsUrl override, account, password, autoJoinMedia,
-//                e2eeDms).
+//                e2eeDms + verified-only delivery policy).
 //   Advanced   — upload URL, Tenor key, custom CSS, keyboard shortcut list,
 //                export / import / reset settings.
 //
 // Usage: <SettingsModal open={uiState.activeModal === 'settings'} onClose={closeModal} />
 // `open` defaults to true for conditional-mount usage.
 
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import type { JSX } from 'solid-js';
 import {
   deleteProfile,
   exportSettings,
   importSettings,
   loadProfile,
+  connectionError,
+  connectionState,
+  lag,
+  relayDiagnostics,
   resetSettings,
   saveProfile,
   setCustomColors,
@@ -32,15 +36,47 @@ import {
   updateBridge,
   updateRelay,
   updateSettings,
+  clearSavedMessages,
+  removeSavedForBuffer,
+  resetActivity,
+  syncSavedRetention,
+  forgetPreferenceSyncDevice,
+  preferenceSyncState,
+  syncPreferencesNow,
+  createUserAction,
+  deleteUserAction,
+  resetOperatorIncidents,
+  resetUploads,
 } from '@/state';
-import type { BridgeSettings, CustomColors, ThemeId } from '@/state';
+import type { BridgeSettings, CustomColors, LocalePreference, SafeCommandId, ThemeId } from '@/state';
 import Modal from '@/ui/bits/Modal';
+import { clearCredentials } from '@/lib/credentials';
+import { disableWebPush } from '@/lib/webPush';
+import { clearDraftsAndHistory } from '@/state/drafts';
+import { archiveStats, configureArchive, deleteArchiveBuffer, wipeArchive } from '@/lib/archive/client';
+import type { ArchiveBufferStats, ArchiveStats } from '@/lib/archive/types';
+import { bridgeState } from '@/state/bridge';
+import { mediaState } from '@/state/media';
+import {
+  assetVersion,
+  diagnosticErrorCode,
+  diagnosticErrorId,
+  exportSupportBundle,
+  mediaRuntimeDiagnostics,
+} from '@/lib/diagnostics';
+import {
+  quietHoursActive,
+  resolvedTimeZone,
+  systemTimeZone,
+  untilTomorrow,
+} from '@/lib/notificationPolicy';
+import { MAX_USER_ACTIONS, SAFE_COMMANDS, safeCommandDefinition } from '@/lib/userActions';
+import { activeLocale, formatDate, formatNumber, LOCALE_OPTIONS, t } from '@/lib/i18n';
+import type { MessageKey } from '@/lib/i18n';
 
 type Tab = 'appearance' | 'messages' | 'notifications' | 'connection' | 'advanced';
 
-/** Bridge settings + the optional e2eeDms flag (additive; may not be in the
- *  base type yet — treat as optional boolean). */
-type BridgeExt = BridgeSettings & { e2eeDms?: boolean };
+type BridgeExt = BridgeSettings;
 
 const THEMES: { id: ThemeId; name: string; accent: string; bg: string; text: string }[] = [
   { id: 'darkbear', name: 'DarkBear', accent: '#818cf8', bg: '#000005', text: '#d0d5e8' },
@@ -64,12 +100,12 @@ const THEMES: { id: ThemeId; name: string; accent: string; bg: string; text: str
   { id: 'custom', name: 'Custom', accent: '#888', bg: '#0c0d12', text: '#d0d4e0' },
 ];
 
-const TABS: { id: Tab; label: string; desc: string; icon: string }[] = [
-  { id: 'appearance', label: 'Appearance', desc: 'Theme, type, layout', icon: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z' },
-  { id: 'messages', label: 'Messages', desc: 'Density, media, mentions', icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
-  { id: 'notifications', label: 'Alerts', desc: 'Notifications and recovery', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
-  { id: 'connection', label: 'Connection', desc: 'Relay, profiles, bridge', icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1' },
-  { id: 'advanced', label: 'Advanced', desc: 'CSS, uploads, data', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
+const TABS: { id: Tab; label: MessageKey; desc: MessageKey; icon: string }[] = [
+  { id: 'appearance', label: 'settings.tabAppearance', desc: 'settings.tabAppearanceDescription', icon: 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z' },
+  { id: 'messages', label: 'settings.tabMessages', desc: 'settings.tabMessagesDescription', icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
+  { id: 'notifications', label: 'settings.tabAlerts', desc: 'settings.tabAlertsDescription', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
+  { id: 'connection', label: 'settings.tabConnection', desc: 'settings.tabConnectionDescription', icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1' },
+  { id: 'advanced', label: 'settings.tabAdvanced', desc: 'settings.tabAdvancedDescription', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
 ];
 
 const SHORTCUTS: { keys: string; action: string }[] = [
@@ -83,6 +119,7 @@ const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'Ctrl+L', action: 'Clear buffer' },
   { keys: 'Tab', action: 'Nick completion' },
   { keys: 'Ctrl+B/I/U', action: 'Bold / Italic / Underline' },
+  { keys: 'M/D/V/S/C/H', action: 'Call controls and transcript' },
 ];
 
 const TIMESTAMP_OPTIONS: { id: '24h' | '12h' | 'relative' | 'off'; name: string }[] = [
@@ -108,7 +145,16 @@ export default function SettingsModal(props: Props) {
   const [themeFilter, setThemeFilter] = createSignal('');
   const [profileName, setProfileName] = createSignal('');
   const [exportCopied, setExportCopied] = createSignal(false);
+  const [supportCopied, setSupportCopied] = createSignal(false);
+  const [archiveStatus, setArchiveStatus] = createSignal('');
+  const [archiveBuffers, setArchiveBuffers] = createSignal<ArchiveBufferStats[]>([]);
+  const [archiveSelectedBuffer, setArchiveSelectedBuffer] = createSignal('');
+  const [userActionName, setUserActionName] = createSignal('');
+  const [userActionCommand, setUserActionCommand] = createSignal<SafeCommandId>('join');
+  const [userActionScope, setUserActionScope] = createSignal('global');
   let contentRef: HTMLDivElement | undefined;
+  let exportCopiedTimer: ReturnType<typeof setTimeout> | undefined;
+  let supportCopiedTimer: ReturnType<typeof setTimeout> | undefined;
 
   createEffect(() => {
     tab();
@@ -126,19 +172,148 @@ export default function SettingsModal(props: Props) {
 
   const bridge = (): BridgeExt => settings.bridge as BridgeExt;
   const patchBridge = (p: Partial<BridgeExt>): void => updateBridge(p);
+  const relayErrorId = () => diagnosticErrorId('relay', diagnosticErrorCode(connectionError()));
+  const bridgeErrorId = () => diagnosticErrorId('bridge', diagnosticErrorCode(bridgeState.error));
+  const mediaErrorId = () => diagnosticErrorId('media', diagnosticErrorCode(mediaState.error));
+  const relayPhaseDetail = () => {
+    const d = relayDiagnostics();
+    if (d.reconnectReason === 'none') return `${Math.round(lag())} ms`;
+    const delay = d.reconnectDelayMs > 0 ? ` · ${Math.round(d.reconnectDelayMs / 1000)}s` : '';
+    return `${d.reconnectReason} · attempt ${d.reconnectAttempt}${delay}`;
+  };
+  const protocolDetail = () => {
+    const d = relayDiagnostics();
+    const hash = d.hashAlgorithm === 'none' ? d.handshake : d.hashAlgorithm;
+    return `${hash} · ${d.compression}`;
+  };
+  const preferenceSyncTime = () => preferenceSyncState.lastSyncedAt
+    ? formatDate(preferenceSyncState.lastSyncedAt, { hour: '2-digit', minute: '2-digit' })
+    : 'not synced';
+  const dndStatus = () => {
+    const now = Date.now();
+    if (settings.notificationsSnoozedUntil > now) {
+      return `Paused until ${formatDate(settings.notificationsSnoozedUntil, {
+        weekday: 'short', hour: '2-digit', minute: '2-digit',
+      })}`;
+    }
+    if (quietHoursActive({
+      enabled: settings.quietHoursEnabled,
+      start: settings.quietHoursStart,
+      end: settings.quietHoursEnd,
+      timeZone: settings.quietHoursTimezone,
+    }, new Date(now))) return 'Scheduled quiet hours are active now';
+    return settings.notifications ? 'Alerts are active' : 'Desktop alerts are disabled';
+  };
+
+  onCleanup(() => {
+    if (exportCopiedTimer) clearTimeout(exportCopiedTimer);
+    if (supportCopiedTimer) clearTimeout(supportCopiedTimer);
+  });
 
   const handleExport = () => {
     void navigator.clipboard.writeText(exportSettings()).then(() => {
       setExportCopied(true);
-      setTimeout(() => setExportCopied(false), 2000);
+      if (exportCopiedTimer) clearTimeout(exportCopiedTimer);
+      exportCopiedTimer = setTimeout(() => {
+        exportCopiedTimer = undefined;
+        setExportCopied(false);
+      }, 2000);
     });
   };
 
   const handleImport = () => {
-    const input = prompt('Paste exported settings JSON:');
+    const input = prompt('Paste redacted settings export JSON:');
     if (!input) return;
     if (!importSettings(input)) alert('Invalid JSON');
   };
+
+  const handleSupportExport = () => {
+    void navigator.clipboard.writeText(exportSupportBundle()).then(() => {
+      setSupportCopied(true);
+      if (supportCopiedTimer) clearTimeout(supportCopiedTimer);
+      supportCopiedTimer = setTimeout(() => {
+        supportCopiedTimer = undefined;
+        setSupportCopied(false);
+      }, 2000);
+    });
+  };
+
+  const handleForgetDevice = async () => {
+    const confirmed = confirm(
+      'Forget this device? This clears saved profiles and settings, relay and bridge passwords, session tokens, drafts and input history, and the local push subscription.',
+    );
+    if (!confirmed) return;
+    await disableWebPush(null);
+    await wipeArchive().catch(() => undefined);
+    clearCredentials();
+    clearDraftsAndHistory();
+    resetActivity();
+    resetOperatorIncidents();
+    resetUploads();
+    resetSettings();
+    forgetPreferenceSyncDevice();
+  };
+
+  const archivePolicy = () => ({
+    retention: settings.archiveRetention,
+    maxMiB: settings.archiveMaxMiB,
+  });
+
+  const applyArchiveStats = (stats: ArchiveStats) => {
+    setArchiveBuffers(stats.buffers);
+    setArchiveSelectedBuffer((current) =>
+      stats.buffers.some((buffer) => buffer.bufferKey === current)
+        ? current
+        : (stats.buffers[0]?.bufferKey ?? ''),
+    );
+    setArchiveStatus(`${formatNumber(stats.messages)} messages · ${formatNumber(stats.bytes / 1024 / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MiB`);
+  };
+
+  const refreshArchiveStats = async () => {
+    applyArchiveStats(await archiveStats());
+  };
+
+  const handleArchiveRetention = (retention: typeof settings.archiveRetention) => {
+    updateSettings({ archiveRetention: retention });
+    syncSavedRetention(retention);
+    setArchiveStatus(retention === 'off' ? 'Wiping local transcript…' : 'Applying retention…');
+    void configureArchive({ ...archivePolicy(), retention })
+      .then(async () => {
+        await refreshArchiveStats();
+      })
+      .catch(() => setArchiveStatus('Archive unavailable in this browser'));
+  };
+
+  const handleWipeArchive = () => {
+    if (!confirm('Delete all locally archived message history from this device?')) return;
+    setArchiveStatus('Wiping local transcript…');
+    void wipeArchive()
+      .then(() => {
+        clearSavedMessages();
+        setArchiveBuffers([]);
+        setArchiveSelectedBuffer('');
+        setArchiveStatus('Local transcript deleted');
+      })
+      .catch(() => setArchiveStatus('Archive unavailable in this browser'));
+  };
+
+  const handleDeleteArchiveBuffer = () => {
+    const bufferKey = archiveSelectedBuffer();
+    const buffer = archiveBuffers().find((candidate) => candidate.bufferKey === bufferKey);
+    if (!buffer || !confirm(`Delete locally archived history for ${buffer.bufferName}?`)) return;
+    setArchiveStatus(`Deleting ${buffer.bufferName}…`);
+    void deleteArchiveBuffer(bufferKey)
+      .then(async () => {
+        removeSavedForBuffer(bufferKey);
+        await refreshArchiveStats();
+      })
+      .catch(() => setArchiveStatus('Archive unavailable in this browser'));
+  };
+
+  createEffect(() => {
+    if (tab() !== 'advanced' || settings.archiveRetention === 'off') return;
+    void refreshArchiveStats().catch(() => setArchiveStatus('Archive unavailable in this browser'));
+  });
 
   return (
     <Modal
@@ -153,38 +328,38 @@ export default function SettingsModal(props: Props) {
         <nav class="settings-rail hidden lg:flex flex-col border-r border-white/[0.06] p-3 gap-1">
           <div class="px-2.5 pb-3 pt-1">
             <p class="text-[10px] font-black uppercase tracking-[0.18em] text-gray-600">DarkBear</p>
-            <h2 class="mt-1 text-[20px] font-black tracking-tight text-gray-50">Preferences</h2>
-            <p class="mt-1 text-[11px] leading-relaxed text-gray-600">Tune the relay console without leaving the buffer.</p>
+            <h2 class="mt-1 text-[20px] font-black tracking-tight text-gray-50">{t('settings.preferences')}</h2>
+            <p class="mt-1 text-[11px] leading-relaxed text-gray-600">{t('settings.description')}</p>
           </div>
           <For each={TABS}>
-            {(t) => (
-              <button onClick={() => setTab(t.id)}
+            {(tabOption) => (
+              <button onClick={() => setTab(tabOption.id)}
                 class={`settings-nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all
-                  ${tab() === t.id
+                  ${tab() === tabOption.id
                     ? 'bg-[var(--custom-accent,#818cf8)]/[0.11] text-gray-100 shadow-sm ring-1 ring-[var(--custom-accent,#818cf8)]/20'
                     : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.035]'}`}>
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04]">
                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d={t.icon} />
+                    <path d={tabOption.icon} />
                   </svg>
                 </span>
                 <span class="min-w-0">
-                  <span class="block text-[12px] font-bold leading-tight">{t.label}</span>
-                  <span class="mt-0.5 block truncate text-[10px] leading-tight text-gray-600">{t.desc}</span>
+                  <span class="block text-[12px] font-bold leading-tight">{t(tabOption.label)}</span>
+                  <span class="mt-0.5 block truncate text-[10px] leading-tight text-gray-600">{t(tabOption.desc)}</span>
                 </span>
               </button>
             )}
           </For>
           <div class="flex-1" />
           <div class="settings-rail-status rounded-2xl border border-white/[0.06] bg-black/20 p-3">
-            <p class="text-[9px] font-black uppercase tracking-[0.16em] text-gray-600">Current</p>
+            <p class="text-[9px] font-black uppercase tracking-[0.16em] text-gray-600">{t('settings.current')}</p>
             <div class="mt-2 flex items-center gap-2">
               <span class="h-2.5 w-2.5 rounded-full bg-[var(--custom-accent,#818cf8)]" />
               <span class="min-w-0 truncate text-[12px] font-semibold text-gray-300">{settings.theme}</span>
             </div>
             <div class="mt-2 grid grid-cols-2 gap-1.5 text-center">
-              <MiniStat label="font" value={`${settings.fontSize}px`} />
-              <MiniStat label="bridge" value={bridge().enabled ? 'on' : 'off'} hot={bridge().enabled} />
+              <MiniStat label={t('settings.font')} value={`${settings.fontSize}px`} />
+              <MiniStat label={t('settings.bridge')} value={bridge().enabled ? t('settings.on') : t('settings.off')} hot={bridge().enabled} />
             </div>
           </div>
         </nav>
@@ -194,12 +369,12 @@ export default function SettingsModal(props: Props) {
             <div class="mb-2 flex items-center justify-between gap-3 px-1">
               <div class="min-w-0">
                 <p class="text-[9px] font-black uppercase tracking-[0.18em] text-gray-600">DarkBear</p>
-                <h2 class="text-[18px] font-black tracking-tight text-gray-50">Preferences</h2>
+                <h2 class="text-[18px] font-black tracking-tight text-gray-50">{t('settings.preferences')}</h2>
               </div>
               <button
                 onClick={() => props.onClose()}
                 class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.035] text-gray-500 active:bg-white/[0.08]"
-                aria-label="Close preferences"
+                aria-label={t('settings.close')}
               >
                 <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                   <path d="M4 4l8 8M12 4l-8 8" />
@@ -208,11 +383,11 @@ export default function SettingsModal(props: Props) {
             </div>
             <div class="flex gap-1 overflow-x-auto pb-2">
               <For each={TABS}>
-                {(t) => (
-                  <button onClick={() => setTab(t.id)}
+                {(tabOption) => (
+                  <button onClick={() => setTab(tabOption.id)}
                     class={`shrink-0 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] transition-all
-                      ${tab() === t.id ? 'bg-[var(--custom-accent,#818cf8)] text-white shadow-lg shadow-black/20' : 'bg-white/[0.035] text-gray-500 active:bg-white/[0.07]'}`}>
-                    {t.label}
+                      ${tab() === tabOption.id ? 'bg-[var(--custom-accent,#818cf8)] text-white shadow-lg shadow-black/20' : 'bg-white/[0.035] text-gray-500 active:bg-white/[0.07]'}`}>
+                    {t(tabOption.label)}
                   </button>
                 )}
               </For>
@@ -221,13 +396,17 @@ export default function SettingsModal(props: Props) {
 
           <div class="hidden items-center justify-between border-b border-white/[0.06] px-5 py-4 lg:flex">
             <div>
-              <p class="text-[10px] font-black uppercase tracking-[0.16em] text-gray-600">{TABS.find((t) => t.id === tab())?.desc}</p>
-              <h3 class="mt-1 text-[17px] font-black tracking-tight text-gray-50">{TABS.find((t) => t.id === tab())?.label}</h3>
+              <p class="text-[10px] font-black uppercase tracking-[0.16em] text-gray-600">
+                {t(TABS.find((tabOption) => tabOption.id === tab())?.desc ?? 'settings.tabAppearanceDescription')}
+              </p>
+              <h3 class="mt-1 text-[17px] font-black tracking-tight text-gray-50">
+                {t(TABS.find((tabOption) => tabOption.id === tab())?.label ?? 'settings.tabAppearance')}
+              </h3>
             </div>
             <button
               onClick={() => props.onClose()}
               class="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.035] text-gray-500 hover:text-gray-200 hover:bg-white/[0.06]"
-              aria-label="Close preferences"
+              aria-label={t('settings.close')}
             >
               <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <path d="M4 4l8 8M12 4l-8 8" />
@@ -241,6 +420,26 @@ export default function SettingsModal(props: Props) {
 
           {/* ─── APPEARANCE ─── */}
           <Show when={tab() === 'appearance'}>
+            <Section label={t('locale.languageRegion')} desc={t('locale.languageRegionDescription')}>
+              <label class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500">
+                {t('locale.language')}
+                <select
+                  data-testid="locale-select"
+                  aria-label={t('locale.language')}
+                  value={settings.locale}
+                  onChange={(event) => updateSettings({ locale: event.currentTarget.value as LocalePreference })}
+                  class="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 text-[12px] font-normal normal-case tracking-normal text-gray-100 outline-none focus:border-[var(--custom-accent,#818cf8)]/35"
+                >
+                  <For each={LOCALE_OPTIONS}>
+                    {(option) => <option value={option.value}>{t(option.label)}</option>}
+                  </For>
+                </select>
+              </label>
+              <p class="mt-2 text-[10px] leading-relaxed text-gray-600">
+                {t('locale.current', { locale: activeLocale() })}
+              </p>
+            </Section>
+
             <Section label="Theme" desc="Choose a color scheme for the interface">
               <div class="relative mb-2">
                 <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -403,7 +602,7 @@ export default function SettingsModal(props: Props) {
             <Section label="Display" desc="Control what appears in the message area">
               <div class="space-y-0">
                 <Toggle label="Compact Mode" desc="Reduce spacing between messages for density" on={settings.compactMode} onChange={(v) => updateSettings({ compactMode: v })} />
-                <Toggle label="Inline Images" desc="Expand image links into thumbnails" on={settings.inlineImages} onChange={(v) => updateSettings({ inlineImages: v })} />
+                <Toggle label="Inline Images" desc="Opt in to fetching remote image thumbnails" on={settings.inlineImages} onChange={(v) => updateSettings({ inlineImages: v })} />
                 <Toggle label="Nick Colors" desc="Assign unique colors to each nickname" on={settings.colorNicks} onChange={(v) => updateSettings({ colorNicks: v })} />
                 <Toggle label="Mode Prefixes" desc="Show @/+/% symbols before nicknames" on={settings.showPrefixes} onChange={(v) => updateSettings({ showPrefixes: v })} />
                 <Toggle label="Join/Part/Quit" desc="Show when users enter and leave channels" on={settings.joinPartMsgs} onChange={(v) => updateSettings({ joinPartMsgs: v })} />
@@ -413,6 +612,31 @@ export default function SettingsModal(props: Props) {
 
             <Section label="Sidebar" desc="Buffer list behavior">
               <Toggle label="Unread Only" desc="Hide channels with no new messages" on={settings.onlyUnread} onChange={(v) => updateSettings({ onlyUnread: v })} />
+            </Section>
+
+            <Section label="Call Captions" desc="Readable live caption presentation">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500">
+                  Caption size
+                  <select aria-label="Default caption size" value={settings.captionSize}
+                    onChange={(event) => updateSettings({ captionSize: event.currentTarget.value as typeof settings.captionSize })}
+                    class="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 text-[12px] font-normal normal-case tracking-normal text-gray-100 outline-none focus:border-[var(--custom-accent,#818cf8)]/35">
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                  </select>
+                </label>
+                <label class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500">
+                  Caption background
+                  <select aria-label="Default caption background" value={settings.captionBackground}
+                    onChange={(event) => updateSettings({ captionBackground: event.currentTarget.value as typeof settings.captionBackground })}
+                    class="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 text-[12px] font-normal normal-case tracking-normal text-gray-100 outline-none focus:border-[var(--custom-accent,#818cf8)]/35">
+                    <option value="solid">High contrast</option>
+                    <option value="translucent">Translucent</option>
+                  </select>
+                </label>
+              </div>
+              <p class="mt-2 text-[10px] leading-relaxed text-gray-600">Caption presentation stays on this device. Caption persistence follows the Local Archive setting, which is off by default.</p>
             </Section>
 
             <Section label="Highlight Words" desc="Get notified when these words appear">
@@ -428,9 +652,54 @@ export default function SettingsModal(props: Props) {
           <Show when={tab() === 'notifications'}>
             <Section label="Alerts" desc="How DarkBear gets your attention">
               <div class="space-y-0">
-                <Toggle label="Desktop Notifications" desc="Show browser push notifications for highlights and mentions" on={settings.notifications} onChange={(v) => updateSettings({ notifications: v })} />
+                <Toggle label="Desktop Notifications" desc="Show permitted browser and Web Push notifications" on={settings.notifications} onChange={(v) => updateSettings({ notifications: v })} />
                 <Toggle label="Notification Sound" desc="Play an audio chime on new activity" on={settings.notificationSound} onChange={(v) => updateSettings({ notificationSound: v })} />
                 <Toggle label="Mark Read on Focus" desc="Automatically clear unread counts when the window is focused" on={settings.readOnFocus} onChange={(v) => updateSettings({ readOnFocus: v })} />
+              </div>
+            </Section>
+
+            <Section label="Do Not Disturb" desc="Pause alerts now or follow a device-local schedule">
+              <div class="space-y-3" data-testid="notification-dnd">
+                <div role="status" aria-live="polite" class="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[11px] font-semibold text-gray-300">
+                  {dndStatus()}
+                </div>
+                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <For each={[
+                    { label: 'Pause 1 hour', until: () => Date.now() + 60 * 60 * 1000 },
+                    { label: 'Pause 8 hours', until: () => Date.now() + 8 * 60 * 60 * 1000 },
+                    { label: 'Until tomorrow', until: () => untilTomorrow() },
+                  ]}>
+                    {(option) => (
+                      <button type="button" onClick={() => updateSettings({ notificationsSnoozedUntil: option.until() })}
+                        class="rounded-xl border border-white/[0.07] bg-white/[0.03] px-2 py-2 text-[10px] font-bold text-gray-300 transition-colors hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-[var(--custom-accent,#818cf8)]">
+                        {option.label}
+                      </button>
+                    )}
+                  </For>
+                  <button type="button" onClick={() => updateSettings({ notificationsSnoozedUntil: 0 })}
+                    disabled={settings.notificationsSnoozedUntil <= Date.now()}
+                    class="rounded-xl border border-white/[0.07] bg-white/[0.03] px-2 py-2 text-[10px] font-bold text-gray-300 transition-colors hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:ring-2 focus-visible:ring-[var(--custom-accent,#818cf8)]">
+                    Resume alerts
+                  </button>
+                </div>
+                <div class="border-t border-white/[0.05] pt-1">
+                  <Toggle label="Scheduled quiet hours" desc="Silence foreground and closed-tab push alerts during this window" on={settings.quietHoursEnabled} onChange={(v) => updateSettings({ quietHoursEnabled: v })} />
+                </div>
+                <Show when={settings.quietHoursEnabled}>
+                  <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <InputField label="Quiet starts" type="time" value={settings.quietHoursStart}
+                      onChange={(v) => updateSettings({ quietHoursStart: v })} />
+                    <InputField label="Quiet ends" type="time" value={settings.quietHoursEnd}
+                      onChange={(v) => updateSettings({ quietHoursEnd: v })} />
+                    <InputField label="Time zone" value={settings.quietHoursTimezone}
+                      placeholder={systemTimeZone()}
+                      onChange={(v) => updateSettings({ quietHoursTimezone: v.trim() || 'system' })} />
+                  </div>
+                  <p class="text-[10px] leading-relaxed text-gray-600">
+                    Use <span class="font-mono text-gray-500">system</span> to follow this browser ({systemTimeZone()}), or an IANA zone such as <span class="font-mono text-gray-500">Europe/Berlin</span>. Current policy zone: {resolvedTimeZone(settings.quietHoursTimezone)}.
+                  </p>
+                </Show>
+                <p class="text-[10px] leading-relaxed text-gray-600">Schedules and temporary pauses stay on this device. Per-buffer all/mentions/mute tiers remain unchanged.</p>
               </div>
             </Section>
 
@@ -455,6 +724,8 @@ export default function SettingsModal(props: Props) {
               <div class="mt-2">
                 <InputField label="Password" value={settings.relay.password} placeholder="Optional relay password" type="password"
                   onChange={(v) => updateRelay({ password: v })} />
+                <Toggle label="Remember Relay Password" desc="Persist across browser restarts on this device" on={settings.rememberRelayPassword}
+                  onChange={(v) => updateSettings({ rememberRelayPassword: v })} />
               </div>
             </Section>
 
@@ -508,16 +779,140 @@ export default function SettingsModal(props: Props) {
                       onChange={(v) => patchBridge({ password: v })} />
                   </div>
                   <div class="space-y-0">
+                    <Toggle label="Remember Bridge Password" desc="Persist across browser restarts on this device" on={settings.rememberBridgePassword}
+                      onChange={(v) => updateSettings({ rememberBridgePassword: v })} />
                     <Toggle label="Auto-join Media" desc="Automatically join a channel's voice/video room when one is live" on={bridge().autoJoinMedia} onChange={(v) => patchBridge({ autoJoinMedia: v })} />
-                    <Toggle label="E2EE DMs" desc="End-to-end encrypt direct messages between DarkBear devices" on={bridge().e2eeDms ?? false} onChange={(v) => patchBridge({ e2eeDms: v })} />
+                    <Toggle label="E2EE DMs" desc="Encrypt direct messages when the peer publishes a DarkBear device key" on={bridge().e2eeDms} onChange={(v) => patchBridge({ e2eeDms: v })} />
+                    <Show when={bridge().e2eeDms}>
+                      <label class="mt-2 block rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+                        <span class="block text-[12px] font-semibold text-gray-300">DM delivery policy</span>
+                        <span class="mb-2 block text-[10px] leading-relaxed text-gray-600">
+                          Verified-only blocks sending until the peer fingerprint is confirmed on this device.
+                        </span>
+                        <select
+                          aria-label="DM delivery policy"
+                          value={bridge().e2eePolicy}
+                          onChange={(event) => patchBridge({
+                            e2eePolicy: event.currentTarget.value === 'verified' ? 'verified' : 'opportunistic',
+                          })}
+                          class="w-full rounded-lg border border-white/[0.08] bg-gray-950 px-3 py-2 text-[12px] text-gray-200 outline-none focus:border-[var(--custom-accent,#818cf8)]/40"
+                        >
+                          <option value="opportunistic">Encrypt when available</option>
+                          <option value="verified">Require verified encryption</option>
+                        </select>
+                      </label>
+                    </Show>
                   </div>
                 </div>
               </Show>
+            </Section>
+
+            <Section label="Cross-device preferences" desc="Account-scoped sync when Orochi metadata is available">
+              <div data-testid="preference-sync-status" class="rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
+                <div class="flex items-center gap-3">
+                  <span
+                    class={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                      preferenceSyncState.status === 'synced'
+                        ? 'bg-emerald-400'
+                        : preferenceSyncState.status === 'error'
+                          ? 'bg-red-400'
+                          : preferenceSyncState.available
+                            ? 'bg-amber-400'
+                            : 'bg-gray-600'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="text-[12px] font-semibold capitalize text-gray-200">
+                      {preferenceSyncState.status.replace('-', ' ')}
+                    </p>
+                    <p class="mt-0.5 text-[10px] leading-relaxed text-gray-600">
+                      {preferenceSyncState.detail} · {preferenceSyncTime()}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Sync preferences now"
+                    disabled={!preferenceSyncState.available || preferenceSyncState.status === 'checking'}
+                    onClick={() => syncPreferencesNow()}
+                    class="shrink-0 rounded-lg border border-[var(--custom-accent,#818cf8)]/20 bg-[var(--custom-accent,#818cf8)]/10 px-3 py-1.5 text-[11px] font-semibold text-[var(--custom-accent,#818cf8)] transition-all hover:bg-[var(--custom-accent,#818cf8)]/15 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Sync now
+                  </button>
+                </div>
+              </div>
+              <p class="mt-2 text-[10px] leading-relaxed text-gray-600">
+                Syncs theme, font and motion accessibility, alert controls, per-buffer notification tiers, pins, mutes, and read positions. Passwords, endpoints, custom CSS, local archives, and media devices stay on this browser. Export/import remains the fallback without the capability.
+              </p>
             </Section>
           </Show>
 
           {/* ─── ADVANCED ─── */}
           <Show when={tab() === 'advanced'}>
+            <Section label="Command Palette Actions" desc="Named allowlisted IRC actions with generated argument prompts">
+              <div class="space-y-3" data-testid="user-action-settings">
+                <Show when={settings.userActions.length > 0}>
+                  <div class="space-y-2">
+                    <For each={settings.userActions}>
+                      {(action) => (
+                        <div class="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
+                          <span class="min-w-0 flex-1">
+                            <span class="block truncate text-[12px] font-bold text-gray-200">{action.name}</span>
+                            <code class="mt-0.5 block truncate text-[10px] text-gray-600">{safeCommandDefinition(action.commandId).template}</code>
+                          </span>
+                          <span class="max-w-[110px] truncate text-[9px] font-bold uppercase tracking-[0.08em] text-gray-600">
+                            {action.scope === 'global' ? 'all profiles' : action.scope.slice('profile:'.length)}
+                          </span>
+                          <button type="button" aria-label={`Delete action ${action.name}`} onClick={() => deleteUserAction(action.id)}
+                            class="rounded-lg px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-500/10 hover:text-red-300">
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <InputField label="Action name" value={userActionName()} placeholder="Whois teammate"
+                    onChange={setUserActionName} />
+                  <label class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500">
+                    Safe command
+                    <select aria-label="Safe command" value={userActionCommand()}
+                      onChange={(event) => setUserActionCommand(event.currentTarget.value as SafeCommandId)}
+                      class="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 text-[12px] font-normal normal-case tracking-normal text-gray-100 outline-none focus:border-[var(--custom-accent,#818cf8)]/35">
+                      <For each={SAFE_COMMANDS}>{(command) => <option value={command.id}>{command.label}</option>}</For>
+                    </select>
+                  </label>
+                  <label class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500">
+                    Profile scope
+                    <select aria-label="Action profile scope" value={userActionScope()}
+                      onChange={(event) => setUserActionScope(event.currentTarget.value)}
+                      class="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 text-[12px] font-normal normal-case tracking-normal text-gray-100 outline-none focus:border-[var(--custom-accent,#818cf8)]/35">
+                      <option value="global">All profiles</option>
+                      <For each={settings.profiles}>{(profile) => <option value={`profile:${profile.name}`}>{profile.name}</option>}</For>
+                    </select>
+                  </label>
+                </div>
+                <div class="flex flex-col gap-2 rounded-xl border border-white/[0.05] bg-black/15 px-3 py-2.5 sm:flex-row sm:items-center">
+                  <span class="min-w-0 flex-1">
+                    <code class="block truncate text-[11px] text-gray-300">{safeCommandDefinition(userActionCommand()).template}</code>
+                    <span class="mt-0.5 block text-[10px] text-gray-600">{safeCommandDefinition(userActionCommand()).description}</span>
+                  </span>
+                  <button type="button"
+                    disabled={!userActionName().trim() || settings.userActions.length >= MAX_USER_ACTIONS}
+                    onClick={() => {
+                      const added = createUserAction(userActionName(), userActionCommand(), userActionScope());
+                      if (added) setUserActionName('');
+                    }}
+                    class="shrink-0 rounded-xl bg-[var(--custom-accent,#818cf8)]/15 px-4 py-2 text-[11px] font-black text-[var(--custom-accent,#818cf8)] hover:bg-[var(--custom-accent,#818cf8)]/20 disabled:cursor-not-allowed disabled:opacity-35">
+                    Add action
+                  </button>
+                </div>
+                <p class="text-[10px] leading-relaxed text-gray-600">Up to {MAX_USER_ACTIONS} local actions. Arguments are requested at run time, the exact IRC command is shown before first use, and expansion is capped. Raw commands, JavaScript, and shell execution are unavailable.</p>
+              </div>
+            </Section>
+
             <Section label="File Uploads" desc="Where DarkBear sends files you drag or paste">
               <InputField label="Upload URL" value={settings.uploadUrl} placeholder="https://your-server.com/upload"
                 onChange={(v) => updateSettings({ uploadUrl: v })} />
@@ -548,19 +943,94 @@ export default function SettingsModal(props: Props) {
               </div>
             </Section>
 
-            <Section label="Data" desc="Import, export, or reset your configuration">
+            <Section label="Local Archive" desc="Optional IndexedDB transcript; indexing and full-history search run in a Web Worker">
+              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px] sm:items-end">
+                <label class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500">
+                  Retention
+                  <select
+                    aria-label="Archive retention"
+                    value={settings.archiveRetention}
+                    onChange={(event) => handleArchiveRetention(event.currentTarget.value as typeof settings.archiveRetention)}
+                    class="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2.5 text-[12px] font-normal normal-case tracking-normal text-gray-100 outline-none focus:border-[var(--custom-accent,#818cf8)]/35"
+                  >
+                    <option value="off">Off — store no transcript</option>
+                    <option value="7d">Keep 7 days</option>
+                    <option value="30d">Keep 30 days</option>
+                    <option value="custom">Custom size limit</option>
+                  </select>
+                </label>
+                <Show when={settings.archiveRetention === 'custom'}>
+                  <InputField label="Maximum MiB" type="number" value={String(settings.archiveMaxMiB)}
+                    onChange={(value) => updateSettings({ archiveMaxMiB: Math.max(10, Math.min(2048, Number(value) || 100)) })} />
+                </Show>
+              </div>
+              <p class="mt-2 text-[10px] leading-relaxed text-gray-600">
+                Off is the default. Enabling this stores message text, sender, buffer, time, msgid, and reply parent only on this device. Passwords, tokens, endpoints, and E2EE keys are never part of the archive.
+              </p>
+              <Show when={archiveBuffers().length > 0}>
+                <div class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <label class="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-500">
+                    Archived buffer
+                    <select aria-label="Archived buffer" value={archiveSelectedBuffer()}
+                      onChange={(event) => setArchiveSelectedBuffer(event.currentTarget.value)}
+                      class="mt-1.5 w-full rounded-xl border border-white/[0.07] bg-white/[0.035] px-3 py-2 text-[11px] font-normal normal-case tracking-normal text-gray-100 outline-none focus:border-[var(--custom-accent,#818cf8)]/35">
+                      <For each={archiveBuffers()}>{(buffer) => (
+                        <option value={buffer.bufferKey}>{buffer.bufferName} · {formatNumber(buffer.messages)}</option>
+                      )}</For>
+                    </select>
+                  </label>
+                  <button onClick={handleDeleteArchiveBuffer}
+                    class="rounded-lg border border-red-500/15 bg-red-500/5 px-3 py-2 text-[11px] font-semibold text-red-300 hover:bg-red-500/12 active:scale-95">
+                    Delete Buffer History
+                  </button>
+                </div>
+              </Show>
+              <div class="mt-3 flex items-center justify-between gap-3">
+                <span class="min-w-0 truncate text-[10px] text-gray-600">{archiveStatus() || 'No archive status requested'}</span>
+                <button onClick={handleWipeArchive}
+                  class="shrink-0 rounded-lg border border-red-500/20 bg-red-500/8 px-3 py-1.5 text-[11px] font-semibold text-red-300 hover:bg-red-500/15 active:scale-95">
+                  Delete Local History
+                </button>
+              </div>
+            </Section>
+
+            <Section label="Diagnostics" desc="Connection and runtime health without message or credential data">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <DiagnosticValue label="Relay" value={connectionState()} detail={connectionError() ? relayErrorId() : (relayDiagnostics().serverVersion || 'not connected')} />
+                <DiagnosticValue label="Phase" value={relayDiagnostics().phase} detail={relayPhaseDetail()} />
+                <DiagnosticValue label="Protocol" value={relayDiagnostics().protocolMode} detail={protocolDetail()} />
+                <DiagnosticValue label="Bridge" value={bridgeState.status} detail={bridgeState.error ? bridgeErrorId() : (bridgeState.e2eeReady ? 'device key published' : 'DM encryption idle')} />
+                <DiagnosticValue label="Orochi Media" value={mediaState.mediaAvailable ? mediaState.callState : 'unavailable'} detail={mediaState.error ? mediaErrorId() : `${mediaState.health.status} · ${Object.keys(mediaState.peers).length} peers`} />
+                <DiagnosticValue label="Codec Runtime" value={mediaRuntimeDiagnostics().webAssembly && mediaRuntimeDiagnostics().mediaDevices ? 'capable' : 'limited'} detail={`${mediaRuntimeDiagnostics().audioWorklet ? 'audio worklet' : 'audio fallback'} · ${mediaRuntimeDiagnostics().videoWorker ? 'video worker' : 'video fallback'}`} />
+                <DiagnosticValue label="Service Worker" value={typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? (navigator.serviceWorker.controller ? 'controlled' : 'uncontrolled') : 'unsupported'} detail="deploy shell" />
+                <DiagnosticValue label="Auth" value={relayDiagnostics().authMode} detail={relayDiagnostics().totp ? 'TOTP available' : relayDiagnostics().handshake} />
+              </div>
+              <div class="mt-2 flex items-center justify-between gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+                <span class="min-w-0 truncate font-mono text-[10px] text-gray-600">{assetVersion() || 'development build'}</span>
+                <button onClick={handleSupportExport}
+                  class="shrink-0 px-3 py-1.5 text-[11px] font-semibold text-gray-300 bg-white/[0.04] border border-white/[0.06] rounded-lg hover:bg-white/[0.07] active:scale-95 transition-all">
+                  {supportCopied() ? 'Copied' : 'Copy Support Bundle'}
+                </button>
+              </div>
+            </Section>
+
+            <Section label="Data" desc="Copy portable preferences without passwords, API keys, or URL credentials and query data">
               <div class="flex flex-wrap gap-2">
                 <button onClick={handleExport}
                   class="px-3 py-1.5 text-[11px] font-semibold text-gray-300 bg-white/[0.04] border border-white/[0.06] rounded-lg hover:bg-white/[0.07] active:scale-95 transition-all">
-                  {exportCopied() ? '✓ Copied' : 'Export to Clipboard'}
+                  {exportCopied() ? '✓ Copied' : 'Copy Redacted Settings'}
                 </button>
                 <button onClick={handleImport}
                   class="px-3 py-1.5 text-[11px] font-semibold text-gray-300 bg-white/[0.04] border border-white/[0.06] rounded-lg hover:bg-white/[0.07] active:scale-95 transition-all">
-                  Import from Clipboard
+                  Import Redacted Settings
                 </button>
                 <button onClick={() => { if (confirm('Reset ALL settings to factory defaults? This cannot be undone.')) resetSettings(); }}
                   class="px-3 py-1.5 text-[11px] font-semibold text-red-400 bg-red-500/8 border border-red-500/15 rounded-lg hover:bg-red-500/15 active:scale-95 transition-all">
                   Reset Everything
+                </button>
+                <button onClick={() => { void handleForgetDevice(); }}
+                  class="px-3 py-1.5 text-[11px] font-semibold text-red-300 bg-red-500/12 border border-red-500/25 rounded-lg hover:bg-red-500/20 active:scale-95 transition-all">
+                  Forget This Device
                 </button>
               </div>
             </Section>
@@ -569,6 +1039,16 @@ export default function SettingsModal(props: Props) {
       </div>
       </div>
     </Modal>
+  );
+}
+
+function DiagnosticValue(props: { label: string; value: string; detail: string }) {
+  return (
+    <div class="min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+      <span class="block text-[9px] font-bold uppercase text-gray-600">{props.label}</span>
+      <span class="mt-0.5 block truncate text-[12px] font-semibold text-gray-300">{props.value}</span>
+      <span class="block truncate text-[9px] text-gray-700">{props.detail}</span>
+    </div>
   );
 }
 

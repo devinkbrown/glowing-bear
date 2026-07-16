@@ -33,7 +33,7 @@ interface TenorResponse {
 
 interface GifPickerProps {
   apiKey: string;
-  onSelect: (url: string) => void;
+  onSelect: (url: string) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -58,11 +58,22 @@ export default function GifPicker(props: GifPickerProps) {
   const [results, setResults] = createSignal<TenorGif[]>([]);
   const [trending, setTrending] = createSignal<TenorGif[]>([]);
   const [loading, setLoading] = createSignal(false);
+  const [selecting, setSelecting] = createSignal(false);
 
   let rootEl: HTMLDivElement | undefined;
   let inputEl: HTMLInputElement | undefined;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let searchAbort: AbortController | null = null;
+
+  const selectGif = async (url: string): Promise<void> => {
+    if (selecting()) return;
+    setSelecting(true);
+    try {
+      await props.onSelect(url);
+    } finally {
+      setSelecting(false);
+    }
+  };
 
   useClickOutside(() => rootEl, () => props.onClose());
 
@@ -184,10 +195,8 @@ export default function GifPicker(props: GifPickerProps) {
               <For each={gifs()}>
                 {(gif) => (
                   <button
-                    onClick={() => {
-                      props.onSelect(gif.url);
-                      props.onClose();
-                    }}
+                    disabled={selecting()}
+                    onClick={() => { void selectGif(gif.url); }}
                     class="block w-full mb-1.5 rounded-lg overflow-hidden hover:ring-2 hover:ring-[var(--custom-accent,#818cf8)]/50 active:ring-2 active:ring-[var(--custom-accent,#818cf8)]/70 transition-all cursor-pointer break-inside-avoid"
                   >
                     <img src={gif.preview} alt={gif.title} loading="lazy" class="w-full block rounded-lg" />

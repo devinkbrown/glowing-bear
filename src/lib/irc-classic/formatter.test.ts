@@ -148,6 +148,7 @@ describe('formatText — URL linkification and images', () => {
     const out = formatText('https://example.com/cat.png', true);
     expect(out).toContain('<img src="https://example.com/cat.png"');
     expect(out).toContain('class="irc-inline-image"');
+    expect(out).toContain('referrerpolicy="no-referrer"');
   });
 
   it('treats allowlisted image hosts as images even without an extension', () => {

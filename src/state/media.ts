@@ -10,16 +10,23 @@ import { createStore, produce } from 'solid-js/store';
 import type { IRCClient } from '@/lib/irc/client';
 import {
   SuimyakuMediaEngine,
+  runSuimyakuCodecSelfTest,
   setMountedSuimyakuMediaEngine,
 } from '@/lib/suimyaku-media/MediaEngine';
 import type {
   CallState as EngineCallState,
   SuimyakuMediaCallbacks,
+  SuimyakuCallHealth,
   SuimyakuPeerState,
   SuimyakuTranscriptEntry,
 } from '@/lib/suimyaku-media/types';
 import { startIncomingRing, startOutgoingRing, stopRing } from '@/lib/ringtone';
 import { bridgeRun, bridgeState } from './bridge';
+import { recordDiagnosticEvent } from '@/lib/diagnosticsEvents';
+import { recordCallActivity } from './activity';
+import { settings } from './settings';
+import { archiveMessages } from '@/lib/archive/client';
+import { archiveRecordFromCaption } from '@/lib/archive/record';
 
 // ---------------------------------------------------------------------------
 // Types + store
@@ -35,7 +42,79 @@ export interface MediaPeer {
   audioLevel: number;
 }
 
+export interface MediaAudioKeyObservation {
+  epoch: number;
+  fingerprint: string;
+}
+
 export type MediaTranscriptEntry = SuimyakuTranscriptEntry;
+
+export type MediaPermissionStatus = PermissionState | 'unsupported';
+export type MediaPreflightStatus = 'idle' | 'checking' | 'ready' | 'error';
+export type MediaCodecStatus = 'idle' | 'checking' | 'ready' | 'error';
+export type MediaEchoStatus = 'idle' | 'recording' | 'playing' | 'error';
+
+export interface MediaDeviceOption {
+  deviceId: string;
+  label: string;
+}
+
+export interface MediaPreflightIntent {
+  mode: 'room' | 'call' | 'accept';
+  target: string;
+  video: boolean;
+}
+
+interface MediaDevicePreferences {
+  microphoneId: string | null;
+  cameraId: string | null;
+  speakerId: string | null;
+}
+
+interface MediaPreflightState {
+  open: boolean;
+  intent: MediaPreflightIntent | null;
+  status: MediaPreflightStatus;
+  codec: MediaCodecStatus;
+  microphonePermission: MediaPermissionStatus;
+  cameraPermission: MediaPermissionStatus;
+  microphones: MediaDeviceOption[];
+  cameras: MediaDeviceOption[];
+  speakers: MediaDeviceOption[];
+  microphoneId: string | null;
+  cameraId: string | null;
+  speakerId: string | null;
+  audioLevel: number;
+  echo: MediaEchoStatus;
+  error: string | null;
+}
+
+const MEDIA_DEVICE_STORAGE_KEY = 'darkbear_media_devices_v1';
+
+function loadMediaDevicePreferences(): MediaDevicePreferences {
+  const empty: MediaDevicePreferences = { microphoneId: null, cameraId: null, speakerId: null };
+  if (typeof localStorage === 'undefined') return empty;
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(MEDIA_DEVICE_STORAGE_KEY) ?? '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return empty;
+    const value = parsed as Record<string, unknown>;
+    return {
+      microphoneId: typeof value.microphoneId === 'string' && value.microphoneId ? value.microphoneId : null,
+      cameraId: typeof value.cameraId === 'string' && value.cameraId ? value.cameraId : null,
+      speakerId: typeof value.speakerId === 'string' && value.speakerId ? value.speakerId : null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+function saveMediaDevicePreferences(value: MediaDevicePreferences): void {
+  if (typeof localStorage === 'undefined') return;
+  try { localStorage.setItem(MEDIA_DEVICE_STORAGE_KEY, JSON.stringify(value)); } catch { /* local-only best effort */ }
+}
+
+const initialDevices = loadMediaDevicePreferences();
+let selectedOutputDeviceId = initialDevices.speakerId;
 
 interface MediaStateShape {
   callState: CallState;
@@ -59,14 +138,22 @@ interface MediaStateShape {
   transcripts: Record<string, MediaTranscriptEntry[]>;
   /** Most recent live caption for the current surface. */
   liveCaption: MediaTranscriptEntry | null;
+  /** Whether the in-call, keyboard-navigable transcript panel is open. */
+  transcriptOpen: boolean;
   minimized: boolean;
   spotlightNick: string | null;
   error: string | null;
   /** True once the bridge session confirms MEDIA is usable. */
   mediaAvailable: boolean;
+  /** Bounded live telemetry from the active Orochi media pipeline. */
+  health: SuimyakuCallHealth;
+  /** Observed peer audio keys only; never evidence that Audio E2EE is usable. */
+  observedAudioKeys: Record<string, MediaAudioKeyObservation>;
+  /** Device/permission/codec gate shown before capture is committed to a call. */
+  preflight: MediaPreflightState;
 }
 
-function initialCallFields(): Omit<MediaStateShape, 'minimized' | 'mediaAvailable'> {
+function initialCallFields(): Omit<MediaStateShape, 'minimized' | 'mediaAvailable' | 'health' | 'preflight'> {
   return {
     callState: 'idle',
     channel: null,
@@ -82,8 +169,10 @@ function initialCallFields(): Omit<MediaStateShape, 'minimized' | 'mediaAvailabl
     raisedHands: {},
     transcripts: {},
     liveCaption: null,
+    transcriptOpen: false,
     spotlightNick: null,
     error: null,
+    observedAudioKeys: {},
   };
 }
 
@@ -91,6 +180,36 @@ const [mediaState, setMediaState] = createStore<MediaStateShape>({
   ...initialCallFields(),
   minimized: false,
   mediaAvailable: false,
+  health: {
+    status: 'idle',
+    transportConnected: false,
+    tier: 0,
+    suggestedBps: 0,
+    jitterMs: 0,
+    lossRate: 0,
+    roundTripMs: 0,
+    encodePressure: 0,
+    roomStats: null,
+    reconnectAttempt: 0,
+    updatedAt: 0,
+  },
+  preflight: {
+    open: false,
+    intent: null,
+    status: 'idle',
+    codec: 'idle',
+    microphonePermission: 'unsupported',
+    cameraPermission: 'unsupported',
+    microphones: [],
+    cameras: [],
+    speakers: [],
+    microphoneId: initialDevices.microphoneId,
+    cameraId: initialDevices.cameraId,
+    speakerId: initialDevices.speakerId,
+    audioLevel: 0,
+    echo: 'idle',
+    error: null,
+  },
 });
 
 /** Read-only media call state. Mutate via the exported actions only. */
@@ -107,6 +226,7 @@ function resetCallState(): void {
 /** Internal: bridge controller marks MEDIA availability on welcome/teardown. */
 export function _setMediaAvailable(available: boolean): void {
   setMediaState('mediaAvailable', available);
+  recordDiagnosticEvent('media-state', available ? 'available' : 'unavailable');
 }
 
 // ---------------------------------------------------------------------------
@@ -114,8 +234,18 @@ export function _setMediaAvailable(available: boolean): void {
 // ---------------------------------------------------------------------------
 
 let engine: SuimyakuMediaEngine | null = null;
+let lastActivityCallState: EngineCallState = 'idle';
+let captionArchiveSequence = 0;
 
 function handleCallState(state: EngineCallState, nick: string, channel: string | null): void {
+  const previous = lastActivityCallState;
+  lastActivityCallState = state;
+  if (state !== previous) {
+    if (state === 'ringing_in') recordCallActivity('Incoming call', nick);
+    else if (state === 'ringing_out') recordCallActivity('Outgoing call', nick);
+    else if (state === 'in_call') recordCallActivity('Call connected', nick || channel || 'room');
+    else if (state === 'idle' && previous !== 'idle') recordCallActivity('Call ended', nick || channel || mediaState.callWith || 'room');
+  }
   if (state === 'idle') {
     resetCallState();
     return;
@@ -180,6 +310,7 @@ const mediaCallbacks: SuimyakuMediaCallbacks = {
     setMediaState(produce((s) => {
       delete s.peers[nick];
       delete s.raisedHands[nick];
+      delete s.observedAudioKeys[nick.toLowerCase()];
       if (s.speakingNick === nick) s.speakingNick = null;
       if (s.spotlightNick === nick) s.spotlightNick = null;
     }));
@@ -219,6 +350,14 @@ const mediaCallbacks: SuimyakuMediaCallbacks = {
     setMediaState('mediaAvailable', true);
   },
 
+  onCallHealth(health) {
+    setMediaState('health', health);
+  },
+
+  onTsumugiState(nick, epoch, fingerprint) {
+    setMediaState('observedAudioKeys', nick.toLowerCase(), { epoch, fingerprint });
+  },
+
   onReaction(nick, emoji) {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('darkbear:voice-reaction', {
@@ -246,10 +385,28 @@ const mediaCallbacks: SuimyakuMediaCallbacks = {
         detail: entry,
       }));
     }
+    if (settings.archiveRetention !== 'off') {
+      const record = archiveRecordFromCaption(entry, captionArchiveSequence++);
+      void archiveMessages([record], {
+        retention: settings.archiveRetention,
+        maxMiB: settings.archiveMaxMiB,
+      }).catch(() => {
+        // Caption persistence is optional; live accessibility must never depend on storage.
+      });
+    }
   },
 
   enableVideoCalls: () => true,
   enableVoiceCalls: () => true,
+
+  getMediaSettings: () => ({
+    inputDeviceId: mediaState.preflight.microphoneId,
+    cameraDeviceId: mediaState.preflight.cameraId,
+    outputDeviceId: mediaState.preflight.speakerId,
+    outputVolume: 100,
+    noiseSuppression: true,
+    echoCancellation: true,
+  }),
 
   getLocalNick: () => bridgeState.nick ?? '',
 };
@@ -258,6 +415,7 @@ const mediaCallbacks: SuimyakuMediaCallbacks = {
 export function _ensureMediaEngine(): SuimyakuMediaEngine {
   if (!engine) {
     engine = new SuimyakuMediaEngine(mediaCallbacks, { kind: 'video' });
+    engine.setOutput(selectedOutputDeviceId, 100);
     setMountedSuimyakuMediaEngine(engine);
   }
   return engine;
@@ -273,6 +431,12 @@ export function _attachBridgeClient(client: IRCClient | null): void {
     return;
   }
   _ensureMediaEngine().setClient(client);
+}
+
+/** Internal: preserve active pipelines across a transient bridge interruption. */
+export function _setMediaTransportConnected(connected: boolean): void {
+  if (!engine && !connected) return;
+  _ensureMediaEngine().setTransportConnected(connected);
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +485,320 @@ export function selfPreviewStream(): MediaStream | null {
   const kind = engine?.getLocalKind() ?? null;
   if (kind !== 'video' && kind !== 'screen') return null;
   return engine?.getLocalStream() ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Device + permission preflight
+// ---------------------------------------------------------------------------
+
+let preflightStream: MediaStream | null = null;
+let preflightAudioContext: AudioContext | null = null;
+let preflightMeterTimer: ReturnType<typeof setInterval> | null = null;
+let preflightGeneration = 0;
+
+export function mediaPreflightPreviewStream(): MediaStream | null {
+  return preflightStream;
+}
+
+function stopPreflightMeter(): void {
+  if (preflightMeterTimer) clearInterval(preflightMeterTimer);
+  preflightMeterTimer = null;
+  if (preflightAudioContext) void preflightAudioContext.close().catch(() => undefined);
+  preflightAudioContext = null;
+  setMediaState('preflight', 'audioLevel', 0);
+}
+
+function releasePreflightStream(): void {
+  stopPreflightMeter();
+  preflightStream?.getTracks().forEach((track) => track.stop());
+  preflightStream = null;
+}
+
+function persistSelectedDevices(): void {
+  saveMediaDevicePreferences({
+    microphoneId: mediaState.preflight.microphoneId,
+    cameraId: mediaState.preflight.cameraId,
+    speakerId: mediaState.preflight.speakerId,
+  });
+}
+
+async function queryMediaPermission(name: 'microphone' | 'camera'): Promise<MediaPermissionStatus> {
+  if (typeof navigator === 'undefined' || !navigator.permissions?.query) return 'unsupported';
+  try {
+    const result = await navigator.permissions.query({ name } as PermissionDescriptor);
+    return result.state;
+  } catch {
+    return 'unsupported';
+  }
+}
+
+function deviceOptions(devices: MediaDeviceInfo[], kind: MediaDeviceKind, fallback: string): MediaDeviceOption[] {
+  let index = 0;
+  return devices.filter((device) => device.kind === kind).map((device) => {
+    index += 1;
+    return { deviceId: device.deviceId, label: device.label || `${fallback} ${index}` };
+  });
+}
+
+/** Refresh labels and drop persisted IDs that no longer exist. */
+export async function refreshMediaDevices(): Promise<void> {
+  const devicesApi = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+  if (!devicesApi?.enumerateDevices) return;
+  const devices = await devicesApi.enumerateDevices();
+  const microphones = deviceOptions(devices, 'audioinput', 'Microphone');
+  const cameras = deviceOptions(devices, 'videoinput', 'Camera');
+  const speakers = deviceOptions(devices, 'audiooutput', 'Speaker');
+  setMediaState('preflight', 'microphones', microphones);
+  setMediaState('preflight', 'cameras', cameras);
+  setMediaState('preflight', 'speakers', speakers);
+  const has = (options: MediaDeviceOption[], selected: string | null) =>
+    selected === null || options.some((option) => option.deviceId === selected);
+  if (!has(microphones, mediaState.preflight.microphoneId)) {
+    setMediaState('preflight', 'microphoneId', null);
+  }
+  if (!has(cameras, mediaState.preflight.cameraId)) {
+    setMediaState('preflight', 'cameraId', null);
+  }
+  if (!has(speakers, mediaState.preflight.speakerId)) {
+    setMediaState('preflight', 'speakerId', null);
+    selectedOutputDeviceId = null;
+  }
+  persistSelectedDevices();
+}
+
+function captureConstraints(video: boolean): MediaStreamConstraints {
+  return {
+    audio: {
+      deviceId: mediaState.preflight.microphoneId
+        ? { exact: mediaState.preflight.microphoneId }
+        : undefined,
+      noiseSuppression: true,
+      echoCancellation: true,
+    },
+    video: video
+      ? {
+          deviceId: mediaState.preflight.cameraId
+            ? { exact: mediaState.preflight.cameraId }
+            : undefined,
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 60 },
+        }
+      : false,
+  };
+}
+
+function captureErrorMessage(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+      return 'Microphone or camera permission is blocked. Allow access in browser site settings, then check again.';
+    }
+    if (error.name === 'NotFoundError' || error.name === 'OverconstrainedError') {
+      return 'The selected media device is unavailable. Choose another device or reconnect it.';
+    }
+    if (error.name === 'NotReadableError') {
+      return 'A media device is busy in another application.';
+    }
+  }
+  return error instanceof Error ? error.message : 'Media capture could not start.';
+}
+
+function startPreflightMeter(stream: MediaStream): void {
+  stopPreflightMeter();
+  if (typeof AudioContext === 'undefined' || stream.getAudioTracks().length === 0) return;
+  try {
+    const context = new AudioContext();
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    const samples = new Uint8Array(analyser.fftSize);
+    preflightAudioContext = context;
+    preflightMeterTimer = setInterval(() => {
+      analyser.getByteTimeDomainData(samples);
+      let sum = 0;
+      for (const sample of samples) {
+        const centered = (sample - 128) / 128;
+        sum += centered * centered;
+      }
+      setMediaState('preflight', 'audioLevel', Math.min(1, Math.sqrt(sum / samples.length) * 4));
+    }, 100);
+  } catch {
+    stopPreflightMeter();
+  }
+}
+
+async function captureForPreflight(video: boolean): Promise<MediaStream> {
+  const devicesApi = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+  if (!devicesApi?.getUserMedia) throw new Error('Media devices are unavailable in this browser.');
+  try {
+    return await devicesApi.getUserMedia(captureConstraints(video));
+  } catch (error) {
+    const recoverable = error instanceof DOMException &&
+      (error.name === 'NotFoundError' || error.name === 'OverconstrainedError') &&
+      Boolean(mediaState.preflight.microphoneId || (video && mediaState.preflight.cameraId));
+    if (!recoverable) throw error;
+    setMediaState('preflight', 'microphoneId', null);
+    if (video) setMediaState('preflight', 'cameraId', null);
+    persistSelectedDevices();
+    return devicesApi.getUserMedia(captureConstraints(video));
+  }
+}
+
+/** Run capture and actual audio+video codec construction before a call starts. */
+export async function runMediaPreflight(): Promise<void> {
+  const intent = mediaState.preflight.intent;
+  if (!intent) return;
+  const generation = ++preflightGeneration;
+  releasePreflightStream();
+  setMediaState('preflight', {
+    status: 'checking',
+    codec: 'checking',
+    echo: 'idle',
+    error: null,
+  });
+  const [microphonePermission, cameraPermission] = await Promise.all([
+    queryMediaPermission('microphone'),
+    intent.video ? queryMediaPermission('camera') : Promise.resolve<MediaPermissionStatus>('unsupported'),
+  ]);
+  if (generation !== preflightGeneration) return;
+  setMediaState('preflight', 'microphonePermission', microphonePermission);
+  setMediaState('preflight', 'cameraPermission', cameraPermission);
+
+  const codecResult = runSuimyakuCodecSelfTest()
+    .then(() => ({ ok: true as const }))
+    .catch((error: unknown) => ({ ok: false as const, error }));
+  const captureResult = captureForPreflight(intent.video)
+    .then((stream) => ({ ok: true as const, stream }))
+    .catch((error: unknown) => ({ ok: false as const, error }));
+  const [codec, capture] = await Promise.all([codecResult, captureResult]);
+  if (generation !== preflightGeneration) {
+    if (capture.ok) capture.stream.getTracks().forEach((track) => track.stop());
+    return;
+  }
+  setMediaState('preflight', 'codec', codec.ok ? 'ready' : 'error');
+  if (capture.ok) {
+    preflightStream = capture.stream;
+    setMediaState('preflight', 'microphonePermission', 'granted');
+    if (intent.video) setMediaState('preflight', 'cameraPermission', 'granted');
+    startPreflightMeter(capture.stream);
+    await refreshMediaDevices().catch(() => undefined);
+  } else {
+    const denied = capture.error instanceof DOMException &&
+      (capture.error.name === 'NotAllowedError' || capture.error.name === 'SecurityError');
+    if (denied) {
+      setMediaState('preflight', 'microphonePermission', 'denied');
+      if (intent.video) setMediaState('preflight', 'cameraPermission', 'denied');
+    }
+  }
+  const failures: string[] = [];
+  if (!capture.ok) failures.push(captureErrorMessage(capture.error));
+  if (!codec.ok) {
+    failures.push(`Codec self-test failed: ${codec.error instanceof Error ? codec.error.message : String(codec.error)}`);
+  }
+  const error = failures.length > 0 ? failures.join(' ') : null;
+  setMediaState('preflight', {
+    status: error ? 'error' : 'ready',
+    error,
+  });
+}
+
+export function openMediaPreflight(intent: MediaPreflightIntent): void {
+  setMediaState('preflight', {
+    open: true,
+    intent,
+    status: 'idle',
+    codec: 'idle',
+    echo: 'idle',
+    error: null,
+  });
+  void runMediaPreflight();
+}
+
+export function closeMediaPreflight(): void {
+  preflightGeneration += 1;
+  releasePreflightStream();
+  setMediaState('preflight', {
+    open: false,
+    intent: null,
+    status: 'idle',
+    codec: 'idle',
+    echo: 'idle',
+    error: null,
+  });
+}
+
+export function selectMediaDevice(kind: 'microphone' | 'camera' | 'speaker', deviceId: string): void {
+  const selected = deviceId || null;
+  const field = kind === 'microphone' ? 'microphoneId' : kind === 'camera' ? 'cameraId' : 'speakerId';
+  setMediaState('preflight', field, selected);
+  if (kind === 'speaker') selectedOutputDeviceId = selected;
+  persistSelectedDevices();
+  if (kind === 'speaker') {
+    engine?.setOutput(selected, 100);
+    return;
+  }
+  if (mediaState.preflight.open) void runMediaPreflight();
+}
+
+export async function runMediaEchoTest(): Promise<void> {
+  if (!preflightStream || preflightStream.getAudioTracks().length === 0 || typeof MediaRecorder === 'undefined') {
+    setMediaState('preflight', { echo: 'error', error: 'Echo test is unavailable in this browser.' });
+    return;
+  }
+  setMediaState('preflight', { echo: 'recording', error: null });
+  const audioOnly = new MediaStream(preflightStream.getAudioTracks().map((track) => track.clone()));
+  try {
+    const recorder = new MediaRecorder(audioOnly);
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
+    const stopped = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
+    recorder.start();
+    await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+    recorder.stop();
+    await stopped;
+    const url = URL.createObjectURL(new Blob(chunks, { type: recorder.mimeType }));
+    const audio = new Audio(url) as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+    if (mediaState.preflight.speakerId && audio.setSinkId) {
+      await audio.setSinkId(mediaState.preflight.speakerId);
+    }
+    setMediaState('preflight', 'echo', 'playing');
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      setMediaState('preflight', 'echo', 'idle');
+    };
+    await audio.play();
+  } catch (error) {
+    setMediaState('preflight', {
+      echo: 'error',
+      error: error instanceof Error ? `Echo test failed: ${error.message}` : 'Echo test failed.',
+    });
+  } finally {
+    audioOnly.getTracks().forEach((track) => track.stop());
+  }
+}
+
+export function requestRoomJoin(channel: string, video: boolean): void {
+  openMediaPreflight({ mode: 'room', target: channel, video });
+}
+
+export function requestStartCall(nick: string, video: boolean): void {
+  openMediaPreflight({ mode: 'call', target: nick, video });
+}
+
+export function requestAcceptCall(): void {
+  if (!mediaState.callWith) return;
+  openMediaPreflight({ mode: 'accept', target: mediaState.callWith, video: mediaState.kind === 'video' });
+}
+
+export function confirmMediaPreflight(): boolean {
+  const intent = mediaState.preflight.intent;
+  if (!intent || mediaState.preflight.status !== 'ready') return false;
+  closeMediaPreflight();
+  if (intent.mode === 'room') joinRoom(intent.target, intent.video);
+  else if (intent.mode === 'call') startCall(intent.target, intent.video);
+  else acceptCall();
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -419,7 +897,14 @@ export function toggleScreenShare(): void {
 }
 
 export function setMinimized(v: boolean): void {
-  setMediaState('minimized', v);
+  setMediaState(produce((state) => {
+    state.minimized = v;
+    if (v) state.transcriptOpen = false;
+  }));
+}
+
+export function setTranscriptOpen(open: boolean): void {
+  setMediaState('transcriptOpen', open);
 }
 
 export function setSpotlight(nick: string | null): void {

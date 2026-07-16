@@ -1,7 +1,7 @@
 /*
  * replayWindow.ts — Bounded sliding-window anti-replay guard for TSUMUGI IVs.
  *
- * TSUMUGI (and group-media) IVs are `[8-byte random prefix][4-byte big-endian
+ * TSUMUGI (and group-audio) IVs are `[8-byte random prefix][4-byte big-endian
  * counter]`. A given receive direction uses one prefix per key generation and a
  * strictly-monotonic counter, so replay protection does NOT need to remember
  * every IV ever seen (an unbounded Set that grows ~1 entry/frame — ~180k

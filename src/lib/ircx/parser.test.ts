@@ -169,6 +169,8 @@ describe('parseEventFeedText — live Event Spine lines', () => {
       source: 'eshmaki.me',
       target: 'kain',
       category: 'USER',
+      subscription: 'CONNECT',
+      severity: 'notice',
       verb: 'CONNECT',
       subject: 'C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5',
     });
@@ -200,8 +202,8 @@ describe('parseEventFeedText — live Event Spine lines', () => {
     expect(parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=OPER_ACTION;orochi.io/severity=notice :eshmaki.me EVENT kain MEMBER JOIN #root C"')).toMatchObject({
       category: 'MEMBER',
       verb: 'JOIN',
-      subject: '#root',
-      detail: 'C',
+      channel: '#root',
+      subject: 'C',
     });
 
     expect(parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT kain MEDIA PROFILE #root C codecs=kaguravox,kaguravis fec=rs_block"')).toMatchObject({

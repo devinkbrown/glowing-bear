@@ -1,7 +1,7 @@
 // CallNotification — full-screen 1:1 call overlay for the ringing states.
 //
 //   ringing_in  — incoming call: caller avatar with pulsing ring animation,
-//                 Accept (acceptCall) / Decline (rejectCall), Esc hint.
+//                 Accept (requestAcceptCall) / Decline (rejectCall), Esc hint.
 //   ringing_out — outgoing call: callee avatar with pulsing ring, Cancel
 //                 (hangup).
 //
@@ -13,10 +13,11 @@
 // component only displays the hint.
 
 import { For, Show, createEffect, createMemo, onCleanup } from 'solid-js';
-import { acceptCall, hangup, mediaState, rejectCall } from '@/state/media';
+import { hangup, mediaState, rejectCall, requestAcceptCall } from '@/state/media';
+import { appAsset, isDesktopRuntime, sendDesktopNotification } from '@/lib/desktop';
 import { nickColor } from '@/lib/nickcolor';
 
-const NOTIFICATION_ICON = '/darkbear/favicon.svg';
+const NOTIFICATION_ICON = appAsset('favicon.svg');
 const KBD_CLASS =
   'px-1.5 py-0.5 bg-white/[0.06] rounded text-gray-400 text-[10px] font-mono';
 
@@ -44,6 +45,13 @@ function RingOverlay() {
     const nick = peerNick();
     const kind = mediaState.kind;
     if (typeof document === 'undefined' || !document.hidden) return;
+    if (isDesktopRuntime()) {
+      void sendDesktopNotification({
+        title: `Incoming ${kind} call`,
+        body: `${nick} is calling you`,
+      });
+      return;
+    }
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
     try {
       const n = new Notification(`Incoming ${kind} call`, {
@@ -155,7 +163,7 @@ function RingOverlay() {
             </button>
 
             <button
-              onClick={acceptCall}
+              onClick={requestAcceptCall}
               class="w-16 h-16 rounded-full bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-500 active:scale-90 transition-all shadow-lg shadow-emerald-600/20 animate-bounce"
               style={{ 'animation-duration': '2s' }}
               title="Accept"

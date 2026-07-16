@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest';
 import {
   UploadError,
   buildUploadEndpoint,
+  prepareUploadFile,
   parseUploadResponse,
   resolveUploadUrl,
   uploadFile,
+  validateUploadFile,
 } from './upload';
 
 describe('buildUploadEndpoint', () => {
@@ -20,6 +22,9 @@ describe('buildUploadEndpoint', () => {
   it('fails closed when the media URL is missing or blank', () => {
     expect(() => buildUploadEndpoint(undefined)).toThrow(UploadError);
     expect(() => buildUploadEndpoint('   ')).toThrow(UploadError);
+    expect(() => buildUploadEndpoint('javascript:alert(1)')).toThrow('not safe');
+    expect(() => buildUploadEndpoint('//evil.example/upload')).toThrow('not safe');
+    expect(() => buildUploadEndpoint('https://user:secret@media.example/upload')).toThrow('cannot contain credentials');
   });
 });
 
@@ -61,6 +66,12 @@ describe('resolveUploadUrl', () => {
 
     // Assert
     expect(url).toBe('https://cdn.evil.example/file.png');
+  });
+
+  it('rejects executable, data, and protocol-relative response URLs', () => {
+    expect(() => resolveUploadUrl('/upload', 'javascript:alert(1)')).toThrow('unsafe file URL');
+    expect(() => resolveUploadUrl('/upload', 'data:text/html,hello')).toThrow('unsafe file URL');
+    expect(() => resolveUploadUrl('/upload', '//evil.example/file')).toThrow('unsafe file URL');
   });
 });
 
@@ -120,6 +131,100 @@ describe('parseUploadResponse', () => {
       message: 'Upload response did not include a file URL.',
     });
     expect(() => resolveUploadUrl(mediaUrl, '   ')).toThrow(UploadError);
+    await expect(parseUploadResponse(mediaUrl, 'x'.repeat(65_537), 'text/plain')).rejects.toThrow('too large');
+  });
+
+  it('normalizes absolute and TTL service expiry metadata', async () => {
+    const now = Date.parse('2026-07-16T12:00:00Z');
+    await expect(parseUploadResponse(
+      'https://media.example.test/upload',
+      JSON.stringify({ path: 'note.txt', expires_at: '2026-07-17T12:00:00Z' }),
+      'application/json',
+      now,
+    )).resolves.toEqual({
+      url: 'https://media.example.test/uploads/note.txt',
+      expiresAt: '2026-07-17T12:00:00.000Z',
+    });
+    await expect(parseUploadResponse(
+      'https://media.example.test/upload',
+      JSON.stringify({ file: { path: 'note.txt', ttl: 3600 } }),
+      'application/json',
+      now,
+    )).resolves.toEqual({
+      url: 'https://media.example.test/uploads/note.txt',
+      expiresAt: '2026-07-16T13:00:00.000Z',
+    });
+  });
+});
+
+describe('upload policy and image sanitation', () => {
+  it('enforces non-empty bounded allowlisted files', () => {
+    expect(() => validateUploadFile(new File([], 'empty.txt', { type: 'text/plain' }))).toThrow('Empty files');
+    expect(() => validateUploadFile(new File(['<svg/>'], 'x.svg', { type: 'image/svg+xml' }))).toThrow('not allowed');
+    expect(() => validateUploadFile(
+      new File(['12345'], 'large.txt', { type: 'text/plain' }),
+      { maxBytes: 4, allowedTypes: ['text/plain'] },
+    )).toThrow('upload limit');
+  });
+
+  it('removes JPEG metadata segments before FormData upload', async () => {
+    const jpeg = new Uint8Array([
+      0xff, 0xd8,
+      0xff, 0xe1, 0x00, 0x06, 0x45, 0x78, 0x69, 0x66,
+      0xff, 0xdb, 0x00, 0x04, 0x01, 0x02,
+      0xff, 0xda, 0x00, 0x02, 0x03, 0x04,
+    ]);
+    const prepared = await prepareUploadFile(new File([jpeg], '../photo.jpg', { type: 'image/jpeg' }));
+    const bytes = new Uint8Array(await prepared.file.arrayBuffer());
+    expect(prepared.metadataStripped).toBe(true);
+    expect(prepared.file.name).not.toContain('/');
+    expect([...bytes]).not.toEqual(expect.arrayContaining([0x45, 0x78, 0x69, 0x66]));
+    expect([...bytes.slice(0, 2)]).toEqual([0xff, 0xd8]);
+  });
+
+  it('removes PNG textual metadata chunks while retaining image chunks', async () => {
+    const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+    const chunk = (type: string, data: number[]) => [
+      0, 0, 0, data.length,
+      ...type.split('').map((char) => char.charCodeAt(0)),
+      ...data,
+      0, 0, 0, 0,
+    ];
+    const png = new Uint8Array([
+      ...signature,
+      ...chunk('tEXt', [1]),
+      ...chunk('IDAT', [2]),
+      ...chunk('IEND', []),
+    ]);
+    const prepared = await prepareUploadFile(new File([png], 'photo.png', { type: 'image/png' }));
+    const text = String.fromCharCode(...new Uint8Array(await prepared.file.arrayBuffer()));
+    expect(prepared.metadataStripped).toBe(true);
+    expect(text).not.toContain('tEXt');
+    expect(text).toContain('IDAT');
+    expect(text).toContain('IEND');
+  });
+
+  it('removes WebP EXIF/XMP chunks and clears their VP8X feature bits', async () => {
+    const four = (value: string) => value.split('').map((char) => char.charCodeAt(0));
+    const le32 = (value: number) => [value, 0, 0, 0];
+    const chunk = (type: string, data: number[]) => [...four(type), ...le32(data.length), ...data, ...(data.length % 2 ? [0] : [])];
+    const body = [
+      ...chunk('VP8X', [0x0c, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+      ...chunk('EXIF', [1, 2, 3, 4]),
+      ...chunk('VP8 ', [5, 6]),
+    ];
+    const webp = new Uint8Array([...four('RIFF'), ...le32(body.length + 4), ...four('WEBP'), ...body]);
+    const prepared = await prepareUploadFile(new File([webp], 'photo.webp', { type: 'image/webp' }));
+    const bytes = new Uint8Array(await prepared.file.arrayBuffer());
+    const text = String.fromCharCode(...bytes);
+    expect(prepared.metadataStripped).toBe(true);
+    expect(text).not.toContain('EXIF');
+    expect(bytes[20]! & 0x0c).toBe(0);
+  });
+
+  it('rejects spoofed image MIME types before upload', async () => {
+    await expect(prepareUploadFile(new File(['not an image'], 'fake.jpg', { type: 'image/jpeg' })))
+      .rejects.toMatchObject({ code: 'policy' });
   });
 });
 
@@ -194,5 +299,34 @@ describe('uploadFile', () => {
       .rejects.toMatchObject({ code: 'network', message: 'Upload failed before the server responded.' });
     await expect(uploadFile(file, { mediaUrl: 'https://media.example.test/upload', fetchImpl: responseFetch }))
       .rejects.toMatchObject({ code: 'response', status: 413, message: 'too large' });
+  });
+
+  it('cancels a chunked upload response as soon as it exceeds the response budget', async () => {
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain' });
+    let pulls = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(new Uint8Array(40 * 1024).fill(0x61));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    }, { highWaterMark: 0 });
+    const fetchImpl: typeof fetch = async () => new Response(body, {
+      headers: { 'content-type': 'text/plain' },
+    });
+
+    await expect(uploadFile(file, {
+      mediaUrl: 'https://media.example.test/upload',
+      fetchImpl,
+    })).rejects.toMatchObject({
+      code: 'response',
+      message: 'Upload service response was too large.',
+      status: 200,
+    });
+    expect(cancelled).toBe(true);
+    expect(pulls).toBe(2);
   });
 });

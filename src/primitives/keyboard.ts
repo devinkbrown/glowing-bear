@@ -4,7 +4,7 @@
 // Shortcut map:
 //   Alt+1..9 / Alt+0   switch to buffer 1-9 / 10
 //   Alt+Up / Alt+Down  previous / next buffer
-//   Alt+A              jump to next highlighted buffer
+//   Alt+A              open the unified activity inbox
 //   Ctrl+K             open buffer switcher
 //   Ctrl+F             toggle message search
 //   Ctrl+\             toggle vertical split pane
@@ -13,7 +13,7 @@
 //   Ctrl+U             toggle user list (outside text inputs)
 //   Ctrl+I             IRCX channel info — orochi servers only (outside text inputs)
 //   Ctrl+Shift+O       toggle oper console (opers only)
-//   M / V / S / H      in-call: mute / camera / screen share / hang up
+//   M / D / V / S / C / H  in-call: mute / deafen / camera / share / transcript / hang up
 //   Escape             hang up a ringing call, else close modal, else minimize call
 
 import {
@@ -23,7 +23,7 @@ import {
   getSorted,
   isActiveOrochi,
   isOper,
-  nextHighlighted,
+  openActivityPanel,
   openChannelInfo,
   openModal,
   setActive,
@@ -38,10 +38,13 @@ import {
   mediaState,
   rejectCall,
   setMinimized,
+  setTranscriptOpen,
   toggleCamera,
+  toggleDeafen,
   toggleMute,
   toggleScreenShare,
 } from '@/state/media';
+import { isImeComposing } from './ime';
 
 const MAX_ALT_BUFFER = 9;
 const ALT_ZERO_INDEX = 9; // Alt+0 → tenth buffer
@@ -51,6 +54,11 @@ function inTextInput(e: KeyboardEvent): boolean {
   if (!el) return false;
   const tag = el.tagName;
   return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+}
+
+function hasActiveModalSurface(): boolean {
+  return typeof document !== 'undefined'
+    && document.querySelector('[aria-modal="true"]') !== null;
 }
 
 function handleAltShortcuts(e: KeyboardEvent): boolean {
@@ -80,8 +88,7 @@ function handleAltShortcuts(e: KeyboardEvent): boolean {
   }
   if (e.key === 'a' || e.key === 'A') {
     e.preventDefault();
-    const next = nextHighlighted(true);
-    if (next) setActive(next);
+    openActivityPanel();
     return true;
   }
   return false;
@@ -159,6 +166,11 @@ function handleInCallKeys(e: KeyboardEvent): boolean {
     toggleCamera();
     return true;
   }
+  if (e.key === 'd' || e.key === 'D') {
+    e.preventDefault();
+    toggleDeafen();
+    return true;
+  }
   if (e.key === 's' || e.key === 'S') {
     e.preventDefault();
     toggleScreenShare();
@@ -167,6 +179,11 @@ function handleInCallKeys(e: KeyboardEvent): boolean {
   if (e.key === 'h' || e.key === 'H') {
     e.preventDefault();
     hangup();
+    return true;
+  }
+  if (e.key === 'c' || e.key === 'C') {
+    e.preventDefault();
+    setTranscriptOpen(!mediaState.transcriptOpen);
     return true;
   }
   return false;
@@ -190,6 +207,11 @@ function handleEscape(e: KeyboardEvent): void {
     closeModal();
     return;
   }
+  if (mediaState.transcriptOpen) {
+    e.preventDefault();
+    setTranscriptOpen(false);
+    return;
+  }
   // Minimize the call surface instead of leaving the call
   if (call === 'in_call' || call === 'connecting') {
     e.preventDefault();
@@ -204,6 +226,12 @@ function handleEscape(e: KeyboardEvent): void {
  */
 export function setupKeyboardShortcuts(): () => void {
   const handler = (e: KeyboardEvent): void => {
+    if (isImeComposing(e)) return;
+    // Modal surfaces own their complete keyboard scope. Do not let a global
+    // chord open a second overlay or mutate the inert app behind the active
+    // one. Escape intentionally remains unhandled here so the active surface's
+    // own dismissal listener is the single owner of that key.
+    if (hasActiveModalSurface()) return;
     if (e.altKey && !e.ctrlKey && !e.metaKey) {
       if (handleAltShortcuts(e)) return;
     }
@@ -215,7 +243,7 @@ export function setupKeyboardShortcuts(): () => void {
     // In-call media keys (no modifiers, not while typing)
     if (
       !e.ctrlKey && !e.altKey && !e.metaKey &&
-      mediaState.callState !== 'idle' && !inTextInput(e)
+      (mediaState.callState === 'in_call' || mediaState.callState === 'connecting') && !inTextInput(e)
     ) {
       if (handleInCallKeys(e)) return;
     }

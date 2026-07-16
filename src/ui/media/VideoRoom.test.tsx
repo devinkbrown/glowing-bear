@@ -15,7 +15,8 @@
 // render → unmount, so mid-test reactivity is not required).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, cleanup } from '@solidjs/testing-library';
+import { render, cleanup, fireEvent } from '@solidjs/testing-library';
+import { resetSettings, updateSettings } from '@/state/settings';
 
 const FAKE_PEER_STREAM = { id: 'peer-stream' } as unknown as MediaStream;
 const FAKE_SELF_STREAM = { id: 'self-stream' } as unknown as MediaStream;
@@ -37,10 +38,25 @@ const media = vi.hoisted(() => ({
     raisedHands: {} as Record<string, true>,
     transcripts: {} as Record<string, unknown[]>,
     liveCaption: null as unknown,
+    transcriptOpen: false,
     minimized: false,
     spotlightNick: null as string | null,
     error: null as string | null,
     mediaAvailable: true,
+    health: {
+      status: 'healthy' as 'idle' | 'healthy' | 'degraded' | 'reconnecting',
+      transportConnected: true,
+      tier: 0 as 0 | 1 | 2 | 3,
+      suggestedBps: 400_000,
+      jitterMs: 8,
+      lossRate: 0.01,
+      roundTripMs: 24,
+      encodePressure: 0.4,
+      roomStats: null as null | { active_senders: number; total_viewers: number; video_fps: number; audio_kbps: number },
+      reconnectAttempt: 0,
+      updatedAt: Date.now(),
+    },
+    observedAudioKeys: {} as Record<string, { epoch: number; fingerprint: string }>,
   },
   peerStream: vi.fn((_nick: string) => FAKE_PEER_STREAM),
   selfPreviewStream: vi.fn(() => FAKE_SELF_STREAM),
@@ -56,6 +72,7 @@ vi.mock('@/state/media', () => ({
   leaveRoom: vi.fn(),
   sendRoomReaction: vi.fn(),
   setMinimized: vi.fn(),
+  setTranscriptOpen: vi.fn(),
   setSpotlight: vi.fn(),
   toggleCamera: vi.fn(),
   toggleDeafen: vi.fn(),
@@ -91,6 +108,18 @@ beforeEach(() => {
   media.state.cameraOn = true;
   media.state.minimized = false;
   media.state.callState = 'in_call';
+  media.state.transcriptOpen = false;
+  media.state.transcripts = {};
+  media.state.liveCaption = null;
+  resetSettings();
+  media.state.health.status = 'healthy';
+  media.state.health.transportConnected = true;
+  media.state.health.tier = 0;
+  media.state.health.lossRate = 0.01;
+  media.state.health.reconnectAttempt = 0;
+  media.state.channel = '#room';
+  media.state.callWith = null;
+  media.state.observedAudioKeys = {};
   media.peerStream.mockClear();
   media.selfPreviewStream.mockClear();
 });
@@ -103,6 +132,75 @@ afterEach(() => {
 });
 
 describe('VideoRoom teardown', () => {
+  it('exposes the compact call health inspector with readable metrics', () => {
+    const view = render(() => <VideoRoom />);
+    expect(view.getByLabelText('Call health: Healthy')).toBeInTheDocument();
+    expect(view.getByText('Packet loss')).toBeInTheDocument();
+    expect(view.getByText('1.0%')).toBeInTheDocument();
+    expect(view.getByText('Full tier')).toBeInTheDocument();
+    expect(view.getByText('Audio E2EE')).toBeInTheDocument();
+    expect(view.getByText('Unavailable')).toBeInTheDocument();
+    expect(view.getByText(/room audio e2ee signalling is incomplete/i)).toBeInTheDocument();
+    expect(view.getByText(/camera video and screen share are not end-to-end encrypted/i)).toBeInTheDocument();
+  });
+
+  it('does not claim direct-call audio E2EE when the engine only reports an observed peer key', () => {
+    media.state.channel = null;
+    media.state.callWith = 'bob';
+    media.state.observedAudioKeys = { bob: { epoch: 2, fingerprint: 'PeerKey12345' } };
+    const view = render(() => <VideoRoom />);
+    expect(view.getByText('Unavailable')).toBeInTheDocument();
+    expect(view.getByText(/Peer audio key observed: PeerKey12345 · generation 2/)).toBeInTheDocument();
+    expect(view.getByText(/audio e2ee signalling is incomplete/i)).toBeInTheDocument();
+    expect(view.getByText(/camera video and screen share are not end-to-end encrypted/i)).toBeInTheDocument();
+  });
+
+  it('surfaces a fail-closed audio encryption error as an alert', () => {
+    media.state.error = 'Audio encryption failed. The audio frame was dropped instead of being sent as plaintext.';
+    const view = render(() => <VideoRoom />);
+    expect(view.getByRole('alert')).toHaveTextContent('dropped instead of being sent as plaintext');
+  });
+
+  it('opens a speaker-labelled transcript and exposes live captions as a polite status', () => {
+    const captions = [
+      { channel: '#room', nick: 'alice', text: 'first caption', time: 1 },
+      { channel: '#room', nick: 'bob', text: 'second caption', time: 2 },
+    ];
+    media.state.transcripts = { '#room': captions };
+    media.state.liveCaption = captions[1];
+    const view = render(() => <VideoRoom />);
+    expect(view.getByRole('status', { name: '' })).toHaveTextContent('bobsecond caption');
+    const transcript = view.getByRole('button', { name: 'Call transcript (2)' });
+    fireEvent.click(transcript);
+    // The mock state is non-reactive, so drive the view state before a fresh render.
+    cleanup();
+    media.state.transcriptOpen = true;
+    const reopened = render(() => <VideoRoom />);
+    expect(reopened.getByRole('dialog', { name: 'Call transcript' })).toBeInTheDocument();
+    expect(reopened.getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('applies local caption size and background preferences', () => {
+    const caption = { channel: '#room', nick: 'alice', text: 'large caption', time: 1 };
+    media.state.transcripts = { '#room': [caption] };
+    media.state.liveCaption = caption;
+    updateSettings({ captionSize: 'large', captionBackground: 'translucent' });
+    const view = render(() => <VideoRoom />);
+    const status = view.getByRole('status');
+    expect(status).toHaveClass('bg-black/55');
+    expect(view.getByText('large caption')).toHaveClass('text-[18px]');
+  });
+
+  it('explains a transient Orochi reconnect without ending the call surface', () => {
+    media.state.health.status = 'reconnecting';
+    media.state.health.transportConnected = false;
+    media.state.health.reconnectAttempt = 2;
+    const view = render(() => <VideoRoom />);
+    expect(view.getByRole('status')).toHaveTextContent(
+      'Orochi bridge interrupted. Keeping media active while reconnecting (attempt 2).',
+    );
+  });
+
   it('binds the engine streams it is given onto the tile <video> elements', () => {
     render(() => <VideoRoom />);
 

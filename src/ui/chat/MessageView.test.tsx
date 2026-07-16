@@ -13,7 +13,7 @@ import { render, cleanup, waitFor, fireEvent } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
 import type { WeeChatBuffer } from '@/lib/weechat/model';
 import type { WeeChatLine } from '@/types';
-import { addLine, addLines, clearBuffers, upsertBuffer, resetSettings, setSearchOpen } from '@/state';
+import { addLine, addLines, clearBuffers, upsertBuffer, resetSettings, setSearchOpen, updateSettings } from '@/state';
 import { parseSearchQuery } from '@/lib/search/grammar';
 import { matchesQuery } from '@/lib/search/matcher';
 import MessageView, {
@@ -23,6 +23,17 @@ import MessageView, {
   type CountBuffer,
   type RenderItemInput,
 } from './MessageView';
+
+const archiveClient = vi.hoisted(() => ({
+  searchArchive: vi.fn(),
+  archiveMessages: vi.fn().mockResolvedValue(undefined),
+  configureArchive: vi.fn().mockResolvedValue(undefined),
+  deleteArchiveBuffer: vi.fn().mockResolvedValue(undefined),
+  wipeArchive: vi.fn().mockResolvedValue(undefined),
+  archiveStats: vi.fn().mockResolvedValue({ messages: 0, bytes: 0, buffers: [] }),
+}));
+
+vi.mock('@/lib/archive/client', () => archiveClient);
 
 const PTR = '0xchan';
 const PTR2 = '0xchan2';
@@ -524,6 +535,23 @@ describe('MessageView filter-grammar search', () => {
     await waitFor(() => expect(countText(container)).toContain('2 found'));
   });
 
+  it('keeps an unfinished IME search open when composition emits Escape', async () => {
+    upsertBuffer(channelBuffer());
+    const { container } = render(() => <MessageView bufferPtr={PTR} />);
+
+    const input = await openSearch(container);
+    fireEvent.input(input, { target: { value: '検索中' } });
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true });
+
+    expect(input).toHaveValue('検索中');
+    expect(container.querySelector('input[placeholder="Search messages..."]')).toBe(input);
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    await waitFor(() => {
+      expect(container.querySelector('input[placeholder="Search messages..."]')).toBeNull();
+    });
+  });
+
   it('from: filters the current buffer to a single nick', async () => {
     upsertBuffer(channelBuffer());
     addLine(PTR, makeLine({ nick: 'alice', message: 'one' }), []);
@@ -568,5 +596,38 @@ describe('MessageView filter-grammar search', () => {
       expect(t).toContain('0 here');
       expect(t).toContain('2 across buffers');
     });
+  });
+
+  it('moves from the search input through archived results with arrow keys', async () => {
+    archiveClient.searchArchive.mockResolvedValue([
+      {
+        key: 'a', bufferKey: 'irc.net.#alpha', bufferName: '#alpha', lineId: 'a',
+        timestamp: 200, sender: 'alice', text: 'deploy ready', msgid: 'a', replyParent: '',
+        snippet: 'deploy ready',
+      },
+      {
+        key: 'b', bufferKey: 'irc.net.#alpha', bufferName: '#alpha', lineId: 'b',
+        timestamp: 100, sender: 'bob', text: 'deploy queued', msgid: 'b', replyParent: '',
+        snippet: 'deploy queued',
+      },
+    ]);
+    updateSettings({ archiveRetention: '7d' });
+    upsertBuffer(channelBuffer());
+    const { container } = render(() => <MessageView bufferPtr={PTR} />);
+
+    const input = await openSearch(container);
+    fireEvent.input(input, { target: { value: 'deploy' } });
+    let results!: NodeListOf<HTMLButtonElement>;
+    await waitFor(() => {
+      results = container.querySelectorAll<HTMLButtonElement>('button[data-archive-hit-index]');
+      expect(results).toHaveLength(2);
+    });
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await waitFor(() => expect(document.activeElement).toBe(results![0]));
+    fireEvent.keyDown(results![0]!, { key: 'ArrowDown' });
+    await waitFor(() => expect(document.activeElement).toBe(results![1]));
+    fireEvent.keyDown(results![1]!, { key: 'ArrowUp' });
+    await waitFor(() => expect(document.activeElement).toBe(results![0]));
   });
 });

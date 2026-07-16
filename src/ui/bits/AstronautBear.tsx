@@ -36,6 +36,8 @@ export default function AstronautBear(props: {
   class?: string;
   accent?: string;
   theme?: ThemeName;
+  /** Keep the illustrated mascot static while preserving the full SVG. */
+  animated?: boolean;
   /**
    * Accessible name. Omit (the default) at every current call site — the mascot
    * sits beside a visible "DarkBear" heading, so it is decorative and must stay
@@ -45,11 +47,11 @@ export default function AstronautBear(props: {
    */
   label?: string;
 }) {
-  const p = mergeProps({ size: 120, class: '', accent: '#818cf8', theme: 'darkbear' as ThemeName }, props);
+  const p = mergeProps({ size: 120, class: '', accent: '#818cf8', theme: 'darkbear' as ThemeName, animated: true }, props);
   const reduced = createMediaQuery('(prefers-reduced-motion: reduce)');
   // Motion runs only when neither the OS pref NOR the in-app control asks to stop it.
   // Both reads are tracked, so a change to either flips the gated SMIL wrappers.
-  const motionOn = (): boolean => !reduced() && settings.sceneMotion !== 'reduced';
+  const motionOn = (): boolean => p.animated && !reduced() && settings.sceneMotion !== 'reduced';
   const labelled = (): boolean => (p.label ?? '').length > 0;
   return (
     <MotionContext.Provider value={motionOn}>

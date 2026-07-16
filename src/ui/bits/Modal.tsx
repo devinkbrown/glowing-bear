@@ -23,6 +23,8 @@
 
 import { Show, createUniqueId, onCleanup, onMount } from 'solid-js';
 import type { JSX } from 'solid-js';
+import { isImeComposing } from '@/primitives/ime';
+import { t } from '@/lib/i18n';
 
 export interface ModalProps {
   children: JSX.Element;
@@ -97,7 +99,25 @@ function ModalShell(props: ModalProps) {
   onMount(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const panel = panelRef;
-    if (!panel) return;
+    const overlay = overlayRef;
+    if (!panel || !overlay) return;
+
+    // `aria-modal` describes the relationship to assistive technology; inert
+    // enforces it for pointer, focus, and accessibility-tree navigation too.
+    const inertSnapshots: Array<{ element: HTMLElement; inert: boolean; hadAttribute: boolean }> = [];
+    const parent = overlay.parentElement;
+    if (parent) {
+      for (const sibling of parent.children) {
+        if (!(sibling instanceof HTMLElement) || sibling === overlay) continue;
+        inertSnapshots.push({
+          element: sibling,
+          inert: sibling.inert,
+          hadAttribute: sibling.hasAttribute('inert'),
+        });
+        sibling.inert = true;
+        sibling.setAttribute('inert', '');
+      }
+    }
 
     // Fallback to the panel itself (tabindex=-1) so a modal with no focusable
     // child still moves focus into the dialog rather than leaving it outside.
@@ -106,6 +126,7 @@ function ModalShell(props: ModalProps) {
     else panel.focus();
 
     function onKeydown(e: KeyboardEvent) {
+      if (isImeComposing(e)) return;
       if (e.key === 'Escape' && props.onClose) {
         e.preventDefault();
         props.onClose();
@@ -121,7 +142,10 @@ function ModalShell(props: ModalProps) {
           panel.focus();
           return;
         }
-        if (e.shiftKey && document.activeElement === first) {
+        if (!panel.contains(document.activeElement)) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        } else if (e.shiftKey && document.activeElement === first) {
           e.preventDefault();
           last.focus();
         } else if (!e.shiftKey && document.activeElement === last) {
@@ -133,7 +157,12 @@ function ModalShell(props: ModalProps) {
     window.addEventListener('keydown', onKeydown);
     onCleanup(() => {
       window.removeEventListener('keydown', onKeydown);
-      previouslyFocused?.focus();
+      for (const snapshot of inertSnapshots) {
+        snapshot.element.inert = snapshot.inert;
+        if (snapshot.hadAttribute) snapshot.element.setAttribute('inert', '');
+        else snapshot.element.removeAttribute('inert');
+      }
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
     });
   });
 
@@ -176,7 +205,7 @@ function ModalShell(props: ModalProps) {
               <button
                 onClick={() => props.onClose?.()}
                 class="text-gray-600 hover:text-gray-300 transition-colors p-2 -mr-2 rounded-lg hover:bg-white/5"
-                aria-label="Close"
+                aria-label={t('app.close')}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                   <path d="M4 4l8 8M12 4l-8 8" />

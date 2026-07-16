@@ -162,6 +162,41 @@ describe('Modal', () => {
     expect(document.activeElement).toBe(dialog);
   });
 
+  it('repairs focus after a focused dynamic control is removed', () => {
+    const [showDynamic, setShowDynamic] = createSignal(true);
+    const { getByLabelText, getByText, queryByText } = render(() => (
+      <Modal open title="Dynamic" onClose={() => undefined}>
+        {showDynamic() && <button onClick={() => setShowDynamic(false)}>Remove me</button>}
+        <button>Stable</button>
+      </Modal>
+    ));
+
+    const dynamic = getByText('Remove me');
+    dynamic.focus();
+    fireEvent.click(dynamic);
+    expect(queryByText('Remove me')).toBeNull();
+
+    tab();
+    expect(document.activeElement).toBe(getByLabelText('Close'));
+  });
+
+  it('makes background siblings inert until the modal unmounts', () => {
+    const [open, setOpen] = createSignal(true);
+    const { getByText } = render(() => (
+      <>
+        <main data-testid="background"><button>Background</button></main>
+        <Modal open={open()} title="Isolated" onClose={() => setOpen(false)}>
+          <button>Inside</button>
+        </Modal>
+      </>
+    ));
+
+    const background = getByText('Background').parentElement!;
+    expect(background).toHaveAttribute('inert');
+    setOpen(false);
+    expect(background).not.toHaveAttribute('inert');
+  });
+
   it('excludes an inert-subtree control from the focus order', () => {
     const { getByText } = render(() => (
       <Modal open>
