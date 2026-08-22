@@ -240,7 +240,7 @@ export default function SettingsModal(props: Props) {
 
   const handleForgetDevice = async () => {
     const confirmed = confirm(
-      'Forget this device? This clears saved profiles and settings, relay and bridge passwords, session tokens, drafts and input history, and the local push subscription.',
+      t('settings.forgetDevice'),
     );
     if (!confirmed) return;
     await disableWebPush(null);

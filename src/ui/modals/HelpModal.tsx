@@ -32,7 +32,7 @@ const SHORTCUTS = [
   { keys: 'C / H', desc: 'Call transcript / hang up' },
 ];
 
-const IRCX_COMMANDS = [
+const ONYX_COMMANDS = [
   { cmd: '/whisper #ch nick msg', desc: 'In-channel whisper' },
   { cmd: '/prop #ch|nick [key] [val]', desc: 'View or set channel and nick properties' },
   { cmd: '/access #channel', desc: 'View channel access list' },
@@ -90,7 +90,7 @@ export default function HelpModal(props: Props) {
 
         <div class="border-t border-white/[0.06] pt-4">
           <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Onyx Server commands</h3>
-          <CommandList items={IRCX_COMMANDS} />
+          <CommandList items={ONYX_COMMANDS} />
         </div>
 
         <div class="border-t border-white/[0.06] pt-4">

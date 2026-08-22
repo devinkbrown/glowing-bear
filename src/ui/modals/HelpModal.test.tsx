@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe('HelpModal', () => {
-  it('renders keyboard, IRCX, and bridge command help', () => {
+  it('renders keyboard, Onyx, and extras command help', () => {
     const { getByRole, getByText } = render(() => <HelpModal open onClose={vi.fn()} />);
 
     expect(getByRole('dialog')).toHaveAccessibleName('Help');

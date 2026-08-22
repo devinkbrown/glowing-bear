@@ -247,7 +247,15 @@ function ConnectScreen(props: { onClose?: () => void }) {
   onMount(() => {
     function onKeydown(e: KeyboardEvent) {
       if (isImeComposing(e)) return;
-      if (e.key === 'Escape' && props.onClose) props.onClose();
+      if (e.key === 'Escape') {
+        if (showSetup()) { setShowSetup(false); return; }
+        if (showSaveProfile()) { setShowSaveProfile(false); return; }
+        if (showAdvanced()) { setShowAdvanced(false); return; }
+        if (showOnyxTotp()) { setShowOnyxTotp(false); return; }
+        if (showAlsoRelay()) { setShowAlsoRelay(false); return; }
+        props.onClose?.();
+        return;
+      }
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doConnect();
     }
     window.addEventListener('keydown', onKeydown);
@@ -303,8 +311,16 @@ function ConnectScreen(props: { onClose?: () => void }) {
               'background-size': '97px 113px, 149px 131px, 181px 167px',
             }}
           />
+          <div
+            class="absolute inset-0 opacity-[0.18] login-ripple"
+            style={{
+              'background-image': `radial-gradient(circle at 50% 40%, ${tc().accent}33, transparent 42%)`,
+            }}
+          />
           <div class="absolute w-[600px] h-[600px] sm:w-[900px] sm:h-[900px] -top-[200px] -right-[200px] rounded-full opacity-[0.06]"
             style={{ background: `radial-gradient(circle, ${tc().accent}, transparent 50%)`, animation: 'login-float-a 30s ease-in-out infinite' }} />
+          <div class="absolute w-[420px] h-[420px] sm:w-[640px] sm:h-[640px] -bottom-[180px] -left-[140px] rounded-full opacity-[0.05]"
+            style={{ background: `radial-gradient(circle, ${tc().accent}, transparent 55%)`, animation: 'login-float-b 42s ease-in-out infinite' }} />
         </div>
       </Show>
 
@@ -350,7 +366,9 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     onSelect={() => setMode('onyx-wss')}
                   />
                 </div>
-                <p class="mt-2 text-center text-[11px] leading-snug text-gray-500">
+                <p class={mode() === 'onyx-tls'
+                  ? 'login-state mt-3 text-[12px] leading-snug'
+                  : 'mt-2 text-center text-[11px] leading-snug text-[var(--color-gray-500)]'}>
                   {mode() === 'weechat' && t('connect.taglineWeechat')}
                   {mode() === 'onyx-wss' && t('connect.taglineOnyx')}
                   {mode() === 'onyx-tls' && t('connect.modeOnyxTlsUnavailable')}
@@ -385,7 +403,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   role="alert"
                   data-testid="connect-diagnose"
                   data-error-code={errorCode() ?? ''}
-                  class="mb-4 rounded-lg border border-red-500/20 bg-red-500/[0.07] px-3 py-2 text-[12px] leading-snug text-red-200"
+                  class="login-state login-state-error mb-4 text-[12px] leading-snug"
                 >
                   <p>{errorText()}</p>
                   <Show when={nextAction()}>
@@ -395,7 +413,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
               </Show>
 
               <Show when={mixedBlocked()}>
-                <div role="status" class="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2 text-[12px] leading-snug text-amber-200">
+                <div role="status" class="login-state login-state-warn mb-4 text-[12px] leading-snug">
                   {t('connect.error.mixed_content')} {t('connect.next.mixed_content')}
                 </div>
               </Show>
@@ -411,6 +429,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
               </Show>
 
               <form
+                aria-busy={connecting() ? 'true' : undefined}
                 onSubmit={(e) => {
                   e.preventDefault();
                   doConnect();
@@ -549,7 +568,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
 
               <div class="pt-3">
                 <button type="submit" disabled={!ready()}
-                  class={`group w-full login-btn-height text-[15px] font-semibold rounded-xl flex items-center justify-center gap-2.5 transition-all
+                  class={`group w-full login-btn-height login-cta text-[15px] font-semibold flex items-center justify-center gap-2.5 transition-all
                     ${ready()
                       ? 'bg-[var(--custom-accent,#818cf8)] text-white cursor-pointer'
                       : 'login-btn-wait cursor-not-allowed'}`}>
@@ -667,18 +686,37 @@ function ConnectScreen(props: { onClose?: () => void }) {
           color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 62%, transparent);
           border: 1px solid color-mix(in srgb, var(--custom-accent, #818cf8) 18%, transparent);
         }
+        .login-cta { border-radius: 14px; }
+        .login-state {
+          border-radius: 14px;
+          border: 1px solid color-mix(in srgb, var(--custom-accent, #818cf8) 22%, transparent);
+          background: color-mix(in srgb, var(--custom-accent, #818cf8) 8%, transparent);
+          padding: 12px 14px;
+          color: var(--color-gray-200);
+          text-align: start;
+        }
+        .login-state-error {
+          border-color: color-mix(in srgb, var(--role-mention, #f87171) 28%, transparent);
+          background: color-mix(in srgb, var(--role-mention, #f87171) 8%, transparent);
+        }
+        .login-state-warn {
+          border-color: color-mix(in srgb, #f59e0b 28%, transparent);
+          background: color-mix(in srgb, #f59e0b 8%, transparent);
+        }
+        .login-ripple { animation: login-ripple 48s ease-in-out infinite; }
         .login-input-height { height: 52px; }
         .login-btn-height { height: 54px; }
         @media (min-width: 640px) {
           .login-input { height: 46px; font-size: 14px; border-radius: 12px; padding: 0 14px; }
           .login-input-height { height: 46px; }
           .login-btn-height { height: 48px; }
+          .login-cta, .login-state { border-radius: 12px; }
         }
         .login-toggle {
           position: relative; width: 44px; height: 26px; border-radius: 13px;
           background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.06); flex-shrink: 0;
         }
-        .login-toggle-on { background: rgba(99, 102, 241, 0.7); }
+        .login-toggle-on { background: color-mix(in srgb, var(--custom-accent, #818cf8) 70%, transparent); }
         .login-toggle-dot {
           position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: white;
           transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -707,6 +745,15 @@ function ConnectScreen(props: { onClose?: () => void }) {
           0%, 100% { transform: translate(0, 0) scale(1); }
           33% { transform: translate(40px, -25px) scale(1.06); }
           66% { transform: translate(-20px, 18px) scale(0.96); }
+        }
+        @keyframes login-float-b {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          40% { transform: translate(-28px, 18px) scale(1.04); }
+          70% { transform: translate(16px, -12px) scale(0.97); }
+        }
+        @keyframes login-ripple {
+          0%, 100% { opacity: 0.12; transform: scale(1); }
+          50% { opacity: 0.22; transform: scale(1.06); }
         }
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(8px); }
@@ -794,7 +841,7 @@ function WeeChatFields(props: {
           </Field>
         </div>
         <button type="button" onClick={props.onTls}
-          class={`flex items-center justify-center px-5 min-w-[88px] login-input-height rounded-xl text-[13px] font-semibold border
+          class={`flex items-center justify-center px-5 min-w-[88px] login-input-height rounded-[14px] sm:rounded-xl text-[13px] font-semibold border
             ${props.tls ? 'bg-emerald-500/12 border-emerald-500/25 text-emerald-300' : 'bg-white/[0.03] border-white/[0.08] text-gray-500'}`}>
           TLS
         </button>

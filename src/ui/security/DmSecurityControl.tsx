@@ -8,7 +8,7 @@ import {
   verifyPeerDmKey,
 } from '@/state/bridge';
 import { useClickOutside } from '@/primitives/clickOutside';
-import { formatDate } from '@/lib/i18n';
+import { formatDate, t } from '@/lib/i18n';
 
 interface Props {
   peer: string;
@@ -100,7 +100,7 @@ export default function DmSecurityControl(props: Props) {
                 <p class="text-[11px] leading-relaxed text-gray-400">
                   {bridgeState.status === 'ready'
                     ? 'No peer device key is available. Messages are not end-to-end encrypted.'
-                    : 'Connect the Onyx Server bridge to check this peer’s device key.'}
+                    : t('security.connectOnyx')}
                 </p>
               }
             >

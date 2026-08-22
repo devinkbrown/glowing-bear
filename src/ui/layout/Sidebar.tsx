@@ -208,7 +208,7 @@ export default function Sidebar(props: SidebarProps) {
       {/* Connection + activity deck */}
       <div class="mx-3 mb-3 shrink-0 space-y-2">
         <div
-          class="darkbear-connection-pill flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-semibold"
+          class="darkbear-connection-pill flex items-center gap-2 px-3 py-2 min-h-[44px] sm:min-h-0 rounded-xl text-[11px] font-semibold"
           classList={{
             'bg-[var(--role-online,#34d399)]/[0.08] text-[var(--role-online,#34d399)] border-[var(--role-online,#34d399)]/25': isConnected(),
             'bg-amber-500/[0.08] text-amber-300 border-amber-400/15': isConnecting() || isReconnecting(),

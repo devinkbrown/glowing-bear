@@ -320,16 +320,16 @@ function ReadMarkerRow() {
 function EmptyState() {
   return (
     <div class="flex-1 flex items-center justify-center px-6">
-      <div class="text-center space-y-3">
-        <div class="w-12 h-12 mx-auto rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center">
-          <svg class="w-6 h-6 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <div class="mx-auto w-full max-w-[72ch] text-center space-y-3">
+        <div class="w-14 h-14 mx-auto rounded-2xl bg-[var(--custom-accent,#818cf8)]/[0.08] border border-[var(--custom-accent,#818cf8)]/15 flex items-center justify-center">
+          <svg class="w-6 h-6 text-[var(--custom-accent,#818cf8)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" />
           </svg>
         </div>
-        <p class="text-gray-500 text-[13px]">{t('message.noBuffer')}</p>
-        <p class="text-gray-600 text-[11px] font-mono">
+        <p class="text-[var(--color-gray-300)] text-[14px]">{t('message.noBuffer')}</p>
+        <p class="text-[var(--color-gray-500)] text-[11px] font-mono">
           <span class="hidden sm:inline">
-            <kbd class="px-1.5 py-0.5 rounded bg-white/[0.05] border border-white/[0.08] text-[10px]">Ctrl+K</kbd> {t('message.searchHint')}
+            <kbd class="px-1.5 py-0.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[10px]">Ctrl+K</kbd> {t('message.searchHint')}
           </span>
           <span class="sm:hidden">{t('message.swipeHint')}</span>
         </p>

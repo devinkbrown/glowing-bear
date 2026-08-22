@@ -81,7 +81,7 @@ test('surfaces loss, repairs reordering, and preserves one call pipeline across 
   expect(axe.violations.map((violation) => violation.id), JSON.stringify(axe.violations, null, 2)).toEqual([]);
 
   await account.disconnectLatest();
-  await expect(call.getByRole('status')).toContainText('Onyx Server bridge interrupted');
+  await expect(call.getByRole('status')).toContainText('Onyx extras interrupted');
   await expect.poll(() => account.connectionCount, { timeout: 10_000 }).toBe(2);
   await expect.poll(() => account.saslMechanisms).toEqual(['PLAIN', 'SESSION-TOKEN']);
   await expect.poll(
