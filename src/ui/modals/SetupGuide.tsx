@@ -72,7 +72,7 @@ export interface SetupGuideProps {
 }
 
 export default function SetupGuide(props: SetupGuideProps) {
-  const [tab, setTab] = createSignal(defaultSetupTab(props.type));
+  const [tab, setTab] = createSignal<'weechat' | 'proxy' | 'totp' | 'onyx' | 'tls'>('weechat');
   createEffect(() => {
     setTab(defaultSetupTab(props.type));
   });

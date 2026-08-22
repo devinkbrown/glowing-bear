@@ -538,15 +538,16 @@ describe('relay URL and TOTP', () => {
 		}
 	});
 
-	it('surfaces totp_required when the relay wants TOTP and none was supplied', () => {
+	it('surfaces totp_required when the relay wants TOTP and none was supplied', async () => {
 		const errors: Array<{ message: string; code?: string }> = [];
-		client.addEventListener('error', ((ev: CustomEvent) => errors.push(ev.detail)) as EventListener);
+		client.addEventListener('error', ((ev: Event) => errors.push((ev as CustomEvent).detail)) as EventListener);
 		const ws = connectOpen();
 		ws.message(handshakeFrame({
 			password_hash_algo: 'sha256',
 			nonce: 'aa'.repeat(16),
 			totp: 'on',
 		}));
+		await flushAsync();
 		expect(errors.some((e) => e.code === 'totp_required')).toBe(true);
 		expect(ws.sent.some((s) => s.startsWith('init'))).toBe(false);
 	});

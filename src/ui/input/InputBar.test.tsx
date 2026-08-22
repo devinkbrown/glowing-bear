@@ -278,6 +278,7 @@ describe('InputBar relay acknowledgement', () => {
   });
 
   it('marks drafted upload URLs sent only after relay acceptance', async () => {
+    markOnyxServer('eshmaki');
     inputMocks.sendInput.mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { findByText, getByLabelText, getByPlaceholderText } = render(() => <InputBar />);
     const chooser = getByLabelText('Choose files to upload') as HTMLInputElement;
@@ -303,6 +304,7 @@ describe('InputBar relay acknowledgement', () => {
   });
 
   it('does not mark a drafted upload sent when its URL was edited into a longer token', async () => {
+    markOnyxServer('eshmaki');
     const { getByLabelText, getByPlaceholderText } = render(() => <InputBar />);
     const chooser = getByLabelText('Choose files to upload') as HTMLInputElement;
     const box = getByPlaceholderText('Message...') as HTMLTextAreaElement;
