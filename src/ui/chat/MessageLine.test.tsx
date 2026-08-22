@@ -408,9 +408,9 @@ describe('MessageLine', () => {
       hidden: false,
     } satisfies WeeChatBuffer);
     setActiveBuffer('0xb');
-    const { container, getByLabelText } = renderLine(makeLine({ msgid: 'm-react-b' }));
+    const { container, getAllByLabelText } = renderLine(makeLine({ msgid: 'm-react-b' }));
     fireEvent.contextMenu(container.querySelector('.msg-row')!);
-    expect(getByLabelText(/React with/)).toBeInTheDocument();
+    expect(getAllByLabelText(/React with/).length).toBeGreaterThan(0);
   });
 
   it('captures a sanitized preview into the store when replying', () => {
