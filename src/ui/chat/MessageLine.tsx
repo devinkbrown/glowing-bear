@@ -18,6 +18,7 @@ import type { WeeChatLine } from '@/types';
 import type { BufferKind } from '@/lib/bufferKind';
 import { nickColor } from '@/lib/nickcolor';
 import { formatTimestamp } from '@/lib/timestamps';
+import { t } from '@/lib/i18n';
 import { formatText, stripFormatting } from '@/lib/irc-classic/formatter';
 import { stripColors } from '@/lib/weechat/strip-colors';
 import { parseEventFeedText, type ParsedEventFeed } from '@/lib/ircx/parser';
@@ -117,7 +118,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                   <button
                     onClick={() => props.onReact(emoji)}
                     class="w-7 h-7 flex items-center justify-center rounded-lg text-[15px] hover:bg-white/[0.08] active:scale-90 transition-all"
-                    aria-label={`React with ${emoji}`}
+                    aria-label={t('message.reactWith', { emoji })}
                   >
                     {emoji}
                   </button>
@@ -137,7 +138,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                 <svg class="w-3.5 h-3.5 shrink-0 -scale-x-100" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M8 4L4 8l4 4M4 8h6a4 4 0 014 4" />
                 </svg>
-                Reply
+                {t('message.reply')}
               </button>
             </Show>
             <Show when={props.canOpenThread}>
@@ -151,7 +152,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                 <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M2.5 3.5h11v7h-6l-3.5 3v-3H2.5z" />
                 </svg>
-                Open thread
+                {t('message.openThread')}
               </button>
             </Show>
             <Show when={props.canSave}>
@@ -163,7 +164,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                 class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
               >
                 <span class="w-3.5 text-center">{props.saved ? '★' : '☆'}</span>
-                {props.saved ? 'Remove saved message' : 'Save message'}
+                {props.saved ? t('message.unsave') : t('message.save')}
               </button>
             </Show>
             <button
@@ -177,7 +178,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                 <rect x="5" y="5" width="9" height="9" rx="1.5" />
                 <path d="M5 11H3.5A1.5 1.5 0 012 9.5v-7A1.5 1.5 0 013.5 1h7A1.5 1.5 0 0112 2.5V5" />
               </svg>
-              Copy Text
+              {t('message.copyText')}
             </button>
             <Show when={props.urls.length > 0}>
               <button
@@ -191,7 +192,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                 <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                   <path d="M6.5 9.5l3-3M7 10a3 3 0 01-4.24 0 3 3 0 010-4.24L4.5 4M9 6a3 3 0 014.24 0 3 3 0 010 4.24L11.5 12" />
                 </svg>
-                Copy Link
+                {t('message.copyLink')}
               </button>
             </Show>
           </div>
@@ -360,7 +361,7 @@ function ReplyAction(props: { nick: string; canReply: boolean; onReply: () => vo
       <button
         type="button"
         class="reply-action ml-1.5 inline-flex shrink-0 items-center justify-center rounded p-0.5 align-middle text-gray-500 opacity-0 transition-opacity hover:text-gray-200 focus-visible:opacity-100 group-hover:opacity-100"
-        aria-label={`Reply to ${props.nick || 'message'}`}
+        aria-label={t('message.replyTo', { nick: props.nick || t('composer.message') })}
         onClick={() => props.onReply()}
       >
         <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -377,7 +378,7 @@ function ThreadAction(props: { canOpen: boolean; onOpen: () => void }) {
       <button
         type="button"
         class="reply-action ml-1 inline-flex shrink-0 items-center justify-center rounded p-0.5 align-middle text-gray-500 opacity-0 transition-opacity hover:text-gray-200 focus-visible:opacity-100 group-hover:opacity-100"
-        aria-label="Open message thread"
+        aria-label={t('message.openThreadAria')}
         onClick={() => props.onOpen()}
       >
         <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -394,7 +395,7 @@ function SaveAction(props: { canSave: boolean; saved: boolean; onToggle: () => v
       <button
         type="button"
         class="reply-action ml-1 inline-flex shrink-0 items-center justify-center rounded p-0.5 align-middle text-[14px] leading-none text-gray-500 opacity-0 transition-opacity hover:text-gray-200 focus-visible:opacity-100 group-hover:opacity-100"
-        aria-label={props.saved ? 'Remove saved message' : 'Save message'}
+        aria-label={props.saved ? t('message.unsave') : t('message.save')}
         onClick={() => props.onToggle()}
       >
         {props.saved ? '★' : '☆'}

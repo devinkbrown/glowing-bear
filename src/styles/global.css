@@ -202,6 +202,9 @@ html[dir="rtl"] .login-secret-toggle {
   left: 0 !important;
   right: auto !important;
 }
+html[dir="rtl"] .login-toggle-on .login-toggle-dot {
+  transform: translateX(-18px);
+}
 html[dir="rtl"] .user-list-panel {
   border-left-width: 0 !important;
   border-right: 1px solid rgba(255,255,255,0.04);
@@ -678,7 +681,7 @@ html[dir="rtl"] .msg-highlight {
   }
   .msg-row:hover .msg-ts.invisible {
     visibility: visible;
-    opacity: 0.45;
+    opacity: 0.75;
     transition: opacity 0.12s ease;
   }
   .msg-ts {

@@ -6,17 +6,23 @@ import {
   relayDiagnostics,
   ConnectionState,
 } from '@/state';
+import { t } from '@/lib/i18n';
 
 export default function ConnectivityStatus() {
   const reconnecting = () => connectionState() === ConnectionState.RECONNECTING;
   const visible = () => !browserOnline() || reconnecting();
   const detail = createMemo(() => {
-    if (!browserOnline()) return 'Network unavailable. Chat and media will resume when this device is online.';
+    if (!browserOnline()) return t('connectivity.offlineDetail');
     const diagnostics = relayDiagnostics();
-    const delay = diagnostics.reconnectDelayMs > 0
-      ? ` Next attempt in ${Math.max(1, Math.ceil(diagnostics.reconnectDelayMs / 1000))}s.`
+    const attempt = diagnostics.reconnectAttempt > 0
+      ? t('connectivity.attempt', { n: diagnostics.reconnectAttempt })
       : '';
-    return `Relay connection interrupted${diagnostics.reconnectAttempt > 0 ? ` · attempt ${diagnostics.reconnectAttempt}` : ''}.${delay}`;
+    const delay = diagnostics.reconnectDelayMs > 0
+      ? t('connectivity.nextAttempt', {
+        seconds: Math.max(1, Math.ceil(diagnostics.reconnectDelayMs / 1000)),
+      })
+      : '';
+    return t('connectivity.relayInterrupted', { attempt, delay });
   });
 
   return (
@@ -33,17 +39,17 @@ export default function ConnectivityStatus() {
         />
         <div class="min-w-0 flex-1">
           <p class="text-[12px] font-black tracking-wide text-white">
-            {browserOnline() ? 'Reconnecting' : 'Offline'}
+            {browserOnline() ? t('connectivity.reconnectingTitle') : t('connectivity.offline')}
           </p>
           <p class="mt-0.5 text-[11px] leading-relaxed text-[#c4cbda]">{detail()}</p>
         </div>
         <Show when={browserOnline() && reconnecting()}>
           <button
             type="button"
-            class="shrink-0 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-[11px] font-black text-white transition-colors hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-[#c7ccff]"
+            class="shrink-0 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-[11px] font-black text-white transition-colors hover:bg-white/15 focus-visible:ring-2 focus-visible:ring-[#c7ccff] min-h-[44px]"
             onClick={reconnect}
           >
-            Retry now
+            {t('connectivity.retry')}
           </button>
         </Show>
       </div>

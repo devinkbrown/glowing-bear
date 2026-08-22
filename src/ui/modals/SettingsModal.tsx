@@ -7,7 +7,7 @@
 //   Messages   — timestamp format, display toggles, sidebar unread filter,
 //                highlight words editor.
 //   Alerts     — desktop notifications, sound, read-on-focus, auto-reconnect.
-//   Connection — relay settings + saved profiles manager + onyx-server bridge
+//   Connection — relay settings + saved profiles + Onyx extras
 //                (enabled, wsUrl override, account, password, autoJoinMedia,
 //                e2eeDms + verified-only delivery policy).
 //   Advanced   — upload URL, Tenor key, custom CSS, keyboard shortcut list,
@@ -710,26 +710,26 @@ export default function SettingsModal(props: Props) {
 
           {/* ─── CONNECTION ─── */}
           <Show when={tab() === 'connection'}>
-            <Section label="Relay" desc="WebSocket relay connection settings">
+            <Section label={t('settings.relaySection')} desc={t('settings.relaySectionDesc')}>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <InputField label="Host" value={settings.relay.host} placeholder="irc.example.com"
+                <InputField label={t('settings.host')} value={settings.relay.host} placeholder="irc.example.com"
                   onChange={(v) => updateRelay({ host: v })} />
-                <InputField label="Port" value={String(settings.relay.port)} placeholder="9001" type="number"
+                <InputField label={t('connect.port')} value={String(settings.relay.port)} placeholder="9001" type="number"
                   onChange={(v) => updateRelay({ port: Number(v) || 9001 })} />
               </div>
               <div class="space-y-0 mt-2">
-                <Toggle label="TLS" desc="Encrypt the WebSocket connection" on={settings.relay.tls} onChange={(v) => updateRelay({ tls: v })} />
-                <Toggle label="Compression" desc="Enable zlib compression for the relay protocol" on={settings.relay.compression} onChange={(v) => updateRelay({ compression: v })} />
+                <Toggle label="TLS" desc={t('settings.tlsDesc')} on={settings.relay.tls} onChange={(v) => updateRelay({ tls: v })} />
+                <Toggle label={t('connect.compression')} desc={t('settings.compressionDesc')} on={settings.relay.compression} onChange={(v) => updateRelay({ compression: v })} />
               </div>
               <div class="mt-2">
-                <InputField label="Password" value={settings.relay.password} placeholder="Optional relay password" type="password"
+                <InputField label={t('connect.password')} value={settings.relay.password} placeholder={t('settings.optionalRelayPassword')} type="password"
                   onChange={(v) => updateRelay({ password: v })} />
-                <Toggle label="Remember Relay Password" desc="Persist across browser restarts on this device" on={settings.rememberRelayPassword}
+                <Toggle label={t('settings.rememberRelay')} desc={t('settings.rememberRelayDesc')} on={settings.rememberRelayPassword}
                   onChange={(v) => updateSettings({ rememberRelayPassword: v })} />
               </div>
             </Section>
 
-            <Section label="Profiles" desc="Save and switch between connection configurations">
+            <Section label={t('settings.profiles')} desc={t('settings.profilesDesc')}>
               <Show when={settings.profiles.length > 0}>
                 <div class="space-y-1.5 mb-3">
                   <For each={settings.profiles}>
@@ -738,12 +738,12 @@ export default function SettingsModal(props: Props) {
                         <span class="text-[12px] text-gray-300 font-medium flex-1 truncate">{p.name}</span>
                         <span class="text-[10px] text-gray-600 font-mono truncate max-w-[120px]">{p.relay.host}:{p.relay.port}</span>
                         <button onClick={() => loadProfile(p.name)}
-                          class="text-[10px] font-semibold text-[var(--custom-accent,#818cf8)] hover:opacity-80 transition-opacity px-1.5">
-                          Load
+                          class="text-[10px] font-semibold text-[var(--custom-accent,#818cf8)] hover:opacity-80 transition-opacity px-1.5 min-h-[44px] sm:min-h-0">
+                          {t('settings.loadProfile')}
                         </button>
-                        <button onClick={() => { if (confirm(`Delete profile "${p.name}"?`)) deleteProfile(p.name); }}
-                          class="text-[10px] font-semibold text-red-400 hover:text-red-300 transition-colors px-1.5">
-                          Del
+                        <button onClick={() => { if (confirm(t('settings.confirmDeleteProfile', { name: p.name }))) deleteProfile(p.name); }}
+                          class="text-[10px] font-semibold text-red-400 hover:text-red-300 transition-colors px-1.5 min-h-[44px] sm:min-h-0">
+                          {t('settings.deleteProfile')}
                         </button>
                       </div>
                     )}
@@ -752,12 +752,12 @@ export default function SettingsModal(props: Props) {
               </Show>
               <div class="flex gap-2">
                 <input type="text" value={profileName()} onInput={(e) => setProfileName(e.currentTarget.value)}
-                  placeholder="Profile name"
-                  class="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700" />
+                  placeholder={t('connect.profileName')}
+                  class="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700 min-h-[44px]" />
                 <button onClick={() => { const name = profileName().trim(); if (name) { saveProfile(name); setProfileName(''); } }}
                   disabled={!profileName().trim()}
-                  class="px-3 py-1.5 text-[11px] font-semibold text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10 border border-[var(--custom-accent,#818cf8)]/20 rounded-lg hover:bg-[var(--custom-accent,#818cf8)]/15 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-                  Save Current
+                  class="px-3 py-1.5 text-[11px] font-semibold text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10 border border-[var(--custom-accent,#818cf8)]/20 rounded-lg hover:bg-[var(--custom-accent,#818cf8)]/15 disabled:opacity-40 disabled:cursor-not-allowed transition-all min-h-[44px]">
+                  {t('settings.saveCurrent')}
                 </button>
               </div>
             </Section>

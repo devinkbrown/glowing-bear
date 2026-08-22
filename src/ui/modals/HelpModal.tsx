@@ -1,5 +1,5 @@
-// HelpModal — keyboard shortcuts, IRCX/Onyx Server command reference, and the
-// Onyx Server bridge voice/video commands.
+// HelpModal — keyboard shortcuts, Onyx Server command reference, and the
+// Onyx extras voice/video commands.
 //
 // Usage: <HelpModal open={uiState.activeModal === 'help'} onClose={closeModal} />
 // `open` defaults to true for conditional-mount usage.
@@ -19,7 +19,7 @@ const SHORTCUTS = [
   { keys: 'Ctrl + K', desc: 'Quick buffer switcher' },
   { keys: 'Ctrl + B', desc: 'Toggle sidebar' },
   { keys: 'Ctrl + U', desc: 'Toggle user list' },
-  { keys: 'Ctrl + I', desc: 'Channel info (IRCX)' },
+  { keys: 'Ctrl + I', desc: 'Channel info' },
   { keys: 'Ctrl + \\', desc: 'Toggle split view' },
   { keys: 'Ctrl + Shift + O', desc: 'Oper console' },
   { keys: 'Tab', desc: 'Complete nick / command' },
@@ -33,9 +33,9 @@ const SHORTCUTS = [
 ];
 
 const IRCX_COMMANDS = [
-  { cmd: '/whisper #ch nick msg', desc: 'IRCX whisper (in-channel PM)' },
-  { cmd: '/prop #ch|nick [key] [val]', desc: 'View/set IRCX properties' },
-  { cmd: '/access #channel', desc: 'View IRCX access list' },
+  { cmd: '/whisper #ch nick msg', desc: 'In-channel whisper' },
+  { cmd: '/prop #ch|nick [key] [val]', desc: 'View or set channel and nick properties' },
+  { cmd: '/access #channel', desc: 'View channel access list' },
   { cmd: '/chaninfo [#channel]', desc: 'Open channel info panel' },
   { cmd: '/profile nick', desc: 'Open user profile card' },
   { cmd: '/services', desc: 'Open Onyx Server account, channel, and memo services' },

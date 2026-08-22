@@ -308,7 +308,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
         </div>
       </Show>
 
-      <div class="min-h-dvh flex flex-col relative z-10">
+      <div class="min-h-dvh flex flex-col relative z-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div class="flex-1 min-h-[24px] sm:min-h-0" />
 
         <div class="flex flex-col items-center px-6 pb-1 sm:pb-2 select-none"
@@ -329,7 +329,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
               <AstronautBear animated={false} size={72} class="sm:w-[88px] sm:h-[88px]" accent={tc().accent} theme={settings.theme} />
             </Suspense>
           </Show>
-          <h1 class="text-[22px] sm:text-[26px] font-bold tracking-tight text-gray-100 mt-1">DarkBear</h1>
+          <h1 class="text-[22px] sm:text-[26px] font-bold tracking-tight text-[var(--color-gray-100)] mt-1">DarkBear</h1>
         </div>
 
         <div class="w-full sm:max-w-[440px] sm:mx-auto" style={{ animation: 'fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both' }}>
@@ -451,16 +451,18 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     <input id="c-endpoint" class="login-input" value={bridgeEndpoint()}
                       onInput={(e) => setBridgeEndpoint(e.currentTarget.value)} autocomplete="off" spellcheck={false} />
                   </Field>
-                  <Field label={t('connect.nick')} id="c-nick">
-                    <input id="c-nick" class="login-input" value={onyxNick()}
-                      onInput={(e) => setOnyxNick(e.currentTarget.value)}
-                      placeholder={t('connect.nick')} autocomplete="nickname" spellcheck={false} />
-                  </Field>
-                  <Field label={t('connect.account')} id="c-account">
-                    <input id="c-account" class="login-input" value={bridgeAccount()}
-                      onInput={(e) => setBridgeAccount(e.currentTarget.value)}
-                      placeholder={t('connect.accountNick')} autocomplete="username" spellcheck={false} />
-                  </Field>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Field label={t('connect.nick')} id="c-nick">
+                      <input id="c-nick" class="login-input" value={onyxNick()}
+                        onInput={(e) => setOnyxNick(e.currentTarget.value)}
+                        placeholder={t('connect.nick')} autocomplete="nickname" spellcheck={false} />
+                    </Field>
+                    <Field label={t('connect.account')} id="c-account">
+                      <input id="c-account" class="login-input" value={bridgeAccount()}
+                        onInput={(e) => setBridgeAccount(e.currentTarget.value)}
+                        placeholder={t('connect.accountNick')} autocomplete="username" spellcheck={false} />
+                    </Field>
+                  </div>
                   <Field label={t('connect.password')} id="c-onyx-pass">
                     <input id="c-onyx-pass" class="login-input" type="password" value={bridgePassword()}
                       onInput={(e) => setBridgePassword(e.currentTarget.value)}
@@ -490,6 +492,12 @@ function ConnectScreen(props: { onClose?: () => void }) {
                               digits[i] = digit;
                               setOnyxTotp(digits.join('').trimEnd());
                               if (digit && i < 5) onyxTotpRefs[i + 1]?.focus();
+                            }}
+                            onKeyDown={(e) => {
+                              if (isImeComposing(e)) return;
+                              if (e.key === 'Backspace' && !onyxTotp()[i] && i > 0) onyxTotpRefs[i - 1]?.focus();
+                              if (e.key === 'ArrowLeft' && i > 0) onyxTotpRefs[i - 1]?.focus();
+                              if (e.key === 'ArrowRight' && i < 5) onyxTotpRefs[i + 1]?.focus();
                             }}
                             autocomplete="one-time-code"
                             aria-label={t('connect.totpDigit', { index: i + 1 })}
@@ -544,7 +552,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   class={`group w-full login-btn-height text-[15px] font-semibold rounded-xl flex items-center justify-center gap-2.5 transition-all
                     ${ready()
                       ? 'bg-[var(--custom-accent,#818cf8)] text-white cursor-pointer'
-                      : 'bg-white/[0.04] text-white/20 cursor-not-allowed border border-white/[0.04]'}`}>
+                      : 'login-btn-wait cursor-not-allowed'}`}>
                   <Show when={connecting()} fallback={t('connect.connect')}>
                     <span class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                     {statusText()}
@@ -639,13 +647,25 @@ function ConnectScreen(props: { onClose?: () => void }) {
         .login-field { display: flex; flex-direction: column; gap: 0; }
         .login-label {
           display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
-          text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-gray-500, #6b6f8a);
-          padding-left: 2px; margin-bottom: 6px;
+          text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-gray-500);
+          padding-inline-start: 2px; margin-bottom: 6px;
         }
         .login-input {
-          width: 100%; height: 52px; background: rgba(255,255,255,0.035);
-          border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; color: #e0e4f0;
+          width: 100%; height: 52px;
+          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 6%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 12%, transparent);
+          border-radius: 14px; color: var(--color-gray-200, #e0e4f0);
           font-size: 16px; padding: 0 16px; outline: none;
+        }
+        .login-input:focus-visible,
+        .login-totp-digit:focus-visible {
+          border-color: color-mix(in srgb, var(--custom-accent, #818cf8) 55%, transparent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--custom-accent, #818cf8) 28%, transparent);
+        }
+        .login-btn-wait {
+          background: color-mix(in srgb, var(--custom-accent, #818cf8) 22%, transparent);
+          color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 62%, transparent);
+          border: 1px solid color-mix(in srgb, var(--custom-accent, #818cf8) 18%, transparent);
         }
         .login-input-height { height: 52px; }
         .login-btn-height { height: 54px; }
@@ -664,17 +684,20 @@ function ConnectScreen(props: { onClose?: () => void }) {
           transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .login-toggle-on .login-toggle-dot { transform: translateX(18px); }
+        html[dir="rtl"] .login-toggle-on .login-toggle-dot { transform: translateX(-18px); }
         .login-quiet {
-          min-height: 44px; font-size: 12px; color: #6b6f8a;
+          min-height: 44px; font-size: 12px; color: var(--color-gray-500);
         }
-        .login-quiet:hover { color: #c5c9d8; }
+        .login-quiet:hover { color: var(--color-gray-300); }
         @media (min-width: 640px) {
           .login-quiet { min-height: 32px; }
         }
         .login-totp-digit {
           width: 42px; height: 52px; text-align: center; font-family: var(--mono-font);
-          font-size: 22px; font-weight: 600; color: #e0e4f0; background: rgba(255,255,255,0.035);
-          border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; outline: none;
+          font-size: 22px; font-weight: 600; color: var(--color-gray-200, #e0e4f0);
+          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 6%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 12%, transparent);
+          border-radius: 12px; outline: none;
         }
         @media (min-width: 640px) {
           .login-totp-digit { width: 40px; height: 46px; font-size: 20px; border-radius: 10px; }
@@ -709,10 +732,10 @@ function ModeButton(props: {
       data-testid={`connect-mode-${props.id}`}
       disabled={props.disabled}
       onClick={() => { if (!props.disabled) props.onSelect(); }}
-      class={`min-h-[44px] rounded-lg px-2 text-center text-[13px] font-semibold transition-colors ${
+      class={`min-h-[44px] rounded-lg px-2 text-center text-[13px] font-semibold transition-colors focus-visible:z-10 ${
         props.active
           ? 'bg-[var(--custom-accent,#818cf8)] text-white shadow-sm'
-          : 'text-gray-400 hover:text-gray-200'
+          : 'text-[var(--color-gray-400)] hover:text-[var(--color-gray-200)]'
       } ${props.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
     >
       {props.title}
