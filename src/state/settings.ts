@@ -112,6 +112,9 @@ function normalizeProfile(v: unknown): RelayProfile | null {
       tls: relay.tls !== false,
       password: typeof relay.password === 'string' ? relay.password : '',
       compression: relay.compression !== false,
+      path: typeof relay.path === 'string' && relay.path.trim()
+        ? relay.path.trim().replace(/^\/+|\/+$/g, '')
+        : DEFAULT_RELAY.path,
     },
     rememberPassword: v.rememberPassword === true,
   };
@@ -222,6 +225,9 @@ function normalizeSettings(input: unknown): AppSettings {
   }
 
   merged.relay = { ...DEFAULT_RELAY, ...(isPlainObject(data.relay) ? data.relay : {}) };
+  merged.relay.path = typeof merged.relay.path === 'string' && merged.relay.path.trim()
+    ? merged.relay.path.trim().replace(/^\/+|\/+$/g, '')
+    : DEFAULT_RELAY.path;
   merged.customColors = { ...DEFAULT_CUSTOM_COLORS, ...(isPlainObject(data.customColors) ? data.customColors : {}) };
   merged.bridge = { ...DEFAULT_BRIDGE, ...(isPlainObject(data.bridge) ? data.bridge : {}) };
   merged.profiles = Array.isArray(data.profiles)

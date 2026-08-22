@@ -1,5 +1,5 @@
-// HelpModal — keyboard shortcuts, IRCX/Onyx Server command reference, and the
-// Onyx Server bridge voice/video commands.
+// HelpModal — keyboard shortcuts, Onyx Server command reference, and the
+// Onyx extras voice/video commands.
 //
 // Usage: <HelpModal open={uiState.activeModal === 'help'} onClose={closeModal} />
 // `open` defaults to true for conditional-mount usage.
@@ -19,7 +19,7 @@ const SHORTCUTS = [
   { keys: 'Ctrl + K', desc: 'Quick buffer switcher' },
   { keys: 'Ctrl + B', desc: 'Toggle sidebar' },
   { keys: 'Ctrl + U', desc: 'Toggle user list' },
-  { keys: 'Ctrl + I', desc: 'Channel info (IRCX)' },
+  { keys: 'Ctrl + I', desc: 'Channel info' },
   { keys: 'Ctrl + \\', desc: 'Toggle split view' },
   { keys: 'Ctrl + Shift + O', desc: 'Oper console' },
   { keys: 'Tab', desc: 'Complete nick / command' },
@@ -32,10 +32,10 @@ const SHORTCUTS = [
   { keys: 'C / H', desc: 'Call transcript / hang up' },
 ];
 
-const IRCX_COMMANDS = [
-  { cmd: '/whisper #ch nick msg', desc: 'IRCX whisper (in-channel PM)' },
-  { cmd: '/prop #ch|nick [key] [val]', desc: 'View/set IRCX properties' },
-  { cmd: '/access #channel', desc: 'View IRCX access list' },
+const ONYX_COMMANDS = [
+  { cmd: '/whisper #ch nick msg', desc: 'In-channel whisper' },
+  { cmd: '/prop #ch|nick [key] [val]', desc: 'View or set channel and nick properties' },
+  { cmd: '/access #channel', desc: 'View channel access list' },
   { cmd: '/chaninfo [#channel]', desc: 'Open channel info panel' },
   { cmd: '/profile nick', desc: 'Open user profile card' },
   { cmd: '/services', desc: 'Open Onyx Server account, channel, and memo services' },
@@ -89,14 +89,14 @@ export default function HelpModal(props: Props) {
         </div>
 
         <div class="border-t border-white/[0.06] pt-4">
-          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">IRCX / Onyx Server Commands</h3>
-          <CommandList items={IRCX_COMMANDS} />
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Onyx Server commands</h3>
+          <CommandList items={ONYX_COMMANDS} />
         </div>
 
         <div class="border-t border-white/[0.06] pt-4">
-          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">Voice / Video (Onyx Server bridge)</h3>
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">Voice / Video (Onyx extras)</h3>
           <p class="text-[10px] text-gray-600 leading-relaxed mb-2">
-            These commands require the Onyx Server bridge — enable it under Settings → Connection.
+            These commands need Onyx extras — enable them under Settings → Connection.
           </p>
           <CommandList items={BRIDGE_COMMANDS} />
         </div>

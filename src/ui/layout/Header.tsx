@@ -8,13 +8,17 @@
    the raw IRC text before injecting its own markup. */
 
 import { createEffect, createMemo, createSignal, on, Show } from 'solid-js';
+import { connectivityHops, showTlsPadlock } from '@/lib/connect/connectivityHops';
 import {
   buffersState,
   activityUnreadCount,
   ConnectionState,
   connectionState,
-  isActiveOnyxServer,
+  sessionKind,
+  showOnyxChrome,
+  enableOnyxExtras,
   lag,
+  onyxExtrasOffered,
   openChannelInfo,
   openModal,
   openActivityPanel,
@@ -25,6 +29,7 @@ import {
   toggleUserList,
   uiState,
 } from '@/state';
+import { bridgeState } from '@/state/bridge';
 import { mediaState, requestRoomJoin, requestStartCall } from '@/state/media';
 import { formatText } from '@/lib/irc-classic/formatter';
 import { BUFFER_KIND_LABEL, bufferKind, isIrcBuffer } from '@/lib/bufferKind';
@@ -65,7 +70,7 @@ export default function Header() {
     const e = entry();
     return e && isChannel() ? Object.keys(e.nicks).length : 0;
   };
-  const onOnyxServer = () => isActiveOnyxServer();
+  const onOnyxServer = () => showOnyxChrome();
   const connected = () => connectionState() === ConnectionState.CONNECTED;
 
   // Live badge — scoped to the buffer the active call belongs to: a room call
@@ -77,7 +82,22 @@ export default function Header() {
     return isPrivate();
   });
 
-  const canCall = () => connected() && mediaState.callState === 'idle' && isIrc() && (isPrivate() || isChannel());
+  const canCall = () =>
+    connected() &&
+    onOnyxServer() &&
+    mediaState.callState === 'idle' &&
+    isIrc() &&
+    (isPrivate() || isChannel());
+  const hops = createMemo(() =>
+    connectivityHops(sessionKind(), {
+      connected: connected(),
+      extrasEnabled: settings.bridge.enabled,
+      extrasStatus: bridgeState.status,
+    }),
+  );
+  const extrasUp = () => bridgeState.status === 'ready';
+  const extrasConnecting = () => bridgeState.status === 'connecting';
+  const showTls = () => showTlsPadlock(sessionKind(), settings.relay.tls);
 
   // Collapse the topic + menus whenever the active buffer changes
   createEffect(on(() => buffersState.activeBuffer, () => {
@@ -114,16 +134,38 @@ export default function Header() {
             </span>
           </Show>
           <Show when={onOnyxServer()}>
-            <span class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-[var(--custom-accent,#818cf8)]/[0.08] text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/15 shrink-0">
-              Onyx Server
+            <span
+              data-testid="onyx-chip"
+              class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-[var(--custom-accent,#818cf8)]/[0.08] text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/15 shrink-0"
+            >
+              {t('header.onyxChip')}
             </span>
+          </Show>
+          <Show when={bridgeState.sessionRestored}>
+            <span
+              data-testid="session-restored"
+              class="hidden md:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-emerald-500/12 text-emerald-300 border border-emerald-500/20 shrink-0"
+            >
+              {t('header.sessionRestored')}
+            </span>
+          </Show>
+          <Show when={onyxExtrasOffered()}>
+            <button
+              type="button"
+              data-testid="enable-onyx-extras"
+              onClick={() => enableOnyxExtras()}
+              class="hidden md:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/25 shrink-0"
+              title={t('header.extrasHint')}
+            >
+              {t('header.enableExtras')}
+            </button>
           </Show>
           <Show when={isChannel() && onOnyxServer()}>
             <button
               type="button"
               onClick={() => openChannelInfo(chanName())}
               class="w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 transition-colors shrink-0"
-              title={`${t('header.channelInfo')} (IRCX PROP + ACCESS)`}
+              title={t('header.channelInfo')}
               aria-label={t('header.channelInfo')}
             >
               <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -175,9 +217,40 @@ export default function Header() {
 
       {/* Right side */}
       <div class="mobile-header-actions flex items-center gap-0.5 sm:gap-2 shrink-0">
+        <Show when={hops().show}>
+          <div class="flex items-center gap-1.5 pr-1" data-testid="connectivity-hops" aria-label={t(hops().hopsLabelKey)}>
+            <Show when={hops().chips.includes('relay')}>
+              <span class="flex items-center gap-1" data-testid="hop-relay" title={t('connectivity.relay')}>
+                <span
+                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-emerald-400' : 'bg-gray-600'}`}
+                  aria-hidden="true"
+                />
+                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.relay')}</span>
+              </span>
+            </Show>
+            <Show when={hops().chips.includes('extras')}>
+              <span class="flex items-center gap-1" data-testid="hop-extras" title={t('connectivity.bridge')}>
+                <span
+                  class={`h-1.5 w-1.5 rounded-full ${extrasUp() ? 'bg-emerald-400' : extrasConnecting() ? 'bg-amber-400' : 'bg-gray-600'}`}
+                  aria-hidden="true"
+                />
+                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.bridge')}</span>
+              </span>
+            </Show>
+            <Show when={hops().chips.includes('session')}>
+              <span class="flex items-center gap-1" data-testid="hop-session" title={t('connectivity.session')}>
+                <span
+                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-emerald-400' : 'bg-gray-600'}`}
+                  aria-hidden="true"
+                />
+                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.session')}</span>
+              </span>
+            </Show>
+          </div>
+        </Show>
         <Show when={connected()}>
           <div class="flex items-center gap-1.5">
-            <Show when={settings.relay.tls}>
+            <Show when={showTls()}>
               <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-500/70" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H3.75A1.75 1.75 0 0 0 2 7.75v5.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0 0 14 13.25v-5.5A1.75 1.75 0 0 0 12.25 6H11V4.5A3.5 3.5 0 0 0 7.5 1h.5zM6 4.5A2 2 0 0 1 8 2.5a2 2 0 0 1 2 2V6H6V4.5z" />
               </svg>

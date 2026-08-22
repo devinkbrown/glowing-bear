@@ -47,6 +47,7 @@ export function initCmd(
 	password: string,
 	compression: boolean,
 	canDecode: boolean = canDecodeRelayCompression(),
+	totp?: string,
 ): string {
 	// WeeChat relay expects comma-separated options for init. This line is built
 	// directly (not via cmd()), so it must strip CR/LF itself: a raw newline in
@@ -61,8 +62,9 @@ export function initCmd(
 	// DecompressionStream) makes the relay send frames the decode path throws on,
 	// dropping the connection right after auth. Fail closed to uncompressed.
 	const effective = compression && canDecode;
-	const opts = [`password=${escaped}`, `compression=${effective ? 'zlib' : 'off'}`].join(',');
-	return `init ${opts}\n`;
+	const opts = [`password=${escaped}`, `compression=${effective ? 'zlib' : 'off'}`];
+	if (totp) opts.push(`totp=${stripNewlines(totp)}`);
+	return `init ${opts.join(',')}\n`;
 }
 
 // ---------------------------------------------------------------------------

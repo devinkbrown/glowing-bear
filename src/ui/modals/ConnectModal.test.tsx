@@ -67,6 +67,33 @@ describe('ConnectModal', () => {
     expect(queryByTestId('connect-decorative-background')).toBeNull();
   });
 
+  it('exposes the typed server picker and keeps TLS documented, not fake-connectable', () => {
+    const { getByTestId, getByRole, getByText } = render(() => <ConnectModal open />);
+    expect(getByTestId('connect-mode-weechat')).toBeInTheDocument();
+    expect(getByTestId('connect-mode-onyx-wss')).toBeInTheDocument();
+    expect(getByTestId('connect-mode-onyx-tls')).toBeEnabled();
+    fireEvent.click(getByTestId('connect-mode-onyx-tls'));
+    expect(getByRole('button', { name: /^Connect$/ })).toBeDisabled();
+    expect(getByText(/Browsers cannot open raw TLS IRC/)).toBeInTheDocument();
+    expect(getByRole('button', { name: /^How do I set this up/ })).toHaveAttribute('aria-expanded', 'false');
+  }, RENDER_TIMEOUT_MS);
+
+  it('shows Onyx WSS account fields and enables Connect without a relay', () => {
+    const { getByTestId, getByLabelText, getByRole } = render(() => <ConnectModal open />);
+    fireEvent.click(getByTestId('connect-mode-onyx-wss'));
+    expect(getByLabelText('Endpoint')).toBeInTheDocument();
+    expect(getByLabelText('Nick')).toBeInTheDocument();
+    expect(getByLabelText('Account')).toBeInTheDocument();
+    const connect = getByRole('button', { name: /^Connect$/ });
+    expect(connect).toBeDisabled();
+    fireEvent.input(getByLabelText('Nick'), { target: { value: 'kain' } });
+    fireEvent.input(getByLabelText('Account'), { target: { value: 'kain' } });
+    fireEvent.input(getByLabelText('Password'), { target: { value: 'secret' } });
+    expect(connect).toBeEnabled();
+    fireEvent.click(connect);
+    expect(state.connect).toHaveBeenCalledTimes(1);
+  }, RENDER_TIMEOUT_MS);
+
   it('keeps Connect disabled until required fields are filled', () => {
     const { getByLabelText, getByRole } = render(() => <ConnectModal open />);
     const connect = getByRole('button', { name: /^Connect$/ });
@@ -78,6 +105,22 @@ describe('ConnectModal', () => {
 
     fireEvent.input(getByLabelText('Password'), { target: { value: 'relay-secret' } });
     expect(connect).toBeEnabled();
+  }, RENDER_TIMEOUT_MS);
+
+  it('keeps the theme picker and setup drawer off the first-run card', () => {
+    const { getByRole, queryByLabelText, queryByTestId } = render(() => <ConnectModal open />);
+    expect(getByRole('radiogroup', { name: 'Server type' })).toBeInTheDocument();
+    expect(queryByLabelText('Open settings')).toBeNull();
+    expect(queryByTestId('setup-drawer')).toBeNull();
+  }, RENDER_TIMEOUT_MS);
+
+  it('shows Onyx TOTP and account remember copy, not WeeChat TOTP, on first-party Onyx', () => {
+    const { getByTestId, getByText, queryByText } = render(() => <ConnectModal open />);
+    fireEvent.click(getByTestId('connect-mode-onyx-wss'));
+    expect(getByText('Onyx TOTP (IDENTIFY)')).toBeInTheDocument();
+    expect(getByText('Remember account password on this device')).toBeInTheDocument();
+    expect(queryByText('WeeChat TOTP')).toBeNull();
+    expect(queryByText('Remember extras password on this device')).toBeNull();
   }, RENDER_TIMEOUT_MS);
 
   it('dispatches the connect intent when the ready form is submitted', () => {

@@ -22,6 +22,7 @@ class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
 
   url: string;
+  protocols: string[] = [];
   binaryType = 'blob';
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
@@ -34,8 +35,9 @@ class FakeWebSocket {
   onerror: ((ev: Event) => void) | null = null;
   onclose: ((ev: CloseEvent) => void) | null = null;
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string | string[]) {
     this.url = url;
+    this.protocols = typeof protocols === 'string' ? [protocols] : [...(protocols ?? [])];
     FakeWebSocket.instances.push(this);
   }
 
@@ -237,6 +239,14 @@ describe('frame handling', () => {
 
 // ── CAP / SASL selection ───────────────────────────────────────────────────────
 
+describe('WebSocket subprotocols', () => {
+  it('offers onyx.irc-media.v1 then text.ircv3.net', () => {
+    const c = makeClient();
+    c.connect();
+    expect(lastSocket().protocols).toEqual(['onyx.irc-media.v1', 'text.ircv3.net']);
+  });
+});
+
 describe('CAP negotiation', () => {
   it('waits for the final multiline CAP LS before requesting accumulated caps', () => {
     // Arrange
@@ -273,6 +283,46 @@ describe('CAP negotiation', () => {
     expect(lastSocket().sent.some((l) => /^CAP REQ .*sasl/.test(l))).toBe(true);
     lastSocket().message(':s CAP * ACK :sasl');
     expect(lastSocket().sent).toContain('AUTHENTICATE SCRAM-SHA-256\r\n');
+  });
+
+  it('prefers SCRAM-SHA-512 when advertised', () => {
+    const c = makeClient();
+    c.connect();
+    lastSocket().open();
+    lastSocket().message(':s CAP * LS :sasl=SCRAM-SHA-512,SCRAM-SHA-256,PLAIN');
+    lastSocket().message(':s CAP * ACK :sasl');
+    expect(lastSocket().sent).toContain('AUTHENTICATE SCRAM-SHA-512\r\n');
+  });
+
+  it('sends IDENTIFY with Onyx TOTP after welcome when PLAIN/SCRAM are skipped', () => {
+    const c = makeClient({ identifyTotp: '123456', account: 'kain' });
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+    ws.message(':s CAP * LS :sasl=PLAIN,SCRAM-SHA-256 message-tags');
+    expect(ws.sent.some((l) => /^CAP REQ .*sasl/.test(l))).toBe(false);
+    ws.message(':s CAP * ACK :message-tags');
+    ws.sent.length = 0;
+    ws.message(':s 001 kain :Welcome');
+    expect(ws.sent).toContain('IDENTIFY kain hunter2 123456\r\n');
+    expect(ws.sent).toContain('IRCX\r\n');
+  });
+
+  it('REQs only advertised tokens from a live-style CAP LS fixture', () => {
+    const c = makeClient();
+    c.connect();
+    const ws = lastSocket();
+    ws.open();
+    ws.sent.length = 0;
+    ws.message(':s CAP * LS :message-tags server-time echo-message sasl=PLAIN,SCRAM-SHA-512 labeled-response sts tls bot draft/file-upload onyx/session-sync onyx/e2ee');
+    const req = ws.sent.find((l) => l.startsWith('CAP REQ ')) ?? '';
+    expect(req).toContain('labeled-response');
+    expect(req).toContain('onyx/session-sync');
+    expect(req).toContain('sasl');
+    expect(req).not.toContain('sts');
+    expect(req).not.toContain('tls');
+    expect(req).not.toContain('bot');
+    expect(req).not.toContain('draft/file-upload');
   });
 
   it('does not request sasl when no credentials are configured', () => {

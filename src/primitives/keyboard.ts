@@ -21,7 +21,7 @@ import {
   clearLines,
   closeModal,
   getSorted,
-  isActiveOnyxServer,
+  showOnyxChrome,
   isOper,
   openActivityPanel,
   openChannelInfo,
@@ -142,7 +142,7 @@ function handleCtrlShortcuts(e: KeyboardEvent): boolean {
   // Ctrl+I: channel info (IRCX PROP + ACCESS) — Onyx Server nodes only
   if (e.key === 'i' || e.key === 'I') {
     if (inTextInput(e)) return true;
-    if (!isActiveOnyxServer()) return true;
+    if (!showOnyxChrome()) return true;
     e.preventDefault();
     const ptr = buffersState.activeBuffer;
     const entry = ptr ? buffersState.buffers[ptr] : undefined;

@@ -230,18 +230,29 @@ export function normalizeCase(value: string, casemapping: string): string {
     .replace(/\^/g, '~');
 }
 
-export type SaslMechanism = 'SESSION-TOKEN' | 'SCRAM-SHA-256' | 'PLAIN' | 'EXTERNAL';
+export type SaslMechanism = 'SESSION-TOKEN' | 'SCRAM-SHA-512' | 'SCRAM-SHA-256' | 'PLAIN' | 'EXTERNAL';
 
 export function selectSaslMechanism(
   offered: string[],
   opts: { hasPassword: boolean; hasClientCert?: boolean; hasSessionToken?: boolean },
 ): SaslMechanism | null {
   const mechs = new Set(offered.map(m => m.toUpperCase()));
+  // Never ANONYMOUS. EXTERNAL is Tauri/cert later — only when a client cert is present.
   if (mechs.has('SESSION-TOKEN') && opts.hasSessionToken) return 'SESSION-TOKEN';
+  if (mechs.has('SCRAM-SHA-512') && opts.hasPassword) return 'SCRAM-SHA-512';
   if (mechs.has('SCRAM-SHA-256') && opts.hasPassword) return 'SCRAM-SHA-256';
   if (mechs.has('PLAIN') && opts.hasPassword) return 'PLAIN';
   if (mechs.has('EXTERNAL') && opts.hasClientCert) return 'EXTERNAL';
   return null;
+}
+
+/** True when SESSION resume failed but the stored token must stay (Helix/USR2). */
+export function isResumeCredentialPreserved(msg: IRCMessage): boolean {
+  const reply = parseStandardReply(msg);
+  if (!reply || reply.command !== 'SESSION') return false;
+  return reply.code === 'RESUME_CREDENTIAL_PRESERVED'
+    || reply.code === 'ORIGIN_UNREACHABLE'
+    || reply.code === 'TEMPORARILY_UNAVAILABLE';
 }
 
 export interface SaslSessionTokenNotice {

@@ -6,7 +6,21 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import type { WeeChatLine } from '@/types';
-import { addLine, activityState, clearBuffers, clearIrcx, markBot, resetActivity, resetSettings, updateSettings, upsertBuffer } from '@/state';
+import {
+  addLine,
+  activityState,
+  clearBuffers,
+  clearIrcx,
+  markBot,
+  markOnyxServer,
+  resetActivity,
+  resetSettings,
+  setActiveBuffer,
+  setSessionKind,
+  updateSettings,
+  upsertBuffer,
+} from '@/state';
+import type { WeeChatBuffer } from '@/types';
 import { decryptedFor } from '@/state/bridge';
 import { threadsState, recordLinePreview, resetThreads, pendingReplyFor } from '@/state/threads';
 import { nickColor } from '@/lib/nickcolor';
@@ -368,6 +382,35 @@ describe('MessageLine', () => {
     const quote = container.querySelector('.reply-quote') as HTMLElement;
     expect(quote.querySelector('img')).toBeNull();
     expect(quote.textContent).toContain('<img src=x onerror=alert(1)>');
+  });
+
+  it('hides react affordances on generic WeeChat buffers', () => {
+    setSessionKind('weechat-generic');
+    const { container, queryByLabelText } = renderLine(makeLine({ msgid: 'm-react-a' }));
+    fireEvent.contextMenu(container.querySelector('.msg-row')!);
+    expect(queryByLabelText(/React with/)).toBeNull();
+  });
+
+  it('offers react on Onyx chrome', () => {
+    setSessionKind('weechat-onyx');
+    markOnyxServer('eshmaki');
+    upsertBuffer({
+      id: '0xb',
+      number: 1,
+      name: 'irc.eshmaki.#alpha',
+      fullName: 'irc.eshmaki.#alpha',
+      shortName: '#alpha',
+      title: '',
+      type: 0,
+      nicksCount: 0,
+      localVars: { type: 'channel', server: 'eshmaki', channel: '#alpha' },
+      notify: 0,
+      hidden: false,
+    } satisfies WeeChatBuffer);
+    setActiveBuffer('0xb');
+    const { container, getAllByLabelText } = renderLine(makeLine({ msgid: 'm-react-b' }));
+    fireEvent.contextMenu(container.querySelector('.msg-row')!);
+    expect(getAllByLabelText(/React with/).length).toBeGreaterThan(0);
   });
 
   it('captures a sanitized preview into the store when replying', () => {

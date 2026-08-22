@@ -12,6 +12,7 @@ export type {
   WeeChatNick,
   HotlistEntry,
   RelaySettings,
+  RelayDialSettings,
 } from '@/lib/weechat/model';
 export { ConnectionState } from '@/lib/weechat/model';
 
@@ -167,6 +168,7 @@ export const DEFAULT_RELAY: RelaySettings = {
   tls: true,
   password: '',
   compression: true,
+  path: 'weechat',
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {

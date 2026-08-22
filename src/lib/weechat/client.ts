@@ -1,6 +1,7 @@
 import {
 	ConnectionState,
 	type HdataResult,
+	type RelayDialSettings,
 	type RelaySettings,
 	type WeeChatBuffer,
 	type WeeChatHotlist,
@@ -8,6 +9,8 @@ import {
 	type WeeChatNick,
 } from './types';
 import { parseIrcv3Tags, replyParentFromTags } from '@/lib/irc-classic/tags';
+import { classifyRelayClose, type RelayFailureCode } from './relayErrors';
+import { buildRelayWebSocketUrl, mixedContentBlocked } from './relayUrl';
 import { stripColors } from './strip-colors';
 import { canDecodeRelayCompression, WeeRelayParser } from './parser';
 import {
@@ -43,7 +46,7 @@ export interface HotlistUpdatedEvent { hotlist: WeeChatHotlist[] }
 export interface BufferSwitchedEvent { id: string }
 export interface AuthenticatedEvent { version: string }
 export interface StateChangedEvent { state: ConnectionState }
-export interface RelayErrorEvent { message: string }
+export interface RelayErrorEvent { message: string; code?: RelayFailureCode }
 
 export type RelayPhase =
 	| 'idle'
@@ -349,14 +352,19 @@ export class WeeRelayClient extends EventTarget {
 
 	state: ConnectionState = ConnectionState.DISCONNECTED;
 	settings: RelaySettings;
+	/** Session-only TOTP; never persisted. Sent as `totp=` not concatenated. */
+	private totp = '';
+	private totpRequired = false;
 
 	// Local caches (convenience — consumers may prefer their own store)
 	buffers: Map<string, WeeChatBuffer> = new Map();
 	nicks: Map<string, WeeChatNick[]> = new Map(); // keyed by buffer pointer
 
-	constructor(settings: RelaySettings) {
+	constructor(settings: RelayDialSettings) {
 		super();
-		this.settings = { ...settings };
+		const { totp, ...relay } = settings;
+		this.settings = { ...relay, path: relay.path || 'weechat' };
+		this.totp = totp?.trim() ?? '';
 		this.diagnosticState = {
 			phase: 'idle',
 			transport: settings.tls ? 'wss' : 'ws',
@@ -391,6 +399,7 @@ export class WeeRelayClient extends EventTarget {
 		this.authStarted = false;
 		this.handshakeAttempted = false;
 		this.authFailed = false;
+		this.totpRequired = false;
 		this.authMode = 'pending';
 		this.connectEpoch += 1;
 		this.cancelHandshakeTimer();
@@ -407,14 +416,24 @@ export class WeeRelayClient extends EventTarget {
 		});
 		this.setState(ConnectionState.CONNECTING);
 
-		const scheme = this.settings.tls ? 'wss' : 'ws';
-		const url = `${scheme}://${this.settings.host}:${this.settings.port}/weechat`;
+		if (mixedContentBlocked(this.settings.tls, this.settings.host)) {
+			this.authFailed = true;
+			this.emitError(
+				'This page is HTTPS, so the browser blocks an unencrypted WebSocket to a remote host. Enable TLS, or connect to loopback.',
+				'mixed_content',
+			);
+			this.updateDiagnostics({ phase: 'failed', reconnectReason: 'none', reconnectDelayMs: 0 });
+			this.setState(ConnectionState.ERROR);
+			return;
+		}
+
+		const url = buildRelayWebSocketUrl(this.settings);
 
 		let ws: WebSocket;
 		try {
 			ws = new WebSocket(url);
 		} catch (err) {
-			this.emitError(`WebSocket creation failed: ${String(err)}`);
+			this.emitError(`WebSocket creation failed: ${String(err)}`, 'network');
 			this.setState(ConnectionState.ERROR);
 			this.scheduleReconnect('network');
 			return;
@@ -483,7 +502,10 @@ export class WeeRelayClient extends EventTarget {
 				// connect() resets authFailed and retries.
 				this.cancelReconnect();
 					this.emitError(
-						'Authentication failed — the relay rejected the password (check your relay password)'
+						this.totpRequired
+							? 'This relay requires a TOTP code. Enter the 6-digit code and connect again.'
+							: 'Authentication failed — the relay rejected the password (check your relay password)',
+						this.totpRequired ? 'totp_required' : 'auth_rejected',
 					);
 					this.updateDiagnostics({
 						phase: 'failed',
@@ -505,6 +527,15 @@ export class WeeRelayClient extends EventTarget {
 				// If we've already authenticated once, TLS/network errors are likely
 				// background-tab disconnects — don't show the self-signed cert advice.
 				let msg: string | null = null;
+				const code = classifyRelayClose({
+					code: ev.code,
+					reason: ev.reason,
+					hadError,
+					tls: this.settings.tls,
+					authenticated: this._wasAuthenticated,
+					authFailed: this.authFailed,
+					totpRequired: this.totpRequired,
+				});
 				if (hadError && this.settings.tls && !this._wasAuthenticated) {
 					msg = `TLS connection to ${this.settings.host}:${this.settings.port} failed — ` +
 						`if using a self-signed certificate, open https://${this.settings.host}:${this.settings.port} ` +
@@ -519,7 +550,7 @@ export class WeeRelayClient extends EventTarget {
 				}
 					// Only emit error if there's a meaningful message.
 					// Reconnects after working sessions are silent.
-					if (msg) this.emitError(msg);
+					if (msg) this.emitError(msg, code);
 					const reconnectReason: RelayReconnectReason = hadError
 						? 'network'
 						: this.state === ConnectionState.AUTHENTICATING
@@ -753,13 +784,23 @@ export class WeeRelayClient extends EventTarget {
 		// Claim auth synchronously before the async hash so the (already cancelled)
 		// timer path can never also fire.
 		this.authStarted = true;
+		if (result.totp && !this.totp) {
+			this.totpRequired = true;
+			this.authFailed = true;
+			this.emitError(
+				'This relay requires a TOTP code. Enter the 6-digit code and connect again.',
+				'totp_required',
+			);
+			this.ws?.close(4003, 'TOTP required');
+			return;
+		}
 		void this.finishHashedAuth(this.connectEpoch, result);
 	}
 
 	private async finishHashedAuth(epoch: number, result: HandshakeResult): Promise<void> {
 		let initLine: string;
 		try {
-			initLine = await initHashCmd(this.settings.password, result);
+			initLine = await initHashCmd(this.settings.password, result, this.totp || undefined);
 		} catch (err) {
 			// Hashing failed (e.g. Web Crypto unavailable). We already claimed auth,
 			// so force the legacy send directly rather than routing through the guard.
@@ -772,7 +813,7 @@ export class WeeRelayClient extends EventTarget {
 				authMode: 'legacy',
 				hashAlgorithm: 'none',
 			});
-			this.send(initCmd(this.settings.password, this.settings.compression, this.canDecodeCompression));
+			this.send(initCmd(this.settings.password, this.settings.compression, this.canDecodeCompression, this.totp || undefined));
 			this.send(infoCmd(ID_VERSION, 'version'));
 			return;
 		}
@@ -803,7 +844,7 @@ export class WeeRelayClient extends EventTarget {
 			totp: false,
 			handshake: 'unavailable',
 		});
-		this.send(initCmd(this.settings.password, this.settings.compression, this.canDecodeCompression));
+		this.send(initCmd(this.settings.password, this.settings.compression, this.canDecodeCompression, this.totp || undefined));
 		this.send(infoCmd(ID_VERSION, 'version'));
 	}
 
@@ -1251,8 +1292,8 @@ export class WeeRelayClient extends EventTarget {
 		this.dispatch('diagnosticsChanged', this.diagnostics() satisfies RelayDiagnosticsChangedEvent);
 	}
 
-	private emitError(message: string): void {
-		this.dispatch('error', { message } satisfies RelayErrorEvent);
+	private emitError(message: string, code?: RelayFailureCode): void {
+		this.dispatch('error', { message, code } satisfies RelayErrorEvent);
 	}
 
 	private dispatch<T>(name: string, detail: T): void {

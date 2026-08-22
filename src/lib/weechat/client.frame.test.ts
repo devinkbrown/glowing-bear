@@ -215,6 +215,7 @@ const SETTINGS: RelaySettings = {
 	tls: false,
 	password: 'hunter2',
 	compression: false,
+	path: 'weechat',
 };
 
 /** Frame parsing is async (microtask hop through parser.parse); flush it. */

@@ -16,9 +16,12 @@ import {
   connect,
   ConnectionState,
   disconnect,
+  markOnyxServer,
   resetSettings,
+  setSessionKind,
   setActiveBuffer,
   uiState,
+  updateBridge,
   upsertBuffer,
 } from '@/state';
 import { requestRoomJoin, requestStartCall } from '@/state/media';
@@ -166,6 +169,7 @@ afterAll(() => {
 beforeEach(() => {
   globalThis.localStorage?.clear();
   resetSettings();
+  setSessionKind('weechat-generic');
   clearBuffers();
   clearIrcx();
 });
@@ -203,6 +207,8 @@ describe('Header', () => {
 
   it('shows room join buttons for a channel and routes clicks to joinRoom', () => {
     goOnline(); // connect() tears down state first, so arrange buffers after
+    setSessionKind('weechat-onyx');
+    markOnyxServer('eshmaki');
     upsertBuffer(CHANNEL);
     setActiveBuffer('0xc');
 
@@ -219,6 +225,8 @@ describe('Header', () => {
 
   it('shows 1:1 call buttons for a query buffer and routes clicks to startCall', () => {
     goOnline(); // connect() tears down state first, so arrange buffers after
+    setSessionKind('weechat-onyx');
+    markOnyxServer('eshmaki');
     upsertBuffer(QUERY);
     setActiveBuffer('0xq');
 
@@ -231,6 +239,21 @@ describe('Header', () => {
     fireEvent.click(getByLabelText('Video call'));
     expect(startCallMock).toHaveBeenCalledWith('trev', true);
     expect(joinRoomMock).not.toHaveBeenCalled();
+  });
+
+  it('hides call buttons on a generic IRC buffer even when connected', () => {
+    goOnline();
+    upsertBuffer(makeBuffer('0xl', {
+      name: 'irc.libera.#linux',
+      fullName: 'irc.libera.#linux',
+      shortName: '#linux',
+      localVars: { type: 'channel', server: 'libera', channel: '#linux' },
+    }));
+    setActiveBuffer('0xl');
+
+    const { queryByLabelText } = render(() => <Header />);
+    expect(queryByLabelText('Join voice')).toBeNull();
+    expect(queryByLabelText('Join video')).toBeNull();
   });
 
   it('hides the call buttons while disconnected', () => {
@@ -280,6 +303,44 @@ describe('Header', () => {
     // Content past the cap is truncated before it can be rendered or parsed.
     expect(container.innerHTML).not.toContain(sentinel);
     expect(container.textContent).toContain('…');
+  });
+
+  it('shows a single relay hop on generic WeeChat (kind A)', () => {
+    goOnline();
+    upsertBuffer(CHANNEL);
+    setActiveBuffer('0xc');
+
+    const { getByTestId, queryByTestId } = render(() => <Header />);
+    expect(getByTestId('connectivity-hops')).toBeInTheDocument();
+    expect(getByTestId('hop-relay')).toBeInTheDocument();
+    expect(queryByTestId('hop-extras')).toBeNull();
+    expect(queryByTestId('hop-session')).toBeNull();
+  });
+
+  it('shows relay and extras hops on WeeChat+Onyx (kind B)', () => {
+    goOnline();
+    setSessionKind('weechat-onyx');
+    updateBridge({ enabled: true });
+    markOnyxServer('eshmaki');
+    upsertBuffer(CHANNEL);
+    setActiveBuffer('0xc');
+
+    const { getByTestId, queryByTestId } = render(() => <Header />);
+    expect(getByTestId('hop-relay')).toBeInTheDocument();
+    expect(getByTestId('hop-extras')).toBeInTheDocument();
+    expect(queryByTestId('hop-session')).toBeNull();
+  });
+
+  it('shows a single Onyx session hop on first-party WSS (kind C)', () => {
+    goOnline();
+    setSessionKind('onyx-direct-wss');
+    upsertBuffer(CHANNEL);
+    setActiveBuffer('0xc');
+
+    const { getByTestId, queryByTestId } = render(() => <Header />);
+    expect(getByTestId('hop-session')).toBeInTheDocument();
+    expect(queryByTestId('hop-relay')).toBeNull();
+    expect(queryByTestId('hop-extras')).toBeNull();
   });
 
   it('opens the channel browser from the top bar while connected', () => {

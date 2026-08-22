@@ -208,7 +208,7 @@ export default function Sidebar(props: SidebarProps) {
       {/* Connection + activity deck */}
       <div class="mx-3 mb-3 shrink-0 space-y-2">
         <div
-          class="darkbear-connection-pill flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-semibold"
+          class="darkbear-connection-pill flex items-center gap-2 px-3 py-2 min-h-[44px] sm:min-h-0 rounded-xl text-[11px] font-semibold"
           classList={{
             'bg-[var(--role-online,#34d399)]/[0.08] text-[var(--role-online,#34d399)] border-[var(--role-online,#34d399)]/25': isConnected(),
             'bg-amber-500/[0.08] text-amber-300 border-amber-400/15': isConnecting() || isReconnecting(),
@@ -574,7 +574,7 @@ function NotifyButton(props: { mode: NotifyMode; temporaryMutedUntil: number; on
       data-notify-mode={props.mode}
       data-temporary-mute={temporarilyMuted() ? 'true' : undefined}
       onClick={(e) => props.onCycle(e)}
-      class="relative z-[2] shrink-0 flex items-center justify-center w-6 h-6 -my-0.5 rounded-md transition-[opacity,color,transform] duration-150 ease-out hover:bg-white/[0.06] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--role-primary,#818cf8)]/60"
+      class="relative z-[2] shrink-0 flex items-center justify-center w-11 h-11 sm:w-6 sm:h-6 -my-1 sm:-my-0.5 rounded-md transition-[opacity,color,transform] duration-150 ease-out hover:bg-white/[0.06] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--role-primary,#818cf8)]/60"
       classList={{
         // Default tier: unobtrusive until the row is hovered or the control focused.
         'opacity-40 text-gray-600 group-hover:opacity-90 group-hover:text-gray-400 focus-visible:opacity-100':

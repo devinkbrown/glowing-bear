@@ -13,6 +13,17 @@ commands (`REGISTER`, `CHANNEL`, `TEGAMI`, …), never ChanServ/NickServ fake us
 > `docs/architecture/`. This file consolidates it for DarkBear. When something here
 > conflicts with a live server, trust the server and the Onyx Server docs.
 
+### Session kinds (DarkBear)
+
+| Kind | Product mode | Chat socket | Notes |
+|---|---|---|---|
+| A `weechat-generic` | WeeChat | Binary relay | Hide Onyx chrome. Never auto-open extras. |
+| B `weechat-onyx` | WeeChat + optional extras | Relay + second WSS | Detect via `004 onyx-`, `NETWORK=Onyx`, known hosts; `NETWORK=IRCXNet` + `onyx-` is still Onyx. IRCXNet alone is not. |
+| C `onyx-direct-wss` | Onyx | **One** first-party WSS | Chat+media. No WeeChat client, no second WSS, no relay password/WeeChat-TOTP. Buffers `onyx:<server>:<target>`. History = CHATHISTORY + msgid dedup. |
+| D `onyx-tls-irc` | TLS (later) | Implicit TLS TCP | Tauri later. Do not block C. |
+
+Not connect types: mesh `:6900`, WebTransport-primary, soju multi-net, bridge-only ghost, WeeChat `api`.
+
 ### Naming (brand vs wire)
 
 | Layer | Name |
@@ -36,12 +47,14 @@ commands (`REGISTER`, `CHANNEL`, `TEGAMI`, …), never ChanServ/NickServ fake us
 Live network is **Onyx**, two nodes: `eshmaki.me` and `ircx.us`. Listeners are
 **dual-stack IPv6** (`[listen] host = "::"`).
 
-| Port | Transport | Use |
+| Port | Transport | DarkBear connect type |
 |---|---|---|
-| `6667` | Plaintext TCP | Plain IRC (dev/local only) |
-| `6697` | Implicit TLS | TLS IRC (TLS 1.3 + hardened 1.2 profile) |
-| `8080` | **Secure WebSocket (wss)** | **Browser clients — DarkBear uses this** |
-| `6900` | Mesh S2S (Mooring PQ) | Server↔server only — **not for clients** |
+| `[listen].irc` (often `6667`) | Plaintext TCP | Dev/LAN only. Not offered from the HTTPS web app. |
+| `[tls]` default `6697` | Implicit TLS | Desktop-only if a TLS TCP client exists (current Tauri shell does not). Never STARTTLS. |
+| `[listen].ws` (typically `8080`) | **Secure WebSocket (wss)** | **First-class Onyx WSS.** Production `wss://`; `ws_plain` is loopback/dev. |
+| `[listen].s2s` | Mesh S2S (Mooring PQ) | Not a client connect type |
+| `[listen].webtransport` | WebTransport/HTTP3 | Not a client connect type |
+| webhook / native UDP media | HTTP / UDP | Not a client connect type |
 
 TLS is **1.3 plus a hardened 1.2 profile** (AEAD/ECDHE-only; no RSA key exchange,
 CBC, compression, or renegotiation). There is no plaintext→TLS upgrade; pick a TLS
@@ -60,7 +73,11 @@ CRLF** (per the IRCv3 WebSocket sub-protocol). A frame is exactly
   segment, **without carrying a remainder across frames**. The browser reassembles
   continuation frames, so each `onmessage` is one complete logical message (it may
   batch several CRLF-separated lines).
-- Sub-protocol: send `text` frames; UTF-8 only (`UTF8ONLY` is advertised).
+- First-party clients MUST offer both WebSocket subprotocols:
+  `onyx.irc-media.v1` then `text.ircv3.net`, and set `binaryType='arraybuffer'`.
+  Legacy no-subprotocol sockets still work on the server. One CR/LF-free IRC line
+  per inbound text frame (do not carry a remainder). Outbound `formatIRCLine` CRLF
+  is fine. UTF-8 only (`UTF8ONLY` is advertised).
 
 ---
 
@@ -204,7 +221,9 @@ DarkBear should reconnect instantly into its live session instead of a JOIN stor
   `SESSION TOKEN` (reveals this session's local reclaim token, plus an optional
   mesh `MTOKEN` for cross-node reclaim), `SESSION RESUME <token>` (resume a detached
   session). Replies are `NOTE SESSION LIST|TOKEN|MTOKEN`. Failures
-  `FAIL SESSION INVALID_TOKEN|NO_SESSION`.
+  `FAIL SESSION INVALID_TOKEN|NO_SESSION`. `WARN SESSION RESUME_CREDENTIAL_PRESERVED`
+  / `ORIGIN_UNREACHABLE` / `TEMPORARILY_UNAVAILABLE` mean the stored token is still
+  valid — do **not** overwrite it.
 - **`SESSION-TOKEN` SASL mech**: authenticate the account without replaying its
   password by presenting the bounded `sst_...` credential Onyx Server emits as
   `NOTICE ... :SESSIONTOKEN <account> <token> expires=<unix>` after a secure
@@ -232,7 +251,7 @@ DarkBear should reconnect instantly into its live session instead of a JOIN stor
 |---|---|
 | `REGISTER <account> <email\|*> <password>` | Create account, log in now; optional `VERIFY <token>` follows. Replies `REGISTER SUCCESS`. `FAIL REGISTER ACCOUNT_EXISTS\|BAD_ACCOUNT_NAME\|INVALID_PASSWORD\|…` |
 | `VERIFY <token>` | Confirm email verification token |
-| `IDENTIFY <account> <password>` | Log into existing account |
+| `IDENTIFY <account> <password> [<2fa-code>]` | Log into existing account. After TOTP enroll, PLAIN/SCRAM SASL are refused — send the 6-digit code here. Onyx TOTP is **not** password-append (WeeChat `totp=` is a different hop). |
 | `LOGOUT` | Drop login (revokes account-derived `+o`) |
 | `DROP <account> <password>` | Delete account |
 | `ACCOUNTINFO [account]` | `account=<name> flags=<n>` |
@@ -248,6 +267,7 @@ DarkBear should reconnect instantly into its live session instead of a JOIN stor
 | `TEGAMI [LIST\|CLEAR\|SEND <account> :msg]` (alias `MEMO`) | Offline account messages (手紙); delivered + cleared on login |
 | `VHOST [USE\|OFF\|CLAIM\|REQUEST\|LIST\|…]` | Visible host personas; applying broadcasts native `CHGHOST` to capable peers |
 | `CERTADD` / `CERTLIST` / `CERTDEL <fp>` | Bind/list/remove TLS client-cert fingerprints for SASL EXTERNAL |
+| `WEBAUTHN` | **Command**, not a SASL mechanism. Only when `[webauthn]` `rp_id` / origins match the page. May follow TOTP. Do not block first-party WSS on it. |
 
 Service failures use IRCv3 `FAIL <CMD> <CODE>` (e.g. `ACCOUNT_REQUIRED`,
 `TEMPORARILY_UNAVAILABLE`, `NEED_MORE_PARAMS`). Many service replies are server
@@ -506,8 +526,9 @@ Onyx Server is a CRDT **mesh** (not a TS6 tree). What a client sees:
       multi-prefix, draft/chathistory, draft/event-playback, draft/typing,
       draft/react, draft/reply, draft/message-redaction, onyx/session-sync,
       onyx/bouncer, sasl).
-- [x] SASL during registration; support PLAIN + SCRAM-SHA-256 (+ SESSION-TOKEN for
-      reconnect, EXTERNAL if using client certs).
+- [x] SASL during registration; support SESSION-TOKEN, SCRAM-SHA-512, SCRAM-SHA-256,
+      PLAIN (never ANONYMOUS; EXTERNAL is Tauri/cert later). After TOTP enroll use
+      `IDENTIFY <acct> <pass> <6-digit>`. WEBAUTHN is a command, not a SASL mech.
 - [x] Gate the `001` autojoin storm behind `!session-sync`; let the server drive JOINs.
 - [x] On reconnect: capture bounded SASL `SESSIONTOKEN` plus logical-session
       `SESSION TOKEN`/`MTOKEN`, authenticate then resume, and dedup

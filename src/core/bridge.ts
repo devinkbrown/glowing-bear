@@ -42,7 +42,10 @@ import {
   setReadMarker,
   setTyping,
 } from '@/state/buffers';
-import { setMediaSink, setRelayObserver } from '@/state/connection';
+import { sessionKind, setMediaSink, setRelayObserver } from '@/state/connection';
+import { isDirectOnyxSession } from '@/lib/connect/sessionKind';
+import { isResumeCredentialPreserved } from '@/lib/irc/parser';
+import { getActiveIrcSession, setActiveIrcSession } from '@/state/ircSession';
 import { ircxState } from '@/state/ircx';
 import { parseReadMarkerTimestamp, recordReadMarker } from '@/state/threads';
 import { settings } from '@/state/settings';
@@ -78,14 +81,23 @@ const BACKOFF_MAX_MS = 30_000;
 const DM_KEY_METADATA = 'ocean.dm-key';
 const KEY_REQUEST_THROTTLE_MS = 30_000;
 const BRIDGE_DISABLED_MSG =
-  'voice/video requires the onyx-server bridge (enable in Settings → Bridge)';
+  'voice/video needs Onyx extras (enable in Settings → Connection)';
 
 // ---------------------------------------------------------------------------
 // Pure helpers (exported for unit tests)
 // ---------------------------------------------------------------------------
 
-/** Activation predicate: enabled AND (Onyx Server seen on the relay OR pinned). */
-export function bridgeShouldRun(enabled: boolean, onyxServerDetected: boolean, pinnedUrl: string): boolean {
+/**
+ * Kind B extras hop only. Kind C already owns the first-party socket;
+ * kind A must never auto-open a second WSS.
+ */
+export function bridgeShouldRun(
+  enabled: boolean,
+  onyxServerDetected: boolean,
+  pinnedUrl: string,
+  kind?: string,
+): boolean {
+  if (kind === 'onyx-direct-wss' || kind === 'weechat-generic' || kind === 'onyx-tls-irc') return false;
   return enabled && (onyxServerDetected || pinnedUrl.trim().length > 0);
 }
 
@@ -387,6 +399,7 @@ function connectTo(url: string): void {
   });
   c.extraMessageHandlers.add(onBridgeMessage);
   client = c;
+  setActiveIrcSession(c);
   _setBridgeState({ status: 'connecting', nick });
   // The media engine registers its own EVENT MEDIA + binary
   // handlers on this client — it consumes the media planes itself.
@@ -433,6 +446,7 @@ function teardownClient(): void {
   _preferenceTransportUnavailable();
   if (client) {
     client.extraMessageHandlers.delete(onBridgeMessage);
+    if (getActiveIrcSession() === client) setActiveIrcSession(null);
     _attachBridgeClient(null);
     client.destroy();
     client = null;
@@ -450,7 +464,7 @@ function stopBridge(): void {
   pendingActions.length = 0;
   teardownClient();
   _setBridgeCryptoScope(null);
-  _setBridgeState({ status: 'off', error: null, e2eeReady: false });
+  _setBridgeState({ status: 'off', error: null, e2eeReady: false, sessionRestored: false });
 }
 
 function scheduleReconnect(): void {
@@ -490,7 +504,12 @@ function onWelcome(welcome: IRCMessage): void {
   backoffMs = BACKOFF_MIN_MS;
   const trustAccount = settings.bridge.account.trim() || c.currentNick;
   _setBridgeCryptoScope(`${currentUrl}\n${trustAccount.toLowerCase()}`);
-  _setBridgeState({ status: 'ready', error: null, nick: c.currentNick });
+  _setBridgeState({
+    status: 'ready',
+    error: null,
+    nick: c.currentNick,
+    sessionRestored: c.sessionSyncActive,
+  });
   _setMediaAvailable(true);
   _setMediaTransportConnected(true);
 
@@ -709,10 +728,15 @@ function onBridgeMessage(msg: IRCMessage): void {
     case '766':
       handleMetadataKV(msg.params[1], msg.params[2], '');
       return;
+    case 'WARN':
+    case 'FAIL':
+      if (isResumeCredentialPreserved(msg)) return;
+      return;
     case 'NOTE': {
       // SESSION reclaim tokens are bearer credentials. Accept them only from
       // the exact server prefix bound by this socket's authenticated 001 and
       // only on WSS; a user-shaped or unrelated NOTE must never reach storage.
+      if (isResumeCredentialPreserved(msg)) return;
       if (
         !welcomed || !isSecureBridgeTransport(currentUrl) ||
         authenticatedServerPrefix === null || msg.prefix !== authenticatedServerPrefix
@@ -916,10 +940,11 @@ export function initBridge(): void {
       // Credential edits retrigger a token-expiry recovery after teardown.
       void settings.bridge.account;
       void settings.bridge.password;
-      const active = bridgeShouldRun(
+      const active = !isDirectOnyxSession(sessionKind()) && bridgeShouldRun(
         settings.bridge.enabled,
         onyxServerDetected(),
         settings.bridge.wsUrl.trim() || (import.meta.env.VITE_IRC_WS ?? ''),
+        sessionKind(),
       );
       if (active) void startBridge();
       else stopBridge();

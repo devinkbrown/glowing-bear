@@ -197,7 +197,7 @@ describe('VideoRoom teardown', () => {
     media.state.health.reconnectAttempt = 2;
     const view = render(() => <VideoRoom />);
     expect(view.getByRole('status')).toHaveTextContent(
-      'Onyx Server bridge interrupted. Keeping media active while reconnecting (attempt 2).',
+      'Onyx extras interrupted. Keeping media active while reconnecting (attempt 2).',
     );
   });
 

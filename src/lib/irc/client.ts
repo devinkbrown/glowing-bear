@@ -7,6 +7,7 @@ import {
   selectSaslMechanism,
   type SaslMechanism,
 } from './parser';
+import { ONYX_WEBSOCKET_PROTOCOLS, wantedCaps } from './wantedCaps';
 import type { IRCMessage, ISupport } from './types';
 
 export type IRCEventHandler = (msg: IRCMessage) => void;
@@ -26,10 +27,12 @@ export interface IRCClientOptions {
   account?: string;
   realname?: string;
   username?: string;
-  password?: string;     // SASL PLAIN password
+  password?: string;     // SASL PLAIN / SCRAM / IDENTIFY password
   saslSessionToken?: string; // Onyx Server sst_ account re-entry credential
   sessionToken?: string; // Onyx Server SESSION RESUME token (local node)
   meshToken?: string;    // Onyx Server mesh-sealed reclaim token (any node)
+  /** Onyx TOTP for IDENTIFY after welcome when PLAIN/SCRAM are refused. Not WeeChat totp=. */
+  identifyTotp?: string;
   hasClientCert?: boolean;
   /** called for every parsed message */
   onMessage: IRCEventHandler;
@@ -114,7 +117,7 @@ export class IRCClient {
   /** Which SASL mechanism we're using */
   private _saslMech: SaslMechanism | null = null;
   /** SCRAM state between challenge/response steps */
-  private _scramState: { clientFirstMsgBare: string; nonce: string; hash: 'SHA-256'; bits: number } | null = null;
+  private _scramState: { clientFirstMsgBare: string; nonce: string; hash: 'SHA-256' | 'SHA-512'; bits: number } | null = null;
   /**
    * Base64 ServerSignature the client computed at client-final time. Non-null
    * once we've sent the client proof and are awaiting the server-final `v=`.
@@ -166,7 +169,7 @@ export class IRCClient {
     CHANMODES: ['beIZ', 'k', 'lfj', 'imnstCTNMSgWOA'],
     CHANTYPES: '#&',
     CHANLIMITS: {},
-    NETWORK: 'IRCXNet',
+    NETWORK: 'Onyx',
     CASEMAPPING: 'ascii',
     MODES: 4,
     MAXCHANNELS: 50,
@@ -232,7 +235,7 @@ export class IRCClient {
     this._clearPingTimers();
 
     try {
-      this.ws = new WebSocket(this.opts.url);
+      this.ws = new WebSocket(this.opts.url, [...ONYX_WEBSOCKET_PROTOCOLS]);
       // Browser media datagrams ride binary frames on this same socket; deliver
       // them as ArrayBuffers (not Blobs) so onBinary gets bytes synchronously.
       this.ws.binaryType = 'arraybuffer';
@@ -576,10 +579,12 @@ export class IRCClient {
             if (caps.length > 0) this.onCapChange?.();
             if (this._capReqPending > 0) this._capReqPending--;
             if (caps.includes('sasl') && (
-              this.opts.saslSessionToken || this.opts.password || this.opts.hasClientCert
+              this.opts.saslSessionToken
+              || this.opts.hasClientCert
+              || (this.opts.password && !this.opts.identifyTotp)
             )) {
               const mech = selectSaslMechanism(this._saslMechs, {
-                hasPassword: Boolean(this.opts.password),
+                hasPassword: Boolean(this.opts.password) && !this.opts.identifyTotp,
                 hasClientCert: Boolean(this.opts.hasClientCert),
                 hasSessionToken: Boolean(this.opts.saslSessionToken),
               });
@@ -654,7 +659,7 @@ export class IRCClient {
           }
         } else if (this._saslMech === 'EXTERNAL') {
           if (param === '+') this.sendRaw('AUTHENTICATE', '+');
-        } else if (this._saslMech === 'SCRAM-SHA-256') {
+        } else if (this._saslMech === 'SCRAM-SHA-256' || this._saslMech === 'SCRAM-SHA-512') {
           if (this._scramServerSig !== null) {
             // We already sent the client proof — this is the server-final
             // message carrying `v=ServerSignature`. Verify it (mutual auth).
@@ -770,6 +775,9 @@ export class IRCClient {
             this.send(buildSessionResumeLine(resumeToken));
           }
           this.sendRaw('SESSION', 'TOKEN');
+        } else if (this.opts.identifyTotp && this.opts.password) {
+          // After TOTP enroll, PLAIN/SCRAM are refused. IDENTIFY carries the code.
+          this.sendRaw('IDENTIFY', this._authcid, this.opts.password, this.opts.identifyTotp);
         }
         this.opts.onConnected?.(msg);
         break;
@@ -855,7 +863,7 @@ export class IRCClient {
   private _retryAfterSaslSessionTokenFailure(clearStoredToken: boolean): boolean {
     if (this._saslMech !== 'SESSION-TOKEN') return false;
     const fallback = selectSaslMechanism(this._saslMechs, {
-      hasPassword: Boolean(this.opts.password),
+      hasPassword: Boolean(this.opts.password) && !this.opts.identifyTotp,
       hasClientCert: Boolean(this.opts.hasClientCert),
       hasSessionToken: false,
     });
@@ -898,61 +906,18 @@ export class IRCClient {
   }
 
   private _wantedCaps(caps: string[]) {
-    return [...new Set(caps)].filter(cap => {
-      // ── Always-off caps ──────────────────────────────────────────────────
-      // STARTTLS upgrade: DarkBear already uses WSS; requesting this is wrong.
-      if (cap === 'tls') return false;
-      // sts (Strict Transport Security): an informational cap whose value is the
-      // transport policy. It is advertised, not negotiated — Onyx Server NAKs a REQ
-      // for it. The TLS upgrade is already implicit in the wss:// endpoint.
-      if (cap === 'sts') return false;
-      // SASL: only request when we have credentials to send.
-      if (cap === 'sasl') {
-        return Boolean(this.opts.saslSessionToken || this.opts.password || this.opts.hasClientCert);
-      }
-      // no-implicit-names: DarkBear relies on the automatic 353 NAMREPLY on
-      // JOIN to populate the member list; opting in would suppress it.
-      if (cap === 'no-implicit-names') return false;
-
-      // ── Unimplemented protocol caps ───────────────────────────────────────
-      // draft/multiline: requested — the store sends newline-containing
-      // composer text as a BATCH-based multiline message (see
-      // src/lib/irc/multiline.ts) and reassembles incoming multiline batches
-      // into a single ChatMessage. Falls back to per-line PRIVMSGs when the
-      // cap is not ACKed.
-      // draft/search: requested — the store's searchServerHistory() drives
-      // the server-side SEARCH command (results replay as a chathistory-shaped
-      // batch, diverted into serverSearch.results); the MessageSearch bar
-      // exposes it as "Search full history".
-      // labeled-response: no @label= request/response correlation in DarkBear.
-      if (cap === 'labeled-response') return false;
-      // draft/channel-rename: requested — the store handles the native
-      // `:renamer RENAME #old #new [:reason]` line and migrates channel state
-      // (messages, membership, unread, active view) under the new key.
-      // draft/file-upload: DarkBear uses HTTP POST to a media server;
-      // the IRC-level file-upload protocol is not implemented.
-      if (cap === 'draft/file-upload') return false;
-      // bot: DarkBear is a human client, not a bot.
-      if (cap === 'bot') return false;
-      // draft/read-marker: requested when offered — enables MARKREAD send/receive
-      // so the read position (see setReadMarker/onReadMarker) syncs across this
-      // account's clients. Only sent post-negotiation; harmless when unacked.
-      if (cap === 'draft/read-marker') return true;
-
-      // onyx/session-sync: server-driven session reclaim. When ACKed, the
-      // server auto-pushes JOIN + NAMES/topic + CHATHISTORY replay for every
-      // channel the account's session is live in, so the client must NOT run
-      // its own blind autojoin storm. Always request it when offered; the
-      // store gates autojoin suppression on negotiatedCaps having it.
-      // (Falls through to `return true` — listed here only for documentation.)
-
-      return true;
+    return wantedCaps(caps, {
+      hasSaslCredentials: Boolean(
+        this.opts.saslSessionToken
+        || this.opts.hasClientCert
+        || (this.opts.password && !this.opts.identifyTotp),
+      ),
     });
   }
 
   private _scramClientFirst() {
-    const hash = 'SHA-256';
-    const bits = 256;
+    const hash = this._saslMech === 'SCRAM-SHA-512' ? 'SHA-512' : 'SHA-256';
+    const bits = hash === 'SHA-512' ? 512 : 256;
     const arr = new Uint8Array(18);
     crypto.getRandomValues(arr);
     const nonce = btoa(String.fromCharCode(...arr)).replace(/[+/=]/g, c =>

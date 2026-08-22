@@ -33,7 +33,7 @@ import { nickColor } from '@/lib/nickcolor';
 import type { CallHealthStatus, NetworkQualityTier } from '@/lib/cadence-media/types';
 import TranscriptPanel from './TranscriptPanel';
 import { settings } from '@/state/settings';
-import { formatNumber } from '@/lib/i18n';
+import { formatNumber, t } from '@/lib/i18n';
 
 const TIMER_TICK_MS = 1000;
 const STREAM_POLL_MS = 1000;
@@ -44,10 +44,10 @@ const KBD_CLASS =
   'px-1.5 py-0.5 bg-white/[0.06] rounded text-gray-400 text-[10px] font-mono';
 
 const BRIDGE_DOT: Record<BridgeStatus, { cls: string; label: string }> = {
-  ready: { cls: 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]', label: 'bridge ready' },
-  connecting: { cls: 'bg-amber-400 animate-pulse', label: 'bridge connecting' },
-  error: { cls: 'bg-red-400', label: 'bridge error' },
-  off: { cls: 'bg-gray-600', label: 'bridge off' },
+  ready: { cls: 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]', label: 'Onyx ready' },
+  connecting: { cls: 'bg-amber-400 animate-pulse', label: 'Onyx connecting' },
+  error: { cls: 'bg-red-400', label: 'Onyx error' },
+  off: { cls: 'bg-gray-600', label: 'Onyx off' },
 };
 
 const HEALTH_STYLE: Record<CallHealthStatus, { dot: string; text: string; label: string }> = {
@@ -339,7 +339,7 @@ function FullOverlay(props: PillProps) {
           >
             <span class={`inline-block mr-2 h-2 w-2 rounded-full ${health().dot}`} aria-hidden="true" />
             {mediaState.health.status === 'reconnecting'
-              ? `Onyx Server bridge interrupted. Keeping media active while reconnecting (attempt ${mediaState.health.reconnectAttempt}).`
+              ? t('media.onyxInterrupted', { n: mediaState.health.reconnectAttempt })
               : mediaState.health.tier === 0
                 ? 'Packet loss or encoder pressure detected. Monitoring before reducing quality.'
                 : `Call quality reduced to ${QUALITY_LABEL[mediaState.health.tier].toLowerCase()} while conditions recover.`}

@@ -278,6 +278,7 @@ function AccountTab(): JSX.Element {
   const [verifyToken, setVerifyToken] = createSignal('');
   const [identAccount, setIdentAccount] = createSignal('');
   const [identPass, setIdentPass] = createSignal('');
+  const [identTotp, setIdentTotp] = createSignal('');
   const [infoAccount, setInfoAccount] = createSignal('');
   const [setAccount, setSetAccount] = createSignal('');
   const [setPass, setSetPass] = createSignal('');
@@ -326,12 +327,21 @@ function AccountTab(): JSX.Element {
           <Input placeholder={t('services.accountCurrentNick')} value={identAccount()} onChange={setIdentAccount} />
           <div class="flex gap-2">
             <Input placeholder={t('services.password')} type="password" autocomplete="current-password" value={identPass()} onChange={setIdentPass} flex />
+            <Input placeholder={t('connect.onyxTotp')} value={identTotp()} onChange={setIdentTotp} />
             <Btn
               label={t('services.identify')}
               disabled={!identPass()}
               onClick={() => {
-                const sent = sendRaw(identAccount() ? `IDENTIFY ${identAccount()} ${identPass()}` : `IDENTIFY ${identPass()}`);
-                if (sent) setIdentPass('');
+                const totp = identTotp().replace(/\D/g, '').slice(0, 6);
+                const sent = sendRaw(
+                  identAccount()
+                    ? (totp ? `IDENTIFY ${identAccount()} ${identPass()} ${totp}` : `IDENTIFY ${identAccount()} ${identPass()}`)
+                    : `IDENTIFY ${identPass()}`,
+                );
+                if (sent) {
+                  setIdentPass('');
+                  setIdentTotp('');
+                }
               }}
             />
           </div>

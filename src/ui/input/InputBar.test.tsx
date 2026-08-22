@@ -13,8 +13,11 @@ import {
   buffersState,
   clearBuffers,
   clearDraftsAndHistory,
+  clearIrcx,
   getDraft,
+  markOnyxServer,
   resetSettings,
+  setSessionKind,
   resetUploads,
   restoreComposerDraft,
   setActiveBuffer,
@@ -109,7 +112,9 @@ const QUERY: WeeChatBuffer = {
 beforeEach(() => {
   resetThreads();
   clearBuffers();
+  clearIrcx();
   resetSettings();
+  setSessionKind('weechat-generic');
   resetUploads();
   clearDraftsAndHistory();
   inputMocks.sendInput.mockReturnValue(true);
@@ -275,6 +280,8 @@ describe('InputBar relay acknowledgement', () => {
   });
 
   it('marks drafted upload URLs sent only after relay acceptance', async () => {
+    setSessionKind('weechat-onyx');
+    markOnyxServer('eshmaki');
     inputMocks.sendInput.mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { findByText, getByLabelText, getByPlaceholderText } = render(() => <InputBar />);
     const chooser = getByLabelText('Choose files to upload') as HTMLInputElement;
@@ -300,6 +307,8 @@ describe('InputBar relay acknowledgement', () => {
   });
 
   it('does not mark a drafted upload sent when its URL was edited into a longer token', async () => {
+    setSessionKind('weechat-onyx');
+    markOnyxServer('eshmaki');
     const { getByLabelText, getByPlaceholderText } = render(() => <InputBar />);
     const chooser = getByLabelText('Choose files to upload') as HTMLInputElement;
     const box = getByPlaceholderText('Message...') as HTMLTextAreaElement;
@@ -328,7 +337,15 @@ describe('InputBar relay acknowledgement', () => {
     expect(getDraft(CHANNEL.fullName)).toBe('failed notification reply');
   });
 
+  it('hides GIF and attach on a generic IRC buffer', () => {
+    const { queryByLabelText } = render(() => <InputBar />);
+    expect(queryByLabelText('GIF picker')).toBeNull();
+    expect(queryByLabelText('Upload file')).toBeNull();
+  });
+
   it('restores a selected GIF URL when relay dispatch is rejected', async () => {
+    setSessionKind('weechat-onyx');
+    markOnyxServer('eshmaki');
     updateSettings({ tenorApiKey: 'test-key' });
     inputMocks.sendInput.mockReturnValueOnce(false);
     vi.stubGlobal('fetch', vi.fn(async () => ({

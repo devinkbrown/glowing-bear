@@ -7,7 +7,7 @@
 //   Messages   — timestamp format, display toggles, sidebar unread filter,
 //                highlight words editor.
 //   Alerts     — desktop notifications, sound, read-on-focus, auto-reconnect.
-//   Connection — relay settings + saved profiles manager + onyx-server bridge
+//   Connection — relay settings + saved profiles + Onyx extras
 //                (enabled, wsUrl override, account, password, autoJoinMedia,
 //                e2eeDms + verified-only delivery policy).
 //   Advanced   — upload URL, Tenor key, custom CSS, keyboard shortcut list,
@@ -240,7 +240,7 @@ export default function SettingsModal(props: Props) {
 
   const handleForgetDevice = async () => {
     const confirmed = confirm(
-      'Forget this device? This clears saved profiles and settings, relay and bridge passwords, session tokens, drafts and input history, and the local push subscription.',
+      t('settings.forgetDevice'),
     );
     if (!confirmed) return;
     await disableWebPush(null);
@@ -604,9 +604,9 @@ export default function SettingsModal(props: Props) {
                 <Toggle label="Compact Mode" desc="Reduce spacing between messages for density" on={settings.compactMode} onChange={(v) => updateSettings({ compactMode: v })} />
                 <Toggle label="Inline Images" desc="Opt in to fetching remote image thumbnails" on={settings.inlineImages} onChange={(v) => updateSettings({ inlineImages: v })} />
                 <Toggle label="Nick Colors" desc="Assign unique colors to each nickname" on={settings.colorNicks} onChange={(v) => updateSettings({ colorNicks: v })} />
-                <Toggle label="Mode Prefixes" desc="Show @/+/% symbols before nicknames" on={settings.showPrefixes} onChange={(v) => updateSettings({ showPrefixes: v })} />
+                <Toggle label={t('settings.modePrefixes')} desc={t('settings.modePrefixesDesc')} on={settings.showPrefixes} onChange={(v) => updateSettings({ showPrefixes: v })} />
                 <Toggle label="Join/Part/Quit" desc="Show when users enter and leave channels" on={settings.joinPartMsgs} onChange={(v) => updateSettings({ joinPartMsgs: v })} />
-                <Toggle label="Read Marker" desc="Draw a line where you last read" on={settings.readMarker} onChange={(v) => updateSettings({ readMarker: v })} />
+                <Toggle label={t('settings.readMarker')} desc={t('settings.readMarkerDesc')} on={settings.readMarker} onChange={(v) => updateSettings({ readMarker: v })} />
               </div>
             </Section>
 
@@ -710,26 +710,26 @@ export default function SettingsModal(props: Props) {
 
           {/* ─── CONNECTION ─── */}
           <Show when={tab() === 'connection'}>
-            <Section label="Relay" desc="WebSocket relay connection settings">
+            <Section label={t('settings.relaySection')} desc={t('settings.relaySectionDesc')}>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <InputField label="Host" value={settings.relay.host} placeholder="irc.example.com"
+                <InputField label={t('settings.host')} value={settings.relay.host} placeholder="irc.example.com"
                   onChange={(v) => updateRelay({ host: v })} />
-                <InputField label="Port" value={String(settings.relay.port)} placeholder="9001" type="number"
+                <InputField label={t('connect.port')} value={String(settings.relay.port)} placeholder="9001" type="number"
                   onChange={(v) => updateRelay({ port: Number(v) || 9001 })} />
               </div>
               <div class="space-y-0 mt-2">
-                <Toggle label="TLS" desc="Encrypt the WebSocket connection" on={settings.relay.tls} onChange={(v) => updateRelay({ tls: v })} />
-                <Toggle label="Compression" desc="Enable zlib compression for the relay protocol" on={settings.relay.compression} onChange={(v) => updateRelay({ compression: v })} />
+                <Toggle label="TLS" desc={t('settings.tlsDesc')} on={settings.relay.tls} onChange={(v) => updateRelay({ tls: v })} />
+                <Toggle label={t('connect.compression')} desc={t('settings.compressionDesc')} on={settings.relay.compression} onChange={(v) => updateRelay({ compression: v })} />
               </div>
               <div class="mt-2">
-                <InputField label="Password" value={settings.relay.password} placeholder="Optional relay password" type="password"
+                <InputField label={t('connect.password')} value={settings.relay.password} placeholder={t('settings.optionalRelayPassword')} type="password"
                   onChange={(v) => updateRelay({ password: v })} />
-                <Toggle label="Remember Relay Password" desc="Persist across browser restarts on this device" on={settings.rememberRelayPassword}
+                <Toggle label={t('settings.rememberRelay')} desc={t('settings.rememberRelayDesc')} on={settings.rememberRelayPassword}
                   onChange={(v) => updateSettings({ rememberRelayPassword: v })} />
               </div>
             </Section>
 
-            <Section label="Profiles" desc="Save and switch between connection configurations">
+            <Section label={t('settings.profiles')} desc={t('settings.profilesDesc')}>
               <Show when={settings.profiles.length > 0}>
                 <div class="space-y-1.5 mb-3">
                   <For each={settings.profiles}>
@@ -738,12 +738,12 @@ export default function SettingsModal(props: Props) {
                         <span class="text-[12px] text-gray-300 font-medium flex-1 truncate">{p.name}</span>
                         <span class="text-[10px] text-gray-600 font-mono truncate max-w-[120px]">{p.relay.host}:{p.relay.port}</span>
                         <button onClick={() => loadProfile(p.name)}
-                          class="text-[10px] font-semibold text-[var(--custom-accent,#818cf8)] hover:opacity-80 transition-opacity px-1.5">
-                          Load
+                          class="text-[10px] font-semibold text-[var(--custom-accent,#818cf8)] hover:opacity-80 transition-opacity px-1.5 min-h-[44px] sm:min-h-0">
+                          {t('settings.loadProfile')}
                         </button>
-                        <button onClick={() => { if (confirm(`Delete profile "${p.name}"?`)) deleteProfile(p.name); }}
-                          class="text-[10px] font-semibold text-red-400 hover:text-red-300 transition-colors px-1.5">
-                          Del
+                        <button onClick={() => { if (confirm(t('settings.confirmDeleteProfile', { name: p.name }))) deleteProfile(p.name); }}
+                          class="text-[10px] font-semibold text-red-400 hover:text-red-300 transition-colors px-1.5 min-h-[44px] sm:min-h-0">
+                          {t('settings.deleteProfile')}
                         </button>
                       </div>
                     )}
@@ -752,53 +752,52 @@ export default function SettingsModal(props: Props) {
               </Show>
               <div class="flex gap-2">
                 <input type="text" value={profileName()} onInput={(e) => setProfileName(e.currentTarget.value)}
-                  placeholder="Profile name"
-                  class="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700" />
+                  placeholder={t('connect.profileName')}
+                  class="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700 min-h-[44px]" />
                 <button onClick={() => { const name = profileName().trim(); if (name) { saveProfile(name); setProfileName(''); } }}
                   disabled={!profileName().trim()}
-                  class="px-3 py-1.5 text-[11px] font-semibold text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10 border border-[var(--custom-accent,#818cf8)]/20 rounded-lg hover:bg-[var(--custom-accent,#818cf8)]/15 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-                  Save Current
+                  class="px-3 py-1.5 text-[11px] font-semibold text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10 border border-[var(--custom-accent,#818cf8)]/20 rounded-lg hover:bg-[var(--custom-accent,#818cf8)]/15 disabled:opacity-40 disabled:cursor-not-allowed transition-all min-h-[44px]">
+                  {t('settings.saveCurrent')}
                 </button>
               </div>
             </Section>
 
-            <Section label="Onyx Server Bridge" desc="Direct session to the Onyx Server for realtime extras">
+            <Section label={t('settings.extras')} desc={t('settings.extrasDesc')}>
               <p class="text-[10px] text-gray-600 leading-relaxed mb-1">
-                Adds realtime voice/video, typing, reactions and E2EE DMs by opening a direct
-                session to the Onyx Server alongside your relay.
+                {t('settings.bridgeBlurb')}
               </p>
-              <Toggle label="Enable Bridge" desc="Open the direct Onyx Server session when connecting" on={bridge().enabled} onChange={(v) => patchBridge({ enabled: v })} />
+              <Toggle label={t('settings.enableExtras')} desc={t('settings.enableExtrasDesc')} on={bridge().enabled} onChange={(v) => patchBridge({ enabled: v })} />
               <Show when={bridge().enabled}>
                 <div class="mt-2 space-y-3 animate-fade-in">
-                  <InputField label="WebSocket URL" value={bridge().wsUrl} placeholder="wss://node.example.com/irc (empty = auto node probing)"
+                  <InputField label={t('settings.wsUrl')} value={bridge().wsUrl} placeholder="wss://node.example.com/irc"
                     onChange={(v) => patchBridge({ wsUrl: v })} />
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <InputField label="Account" value={bridge().account} placeholder="Account (nick)"
+                    <InputField label={t('connect.account')} value={bridge().account} placeholder={t('connect.accountNick')}
                       onChange={(v) => patchBridge({ account: v })} />
-                    <InputField label="Password" value={bridge().password} placeholder="Account password" type="password"
+                    <InputField label={t('connect.password')} value={bridge().password} placeholder={t('connect.accountPassword')} type="password"
                       onChange={(v) => patchBridge({ password: v })} />
                   </div>
                   <div class="space-y-0">
-                    <Toggle label="Remember Bridge Password" desc="Persist across browser restarts on this device" on={settings.rememberBridgePassword}
+                    <Toggle label={t('connect.rememberBridge')} desc={t('connect.sessionOnly')} on={settings.rememberBridgePassword}
                       onChange={(v) => updateSettings({ rememberBridgePassword: v })} />
-                    <Toggle label="Auto-join Media" desc="Automatically join a channel's voice/video room when one is live" on={bridge().autoJoinMedia} onChange={(v) => patchBridge({ autoJoinMedia: v })} />
-                    <Toggle label="E2EE DMs" desc="Encrypt direct messages when the peer publishes a DarkBear device key" on={bridge().e2eeDms} onChange={(v) => patchBridge({ e2eeDms: v })} />
+                    <Toggle label={t('settings.autoJoinMedia')} desc={t('settings.autoJoinMediaDesc')} on={bridge().autoJoinMedia} onChange={(v) => patchBridge({ autoJoinMedia: v })} />
+                    <Toggle label={t('settings.e2eeDms')} desc={t('settings.e2eeDmsDesc')} on={bridge().e2eeDms} onChange={(v) => patchBridge({ e2eeDms: v })} />
                     <Show when={bridge().e2eeDms}>
                       <label class="mt-2 block rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
-                        <span class="block text-[12px] font-semibold text-gray-300">DM delivery policy</span>
+                        <span class="block text-[12px] font-semibold text-gray-300">{t('settings.e2eePolicy')}</span>
                         <span class="mb-2 block text-[10px] leading-relaxed text-gray-600">
-                          Verified-only blocks sending until the peer fingerprint is confirmed on this device.
+                          {t('settings.e2eePolicyDesc')}
                         </span>
                         <select
-                          aria-label="DM delivery policy"
+                          aria-label={t('settings.e2eePolicy')}
                           value={bridge().e2eePolicy}
                           onChange={(event) => patchBridge({
                             e2eePolicy: event.currentTarget.value === 'verified' ? 'verified' : 'opportunistic',
                           })}
                           class="w-full rounded-lg border border-white/[0.08] bg-gray-950 px-3 py-2 text-[12px] text-gray-200 outline-none focus:border-[var(--custom-accent,#818cf8)]/40"
                         >
-                          <option value="opportunistic">Encrypt when available</option>
-                          <option value="verified">Require verified encryption</option>
+                          <option value="opportunistic">{t('settings.e2eeOpportunistic')}</option>
+                          <option value="verified">{t('settings.e2eeVerified')}</option>
                         </select>
                       </label>
                     </Show>
@@ -999,7 +998,7 @@ export default function SettingsModal(props: Props) {
                 <DiagnosticValue label="Relay" value={connectionState()} detail={connectionError() ? relayErrorId() : (relayDiagnostics().serverVersion || 'not connected')} />
                 <DiagnosticValue label="Phase" value={relayDiagnostics().phase} detail={relayPhaseDetail()} />
                 <DiagnosticValue label="Protocol" value={relayDiagnostics().protocolMode} detail={protocolDetail()} />
-                <DiagnosticValue label="Bridge" value={bridgeState.status} detail={bridgeState.error ? bridgeErrorId() : (bridgeState.e2eeReady ? 'device key published' : 'DM encryption idle')} />
+                <DiagnosticValue label="Onyx" value={bridgeState.status} detail={bridgeState.error ? bridgeErrorId() : (bridgeState.e2eeReady ? 'device key published' : 'DM encryption idle')} />
                 <DiagnosticValue label="Onyx Server Media" value={mediaState.mediaAvailable ? mediaState.callState : 'unavailable'} detail={mediaState.error ? mediaErrorId() : `${mediaState.health.status} · ${Object.keys(mediaState.peers).length} peers`} />
                 <DiagnosticValue label="Codec Runtime" value={mediaRuntimeDiagnostics().webAssembly && mediaRuntimeDiagnostics().mediaDevices ? 'capable' : 'limited'} detail={`${mediaRuntimeDiagnostics().audioWorklet ? 'audio worklet' : 'audio fallback'} · ${mediaRuntimeDiagnostics().videoWorker ? 'video worker' : 'video fallback'}`} />
                 <DiagnosticValue label="Service Worker" value={typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? (navigator.serviceWorker.controller ? 'controlled' : 'uncontrolled') : 'unsupported'} detail="deploy shell" />
@@ -1061,13 +1060,13 @@ function PreferenceOverview(props: { bridgeEnabled: boolean }) {
         <OverviewTile label="Theme" value={String(settings.theme)} tone="accent" />
         <OverviewTile label="Messages" value={settings.compactMode ? 'compact' : 'comfortable'} />
         <OverviewTile label="Alerts" value={settings.notifications ? 'enabled' : 'quiet'} hot={settings.notifications} />
-        <OverviewTile label="Bridge" value={props.bridgeEnabled ? 'Onyx Server on' : 'relay only'} hot={props.bridgeEnabled} />
+        <OverviewTile label="Onyx" value={props.bridgeEnabled ? 'extras on' : 'relay only'} hot={props.bridgeEnabled} />
       </div>
       <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <QuickToggle label="Compact" on={settings.compactMode} onClick={() => updateSettings({ compactMode: !settings.compactMode })} />
         <QuickToggle label="Images" on={settings.inlineImages} onClick={() => updateSettings({ inlineImages: !settings.inlineImages })} />
         <QuickToggle label="Alerts" on={settings.notifications} onClick={() => updateSettings({ notifications: !settings.notifications })} />
-        <QuickToggle label="Bridge" on={props.bridgeEnabled} onClick={() => updateBridge({ enabled: !props.bridgeEnabled })} />
+        <QuickToggle label="Onyx" on={props.bridgeEnabled} onClick={() => updateBridge({ enabled: !props.bridgeEnabled })} />
       </div>
     </div>
   );

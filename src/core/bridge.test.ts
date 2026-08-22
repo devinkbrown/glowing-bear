@@ -89,6 +89,12 @@ describe('bridgeShouldRun', () => {
     expect(bridgeShouldRun(true, false, '')).toBe(false);
     expect(bridgeShouldRun(true, false, '   ')).toBe(false);
   });
+
+  it('never starts a second socket for kind C or kind A', () => {
+    expect(bridgeShouldRun(true, true, 'wss://eshmaki.me:8080', 'onyx-direct-wss')).toBe(false);
+    expect(bridgeShouldRun(true, true, 'wss://eshmaki.me:8080', 'weechat-generic')).toBe(false);
+    expect(bridgeShouldRun(true, true, '', 'weechat-onyx')).toBe(true);
+  });
 });
 
 describe('isSecureBridgeTransport', () => {

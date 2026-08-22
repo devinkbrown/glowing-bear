@@ -100,6 +100,7 @@ const SETTINGS: RelaySettings = {
 	tls: false,
 	password: 'hunter2',
 	compression: false,
+	path: 'weechat',
 };
 
 function flushAsync(): Promise<void> {
@@ -500,5 +501,54 @@ describe('compression negotiation honours decode capability', () => {
 		} finally {
 			c.disconnect();
 		}
+	});
+});
+
+describe('relay URL and TOTP', () => {
+	it('dials /weechat by default and a custom path when set', () => {
+		client.connect();
+		expect(FakeWebSocket.instances.at(-1)?.url).toBe('ws://relay.test:9001/weechat');
+		client.disconnect();
+		const custom = new WeeRelayClient({ ...SETTINGS, path: 'custom' });
+		try {
+			custom.connect();
+			expect(FakeWebSocket.instances.at(-1)?.url).toBe('ws://relay.test:9001/custom');
+		} finally {
+			custom.disconnect();
+		}
+	});
+
+	it('sends totp= as its own option, not concatenated onto the password', async () => {
+		const c = new WeeRelayClient({ ...SETTINGS, totp: '123456' });
+		try {
+			c.connect();
+			const ws = FakeWebSocket.instances.at(-1)!;
+			ws.open();
+			ws.message(handshakeFrame({
+				password_hash_algo: 'sha256',
+				nonce: 'aa'.repeat(16),
+				totp: 'off',
+			}));
+			await waitFor(() => ws.sent.some((s) => s.startsWith('init password_hash=')));
+			const init = ws.sent.find((s) => s.startsWith('init '))!;
+			expect(init).toContain(',totp=123456');
+			expect(init).not.toContain('hunter2123456');
+		} finally {
+			c.disconnect();
+		}
+	});
+
+	it('surfaces totp_required when the relay wants TOTP and none was supplied', async () => {
+		const errors: Array<{ message: string; code?: string }> = [];
+		client.addEventListener('error', ((ev: Event) => errors.push((ev as CustomEvent).detail)) as EventListener);
+		const ws = connectOpen();
+		ws.message(handshakeFrame({
+			password_hash_algo: 'sha256',
+			nonce: 'aa'.repeat(16),
+			totp: 'on',
+		}));
+		await flushAsync();
+		expect(errors.some((e) => e.code === 'totp_required')).toBe(true);
+		expect(ws.sent.some((s) => s.startsWith('init'))).toBe(false);
 	});
 });

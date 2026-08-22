@@ -18,6 +18,13 @@ export interface RelaySettings {
   tls: boolean;
   password: string;
   compression: boolean;
+  /** WebSocket path without a leading slash. Default `weechat`. */
+  path: string;
+}
+
+/** Session-only dial options that must never be persisted. */
+export interface RelayDialSettings extends RelaySettings {
+  totp?: string;
 }
 
 export const DEFAULT_RELAY: RelaySettings = {
@@ -26,6 +33,7 @@ export const DEFAULT_RELAY: RelaySettings = {
   tls: true,
   password: '',
   compression: true,
+  path: 'weechat',
 };
 
 export interface WeeChatBuffer {

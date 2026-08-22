@@ -295,26 +295,24 @@ function embedsFor(line: WeeChatLine): MediaEmbed[] {
 
 function DaySeparator(props: { date: Date }) {
   return (
-    <div class="flex items-center gap-3 sm:gap-4 py-3 sm:py-4 my-1 sm:my-2 px-3 sm:px-1">
-      <div class="flex-1 h-px bg-white/[0.04]" />
-      <span class="text-[10px] font-semibold uppercase tracking-[0.12em] sm:tracking-[0.15em] text-gray-500 select-none whitespace-nowrap px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.05]">
+    <div class="flex items-center gap-2 py-2 my-0.5 px-3 sm:px-1">
+      <div class="flex-1 h-px bg-white/[0.035]" />
+      <span class="text-[10px] font-medium text-gray-600 select-none whitespace-nowrap">
         {formatDate(props.date, { weekday: 'short', month: 'short', day: 'numeric' })}
       </span>
-      <div class="flex-1 h-px bg-white/[0.04]" />
+      <div class="flex-1 h-px bg-white/[0.035]" />
     </div>
   );
 }
 
 function ReadMarkerRow() {
   return (
-    <div class="flex items-center gap-3 my-2 px-3 sm:px-1">
-      <div class="flex-1 h-px bg-red-500/25" />
-      <span class="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-red-500/40 select-none">
-        <span class="w-1 h-1 rounded-full bg-red-500/40" />
+    <div class="flex items-center gap-2 my-1.5 px-3 sm:px-1">
+      <div class="flex-1 h-px bg-[var(--role-mention,#f87171)]/25" />
+      <span class="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--role-mention,#f87171)]/55 select-none">
         {t('message.new')}
-        <span class="w-1 h-1 rounded-full bg-red-500/40" />
       </span>
-      <div class="flex-1 h-px bg-red-500/25" />
+      <div class="flex-1 h-px bg-[var(--role-mention,#f87171)]/25" />
     </div>
   );
 }
@@ -322,16 +320,16 @@ function ReadMarkerRow() {
 function EmptyState() {
   return (
     <div class="flex-1 flex items-center justify-center px-6">
-      <div class="text-center space-y-3">
-        <div class="w-12 h-12 mx-auto rounded-2xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center">
-          <svg class="w-6 h-6 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <div class="mx-auto w-full max-w-[72ch] text-center space-y-3">
+        <div class="w-14 h-14 mx-auto rounded-2xl bg-[var(--custom-accent,#818cf8)]/[0.08] border border-[var(--custom-accent,#818cf8)]/15 flex items-center justify-center">
+          <svg class="w-6 h-6 text-[var(--custom-accent,#818cf8)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" />
           </svg>
         </div>
-        <p class="text-gray-500 text-[13px]">{t('message.noBuffer')}</p>
-        <p class="text-gray-600 text-[11px] font-mono">
+        <p class="text-[var(--color-gray-300)] text-[14px]">{t('message.noBuffer')}</p>
+        <p class="text-[var(--color-gray-500)] text-[11px] font-mono">
           <span class="hidden sm:inline">
-            <kbd class="px-1.5 py-0.5 rounded bg-white/[0.05] border border-white/[0.08] text-[10px]">Ctrl+K</kbd> {t('message.searchHint')}
+            <kbd class="px-1.5 py-0.5 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[10px]">Ctrl+K</kbd> {t('message.searchHint')}
           </span>
           <span class="sm:hidden">{t('message.swipeHint')}</span>
         </p>
@@ -924,6 +922,7 @@ export default function MessageView(props: MessageViewProps) {
           class="flex-1 overflow-y-auto overflow-x-hidden px-0 sm:px-2 py-2 sm:py-3 msg-area"
           style={{ 'font-size': `${settings.fontSize}px` }}
         >
+          <div class="mx-auto w-full max-w-[72ch]">
           <Show when={entry()?.loading}>
             <div class="flex items-center justify-center py-6">
               <div class="flex items-center gap-2.5 text-gray-400 text-[12px]">
@@ -999,6 +998,7 @@ export default function MessageView(props: MessageViewProps) {
                 );
               }}
             </For>
+          </div>
           </div>
         </div>
 

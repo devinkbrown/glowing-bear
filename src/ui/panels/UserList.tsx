@@ -7,7 +7,7 @@ import type { JSX } from 'solid-js';
 import {
   buffersState, NICK_TIER_ORDER, settings,
   openQuery, sendInput, isOperBuffer,
-  isActiveOnyxServer, isBot, openUserProfile, sendWhisper,
+  showOnyxChrome, isBot, openUserProfile, sendWhisper,
 } from '@/state';
 import type { WeeChatNick } from '@/types';
 import { mediaState, requestStartCall } from '@/state/media';
@@ -406,10 +406,10 @@ export default function UserList(props: Props) {
                 <div class="py-1.5">
                   <PopupBtn icon="msg" label={t('users.message')} onClick={() => doAction('query')} />
                   <PopupBtn icon="whois" label={t('users.whois')} onClick={() => doAction('whois')} />
-                  <Show when={isActiveOnyxServer()}>
+                  <Show when={showOnyxChrome()}>
                     <PopupBtn icon="profile" label={t('users.profile')} onClick={() => doAction('profile')} />
                   </Show>
-                  <Show when={isActiveOnyxServer() && entry()?.buffer.localVars['type'] === 'channel'}>
+                  <Show when={showOnyxChrome() && entry()?.buffer.localVars['type'] === 'channel'}>
                     <PopupBtn icon="whisper" label={t('users.whisper')} onClick={() => doAction('whisper')} />
                   </Show>
                   <Show when={mediaState.callState === 'idle'}>
