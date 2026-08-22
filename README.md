@@ -1,25 +1,35 @@
 # DarkBear
 
-A WeeChat relay client with first-class Onyx Server extras. Connect to your IRC bouncer from any browser — and when your network is Onyx Server, DarkBear can open a companion WSS session that carries realtime voice, video, screenshare, typing, reactions, and E2EE DMs.
+A SolidJS IRC client for WeeChat relay and first-party Onyx Server. Connect from any browser: generic IRC through WeeChat, or one WSS session to Onyx that is chat and media together.
 
 **Live app:** [https://eshmaki.me/darkbear/](https://eshmaki.me/darkbear/). The GitHub Pages copy at `https://devinkbrown.github.io/darkbear/` may still be an older Glowing Bear snapshot; treat eshmaki.me as the current build.
 
 ## Architecture
 
-DarkBear v3 is a SolidJS + Vite SPA with two wire connections:
+DarkBear v3 is a SolidJS + Vite SPA. The wire depends on SessionKind — not every connect opens two sockets.
 
 ```
-Browser ──weechat relay (binary protocol over WS)──▶ WeeChat ──IRC──▶ any network   (chat)
-Browser ──direct WSS (Onyx Server bridge)──▶ Onyx Server                                      (media + extras)
+A  Browser ──weechat relay (binary WS)──▶ WeeChat ──IRC──▶ any network     (chat only)
+
+B  Browser ──weechat relay (binary WS)──▶ WeeChat ──IRC──▶ Onyx            (chat)
+   Browser ──optional second WSS───────▶ Onyx Server                       (media + extras)
+
+C  Browser ──one first-party WSS───────▶ Onyx Server                       (chat + media)
+
+D  implicit TLS IRC :6697 — later; not connectable from this client
 ```
 
-- **Chat backbone**: the WeeChat binary `weechat` relay protocol. WeeChat runs on your server as the bouncer; DarkBear speaks that protocol over WebSocket. Buffers, history, nicklists, hotlist — all relay-driven. The HTTP `api` relay is not supported.
-- **Onyx Server first-party WSS** (`[listen].ws`, typically 8080): production `wss://` only. DarkBear offers `onyx.irc-media.v1` then `text.ircv3.net`. Implicit TLS IRC (`[tls]` :6697) and plain IRC (`[listen].irc` :6667) are not openable from the browser; the current desktop shell has no raw TLS TCP client, so those paths are documented as “use WeeChat or WSS.” Mesh S2S, WebTransport, webhooks, and native UDP media ports are not connect types.
-- **Onyx Server extras** (optional companion session): a persistent direct secure WebSocket to Onyx Server. Auto-offered when the relay's 004/005 looks like Onyx (`onyx-`, `NETWORK=Onyx` or residual `IRCXNet`, known hosts). Production and credentialed endpoints require `wss://`; plain `ws://` is limited to unauthenticated loopback development (`ws_plain`). It carries:
-  - **Voice/video/screenshare** — CadenceVox/CadenceVis WASM codecs over binary WS frames with per-stream HMAC, MEDIA control plane, EVENT MEDIA presence
-  - **Typing notifications & emoji reactions** (TAGMSG) sent and received
-  - **Read-marker sync** across devices (MARKREAD)
-  - **Verifiable E2EE DMs** (P-256 ECDH + AES-GCM `TSUMUGI1` envelopes; full peer fingerprints, local trust pins, rotation warnings, and verified-only fail-closed delivery)
+- **A `weechat-generic`**: the WeeChat binary `weechat` relay is the only socket. Generic IRC. Hides Onyx chrome. Never auto-opens extras. Buffers, history, nicklists, hotlist are relay-driven. The HTTP `api` relay is not supported.
+- **B `weechat-onyx`**: the relay stays the chat backbone. An optional second WSS carries extras after 004/005 looks like Onyx (`onyx-`, `NETWORK=Onyx`, known hosts). `NETWORK=IRCXNet` alone does not auto-bridge. Production extras require `wss://`; plain `ws://` is limited to unauthenticated loopback (`ws_plain`).
+- **C `onyx-direct-wss`**: one first-party WSS is chat+media. Not a sidecar. DarkBear does not construct a WeeChat client or a second extras socket. Buffers are `onyx:<server>:<target>`. History is CHATHISTORY. Offers `onyx.irc-media.v1` then `text.ircv3.net`. Production `wss://` only (`[listen].ws`, typically 8080).
+- **D `onyx-tls-irc`**: implicit TLS IRC (`[tls]` :6697). Documented, not connectable — browsers cannot open raw TLS IRC, and the current desktop shell has no TCP client. Plain IRC (`[listen].irc` :6667) is not offered from this HTTPS page. Mesh S2S, WebTransport, webhooks, and native UDP media ports are not connect types.
+
+On C, media rides the same socket as chat. On B, extras are the optional second hop. Both paths can carry:
+
+- **Voice/video/screenshare** — CadenceVox/CadenceVis WASM codecs over binary WS frames with per-stream HMAC, MEDIA control plane, EVENT MEDIA presence
+- **Typing notifications & emoji reactions** (TAGMSG) sent and received
+- **Read-marker sync** across devices (MARKREAD)
+- **Verifiable E2EE DMs** (P-256 ECDH + AES-GCM `TSUMUGI1` envelopes; full peer fingerprints, local trust pins, rotation warnings, and verified-only fail-closed delivery)
 
 ## Features
 
@@ -69,8 +79,8 @@ Browser ──direct WSS (Onyx Server bridge)──▶ Onyx Server              
 - Enforced production asset, frame-time, message-burst, and long-call memory
   budgets, with automatic low-capability decorative-quality reduction
 - Credential-free portable settings exports: passwords and API keys are removed;
-  upload and background URLs retain only a safe HTTP(S) origin/path, and bridge
-  endpoints retain only WSS or credential-free loopback WS origin/path data
+  upload and background URLs retain only a safe HTTP(S) origin/path, and Onyx
+  WSS endpoints retain only WSS or credential-free loopback WS origin/path data
 - Keyboard-driven — press Ctrl+K, or see Help for the full map
 
 ## Setup
@@ -151,13 +161,13 @@ offline document when network navigation fails.
 
 ### Env (build-time, optional)
 
-- `VITE_IRC_WS` — pin the Onyx Server bridge WS endpoint (unset = latency-probe node selection)
+- `VITE_IRC_WS` — pin the Onyx Server WSS endpoint (unset = latency-probe node selection)
 - `VITE_MEDIA_URL` — upload service base (unset = settings uploadUrl / same-origin `/upload`)
 
 ## Protocol reference
 
-Direct Onyx Server wire surface used by the bridge (CAP/SASL/sessions, IRCX,
-services, Event Spine, MEDIA):
+Direct Onyx Server wire surface used by first-party C and optional B extras
+(CAP/SASL/sessions, IRCX, services, Event Spine, MEDIA):
 [`docs/ONYX_SERVER_PROTOCOL.md`](docs/ONYX_SERVER_PROTOCOL.md).
 
 Product brand is **Onyx Server** / network **Onyx**. Wire residuals such as
@@ -177,8 +187,8 @@ src/
 │   ├── cadence-media/  # voice/video engine (WASM codecs, WS frames, MAC; Audio E2EE primitives hard-disabled)
 │   └── e2ee/            # DM cipher + typed local peer-trust repository
 ├── state/               # Solid stores: settings, buffers, connection, ircx, ui,
-│                        # completion, bridge, media (see state/README.md)
-├── core/bridge.ts       # Onyx Server bridge controller
+│                        # completion, extras, media (see state/README.md)
+├── core/bridge.ts       # Onyx extras hop (kind B only; C uses the chat socket)
 ├── ui/                  # components: layout, chat, input, modals, panels, media, bits
 ├── primitives/          # keyboard, swipe, viewport, media-query, favicon badge
 └── styles/global.css    # 19 themes, irc color classes
