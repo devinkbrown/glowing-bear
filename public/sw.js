@@ -8,7 +8,7 @@
  * relay/media traffic, archives, drafts, transcripts, and decrypted content are
  * outside the allowlist and never enter Cache Storage.
  *
- * Push renders Orochi Web Push notifications (WEBPUSH SUBSCRIBE flow) and
+ * Push renders Onyx Server Web Push notifications (WEBPUSH SUBSCRIBE flow) and
  * focuses/opens the app on click.
  */
 

@@ -161,8 +161,8 @@ describe('parseEventFeedText — live Event Spine lines', () => {
     });
   });
 
-  it('unwraps WeeChat unknown-command wrappers around tagged Orochi EVENT lines', () => {
-    const parsed = parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=CONNECT;orochi.io/severity=notice :eshmaki.me EVENT kain USER CONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5"');
+  it('unwraps WeeChat unknown-command wrappers around tagged Onyx Server EVENT lines', () => {
+    const parsed = parseEventFeedText('irc: command "EVENT" not found: "@onyx_server.io/category=CONNECT;onyx_server.io/severity=notice :eshmaki.me EVENT kain USER CONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5"');
 
     expect(parsed).toMatchObject({
       kind: 'event',
@@ -176,8 +176,8 @@ describe('parseEventFeedText — live Event Spine lines', () => {
     });
   });
 
-  it('parses bare Orochi tag prefixes when the leading @ was stripped', () => {
-    const parsed = parseEventFeedText('orochi.io/category=CONNECT;orochi.io/severity=notice :eshmaki.me EVENT kain USER CONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5');
+  it('parses bare Onyx Server tag prefixes when the leading @ was stripped', () => {
+    const parsed = parseEventFeedText('onyx_server.io/category=CONNECT;onyx_server.io/severity=notice :eshmaki.me EVENT kain USER CONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5');
 
     expect(parsed).toMatchObject({
       source: 'eshmaki.me',
@@ -188,8 +188,8 @@ describe('parseEventFeedText — live Event Spine lines', () => {
     });
   });
 
-  it('parses bare Orochi disconnect tags with a trailing reason', () => {
-    const parsed = parseEventFeedText('orochi.io/category=DISCONNECT;orochi.io/severity=notice :eshmaki.me EVENT kain USER DISCONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5 :Client quit');
+  it('parses bare Onyx Server disconnect tags with a trailing reason', () => {
+    const parsed = parseEventFeedText('onyx_server.io/category=DISCONNECT;onyx_server.io/severity=notice :eshmaki.me EVENT kain USER DISCONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5 :Client quit');
 
     expect(parsed).toMatchObject({
       category: 'USER',
@@ -199,25 +199,25 @@ describe('parseEventFeedText — live Event Spine lines', () => {
   });
 
   it('unwraps member and media Event Spine wrappers from WeeChat server-buffer errors', () => {
-    expect(parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=OPER_ACTION;orochi.io/severity=notice :eshmaki.me EVENT kain MEMBER JOIN #root C"')).toMatchObject({
+    expect(parseEventFeedText('irc: command "EVENT" not found: "@onyx_server.io/category=OPER_ACTION;onyx_server.io/severity=notice :eshmaki.me EVENT kain MEMBER JOIN #root C"')).toMatchObject({
       category: 'MEMBER',
       verb: 'JOIN',
       channel: '#root',
       subject: 'C',
     });
 
-    expect(parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT kain MEDIA PROFILE #root C codecs=kaguravox,kaguravis fec=rs_block"')).toMatchObject({
+    expect(parseEventFeedText('irc: command "EVENT" not found: "@onyx_server.io/category=SERVICE;onyx_server.io/severity=notice :eshmaki.me EVENT kain MEDIA PROFILE #root C codecs=cadencevox,cadencevis fec=rs_block"')).toMatchObject({
       kind: 'media',
       category: 'MEDIA',
       verb: 'PROFILE',
       channel: '#root',
       subject: 'C',
-      attrs: { codecs: 'kaguravox,kaguravis', fec: 'rs_block' },
+      attrs: { codecs: 'cadencevox,cadencevis', fec: 'rs_block' },
     });
   });
 
   it('preserves trailing quit reasons from wrapped disconnect events', () => {
-    const parsed = parseEventFeedText('irc: command "EVENT" not found: "@orochi.io/category=DISCONNECT;orochi.io/severity=notice :eshmaki.me EVENT kain USER DISCONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5 :Client quit"');
+    const parsed = parseEventFeedText('irc: command "EVENT" not found: "@onyx_server.io/category=DISCONNECT;onyx_server.io/severity=notice :eshmaki.me EVENT kain USER DISCONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5 :Client quit"');
 
     expect(parsed).toMatchObject({
       category: 'USER',
@@ -352,7 +352,7 @@ describe('parseIrcxLine — 806-810/825 EVENT', () => {
     expect(parsed.mask).toBe('*');
   });
 
-  it('parses requester-prefixed EVENT numerics from raw Orochi shape', () => {
+  it('parses requester-prefixed EVENT numerics from raw Onyx Server shape', () => {
     const parsed = parse('806', 'dbtA3950 MEDIA #root :Event added') as ParsedEvent;
 
     expect(parsed.type).toBe('event_add');
@@ -419,7 +419,7 @@ describe('parseIrcxLine — LIST/LISTX channel rows', () => {
     expect(parsed.topic).toBe('Topic text');
   });
 
-  it('parses Orochi LISTX 812 rows and the 817 end marker', () => {
+  it('parses Onyx Server LISTX 812 rows and the 817 end marker', () => {
     const parsed = parse('812', 'me #test 1 0 0 :mesh room') as ParsedChannelListRow;
 
     expect(parsed).toEqual({

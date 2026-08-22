@@ -1,12 +1,12 @@
-// IRCX / orochi extension store.
+// IRCX / Onyx Server extension store.
 //
-// Tracks which servers identified as orochi (gates IRCX features and bridge
+// Tracks which servers identified as Onyx Server (gates IRCX features and bridge
 // activation), channel PROPs, user profiles, ACCESS lists, bot/account tags,
 // MONITOR list and the IRCX side-panel targets.
 
 import { createStore, produce } from 'solid-js/store';
 import type { PropEntry, AccessEntry, UserProfile } from '@/lib/ircx/types';
-import type { OrochiServiceFeedback } from '@/lib/irc/serviceFeedback';
+import type { OnyxServerServiceFeedback } from '@/lib/irc/serviceFeedback';
 import { buffersState } from './buffers';
 import { sendTo } from './connection';
 
@@ -27,16 +27,16 @@ export interface ChannelListState {
   updatedAt: number | null;
 }
 
-export interface ServiceFeedbackEntry extends OrochiServiceFeedback {
+export interface ServiceFeedbackEntry extends OnyxServerServiceFeedback {
   serverName: string;
   receivedAt: number;
 }
 
 export interface IrcxState {
-  /** Server names that identified as orochi (via 004). */
-  orochiServers: Record<string, true>;
-  /** Detected direct Orochi WSS gateways keyed by relay server name. */
-  orochiGateways: Record<string, string>;
+  /** Server names that identified as Onyx Server (via 004). */
+  onyxServers: Record<string, true>;
+  /** Detected direct Onyx Server WSS gateways keyed by relay server name. */
+  onyxGateways: Record<string, string>;
   /** Channel properties: channel -> key(UPPER) -> value. */
   channelProps: Record<string, Record<string, string>>;
   /** User profiles keyed by nick. */
@@ -64,14 +64,14 @@ export interface IrcxState {
 
   /** Latest LIST/LISTX result set for the channel browser. */
   channelList: ChannelListState;
-  /** Bounded, session-only feedback from Orochi service commands. */
+  /** Bounded, session-only feedback from Onyx Server service commands. */
   serviceFeedback: ServiceFeedbackEntry[];
 }
 
 function initialState(): IrcxState {
   return {
-    orochiServers: {},
-    orochiGateways: {},
+    onyxServers: {},
+    onyxGateways: {},
     channelProps: {},
     userProfiles: {},
     accessLists: {},
@@ -138,23 +138,23 @@ function activeServerName(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Orochi detection
+// Onyx Server detection (API: markOnyxServer / isOnyxServer / isActiveOnyxServer)
 // ---------------------------------------------------------------------------
 
-export function markOrochi(serverName: string, wssGateway?: string): void {
-  setState('orochiServers', serverName, true);
-  if (wssGateway) setState('orochiGateways', serverName, wssGateway);
+export function markOnyxServer(serverName: string, wssGateway?: string): void {
+  setState('onyxServers', serverName, true);
+  if (wssGateway) setState('onyxGateways', serverName, wssGateway);
 }
 
-export function isOrochiServer(serverName?: string): boolean {
+export function isOnyxServer(serverName?: string): boolean {
   if (!serverName) return false;
-  return !!state.orochiServers[serverName];
+  return !!state.onyxServers[serverName];
 }
 
-/** True when the active buffer belongs to an orochi server. */
-export function isActiveOrochi(): boolean {
+/** True when the active buffer belongs to an Onyx Server. */
+export function isActiveOnyxServer(): boolean {
   const name = activeServerName();
-  return name !== '' && !!state.orochiServers[name];
+  return name !== '' && !!state.onyxServers[name];
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +383,7 @@ export function closeServicesPanel(): void {
 
 export function recordServiceFeedback(
   serverName: string,
-  feedback: OrochiServiceFeedback,
+  feedback: OnyxServerServiceFeedback,
   receivedAt = Date.now(),
 ): void {
   if (!serverName) return;
@@ -402,7 +402,7 @@ export function clearServiceFeedback(serverName?: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Services (orochi direct verbs: ACCOUNT, CHANNEL, MEMO)
+// Services (Onyx Server direct verbs: ACCOUNT, CHANNEL, MEMO)
 // ---------------------------------------------------------------------------
 
 export function sendAccount(cmd: string): boolean {

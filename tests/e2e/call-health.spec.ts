@@ -1,34 +1,34 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { KaguraCodec, encodeKaguraFrame } from '../../src/lib/suimyaku-media/kaguraFrame';
-import { mediaStreamId } from '../../src/lib/suimyaku-media/mediaStream';
+import { CadenceCodec, encodeCadenceFrame } from '../../src/lib/cadence-media/cadenceFrame';
+import { mediaStreamId } from '../../src/lib/cadence-media/mediaStream';
 import { waitForAssetVersionReady } from './fixtures/appReady';
-import { MockOrochiAccount } from './fixtures/orochiAccount';
+import { MockOnyxAccount } from './fixtures/onyxAccount';
 import { MockWeeChatRelay } from './fixtures/weechatRelay';
 import { installCallMedia } from './fixtures/callMedia';
 
 function audioFrame(sequence: number): Uint8Array {
-  return encodeKaguraFrame({
+  return encodeCadenceFrame({
     bandId: 64,
     streamId: mediaStreamId('#darkbear', 'alice', 'audio'),
     sequence,
     timestamp: Date.now(),
     keyframe: false,
-    codec: KaguraCodec.kaguravoxAudio,
+    codec: CadenceCodec.cadencevoxAudio,
     payload: new Uint8Array([1, 2, 3, 4]),
   });
 }
 
-test('surfaces loss, repairs reordering, and preserves one call pipeline across Orochi reconnect', async ({ page }, testInfo) => {
+test('surfaces loss, repairs reordering, and preserves one call pipeline across Onyx Server reconnect', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const relay = new MockWeeChatRelay();
-  const account = new MockOrochiAccount();
+  const account = new MockOnyxAccount();
   await Promise.all([relay.install(page), account.install(page), installCallMedia(page)]);
   await page.addInitScript(() => {
     localStorage.setItem('darkbear_settings_v2', JSON.stringify({
       bridge: {
         enabled: true,
-        wsUrl: 'wss://orochi.test/irc',
+        wsUrl: 'wss://onyx.test/irc',
         account: 'call-account',
         password: 'call-secret',
         autoJoinMedia: false,
@@ -81,7 +81,7 @@ test('surfaces loss, repairs reordering, and preserves one call pipeline across 
   expect(axe.violations.map((violation) => violation.id), JSON.stringify(axe.violations, null, 2)).toEqual([]);
 
   await account.disconnectLatest();
-  await expect(call.getByRole('status')).toContainText('Orochi bridge interrupted');
+  await expect(call.getByRole('status')).toContainText('Onyx Server bridge interrupted');
   await expect.poll(() => account.connectionCount, { timeout: 10_000 }).toBe(2);
   await expect.poll(() => account.saslMechanisms).toEqual(['PLAIN', 'SESSION-TOKEN']);
   await expect.poll(

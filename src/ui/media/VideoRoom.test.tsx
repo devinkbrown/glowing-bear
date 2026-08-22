@@ -191,13 +191,13 @@ describe('VideoRoom teardown', () => {
     expect(view.getByText('large caption')).toHaveClass('text-[18px]');
   });
 
-  it('explains a transient Orochi reconnect without ending the call surface', () => {
+  it('explains a transient Onyx Server reconnect without ending the call surface', () => {
     media.state.health.status = 'reconnecting';
     media.state.health.transportConnected = false;
     media.state.health.reconnectAttempt = 2;
     const view = render(() => <VideoRoom />);
     expect(view.getByRole('status')).toHaveTextContent(
-      'Orochi bridge interrupted. Keeping media active while reconnecting (attempt 2).',
+      'Onyx Server bridge interrupted. Keeping media active while reconnecting (attempt 2).',
     );
   });
 

@@ -6,7 +6,7 @@
 // Escape closes it AND restores focus to the trigger that opened it.
 //
 // matchMedia is stubbed to report a mobile viewport (min-width:1024px => false)
-// so the overlay-drawer branch renders. The direct-orochi bridge and the media
+// so the overlay-drawer branch renders. The direct-onyx-server bridge and the media
 // store are mocked away — they open sockets/timers this UI-shape suite does not
 // need.
 

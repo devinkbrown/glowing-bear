@@ -14,7 +14,7 @@ const encoder = new TextEncoder();
 const utf8Bytes = (text: string): number => encoder.encode(text).length;
 
 describe('parseMultilineLimits', () => {
-  it('parses the cap value orochi advertises in the live capture', () => {
+  it('parses the cap value Onyx Server advertises in the live capture', () => {
     // draft/multiline=max-bytes=4096,max-lines=24
     expect(parseMultilineLimits('max-bytes=4096,max-lines=24')).toEqual({
       maxBytes: 4096,

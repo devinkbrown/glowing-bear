@@ -251,7 +251,7 @@ export interface SaslSessionTokenNotice {
 }
 
 /**
- * Parse Orochi's TLS-only post-auth credential notice:
+ * Parse Onyx Server's TLS-only post-auth credential notice:
  * `:server NOTICE <nick> :SESSIONTOKEN <account> <sst_...> expires=<unix>`.
  *
  * This is deliberately distinct from `NOTE SESSION TOKEN` / `MTOKEN`, which
@@ -287,7 +287,7 @@ export function parseStandardReply(msg: IRCMessage): StandardReply | null {
 /**
  * Parsed key=value fields from an `ACCOUNTINFO` reply.
  *
- * Orochi answers `ACCOUNTINFO` with a server NOTICE in the shape
+ * Onyx Server answers `ACCOUNTINFO` with a server NOTICE in the shape
  * `account=<name> flags=<n>` (server.zig handleAccountInfo); some deployments
  * append `email=`, `secure=on|off`, `enforce=on|off`, and `registered=`.
  * We extract only the keys the server actually sent — absent keys stay
@@ -377,7 +377,7 @@ export function parseSessionTokenNote(msg: IRCMessage): string | null {
 }
 
 /**
- * Parse `:server NOTE SESSION MTOKEN :<token>` — Orochi's mesh-sealed reclaim
+ * Parse `:server NOTE SESSION MTOKEN :<token>` — Onyx Server's mesh-sealed reclaim
  * token, emitted alongside the local TOKEN on mesh deployments. Usable to
  * reclaim/redirect the session from any node via `SESSION RESUME <mtoken>`.
  */

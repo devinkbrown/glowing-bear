@@ -34,16 +34,16 @@ const TEMPORARY_MUTE_KEY = 'db-temporary-mutes';
 const MAX_TEMPORARY_MUTE_MS = 31 * 24 * 60 * 60 * 1000;
 
 // Ordered privilege tiers, highest first -- checked against nick.prefix.trim().
-// Covers orochi's PREFIX=(YQqov)*!.@+ (Y=* network-oper, Q=! founder,
+// Covers Onyx Server's PREFIX=(YQqov)*!.@+ (Y=* network-oper, Q=! founder,
 // q=. owner, o=@ op, v=+ voice) AND standard IRC (~ owner, & admin, @ op,
 // % halfop, + voice). A nick's WeeChat-relay prefix is its single highest
-// char; Founder (!) is ranked above Owner (~/.) so orochi channels group
+// char; Founder (!) is ranked above Owner (~/.) so Onyx Server channels group
 // correctly. Networks only ever use one prefix universe, so the interleaving
 // is harmless.
 const PREFIX_TIERS: { chars: Set<string>; label: string }[] = [
-  { chars: new Set(['*']),      label: 'Operator' }, // orochi network operator (Y)
-  { chars: new Set(['!']),      label: 'Founder' },  // orochi channel founder (Q)
-  { chars: new Set(['.', '~']), label: 'Owner' },    // orochi owner (q) / standard owner
+  { chars: new Set(['*']),      label: 'Operator' }, // Onyx Server network operator (Y)
+  { chars: new Set(['!']),      label: 'Founder' },  // Onyx Server channel founder (Q)
+  { chars: new Set(['.', '~']), label: 'Owner' },    // Onyx Server owner (q) / standard owner
   { chars: new Set(['&']),      label: 'Admin' },    // standard admin
   { chars: new Set(['@']),      label: 'Op' },       // op (o)
   { chars: new Set(['%']),      label: 'Halfop' },   // standard halfop
@@ -581,7 +581,7 @@ let sysLineCounter = 0;
 
 /**
  * Append a locally generated system notice to a buffer (never sent to the
- * relay). Used for things like "voice/video requires the orochi bridge".
+ * relay). Used for things like "voice/video requires the onyx-server bridge".
  */
 export function addLocalSystemLine(bufferPtr: string, text: string): void {
   const now = new Date();
@@ -868,7 +868,7 @@ export function pruneTemporaryMutes(now = Date.now()): void {
 
 /**
  * Policy aliases sent to the service worker. Full names preserve reconnect
- * identity; loaded short names let an Orochi push `{from}` or `{target}` match.
+ * identity; loaded short names let an Onyx Server push `{from}` or `{target}` match.
  */
 export function notificationMuteSnapshot(now = Date.now()): {
   mutedTargets: string[];

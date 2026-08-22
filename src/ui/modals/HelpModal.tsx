@@ -1,5 +1,5 @@
-// HelpModal — keyboard shortcuts, IRCX/orochi command reference, and the
-// orochi bridge voice/video commands.
+// HelpModal — keyboard shortcuts, IRCX/Onyx Server command reference, and the
+// Onyx Server bridge voice/video commands.
 //
 // Usage: <HelpModal open={uiState.activeModal === 'help'} onClose={closeModal} />
 // `open` defaults to true for conditional-mount usage.
@@ -38,7 +38,7 @@ const IRCX_COMMANDS = [
   { cmd: '/access #channel', desc: 'View IRCX access list' },
   { cmd: '/chaninfo [#channel]', desc: 'Open channel info panel' },
   { cmd: '/profile nick', desc: 'Open user profile card' },
-  { cmd: '/services', desc: 'Open Orochi account, channel, and memo services' },
+  { cmd: '/services', desc: 'Open Onyx Server account, channel, and memo services' },
   { cmd: '/monitor add|del nick', desc: 'MONITOR online tracking' },
   { cmd: '/pushset key value', desc: 'Configure push notifications' },
 ];
@@ -89,14 +89,14 @@ export default function HelpModal(props: Props) {
         </div>
 
         <div class="border-t border-white/[0.06] pt-4">
-          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">IRCX / orochi Commands</h3>
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">IRCX / Onyx Server Commands</h3>
           <CommandList items={IRCX_COMMANDS} />
         </div>
 
         <div class="border-t border-white/[0.06] pt-4">
-          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">Voice / Video (orochi bridge)</h3>
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">Voice / Video (Onyx Server bridge)</h3>
           <p class="text-[10px] text-gray-600 leading-relaxed mb-2">
-            These commands require the orochi bridge — enable it under Settings → Connection.
+            These commands require the Onyx Server bridge — enable it under Settings → Connection.
           </p>
           <CommandList items={BRIDGE_COMMANDS} />
         </div>

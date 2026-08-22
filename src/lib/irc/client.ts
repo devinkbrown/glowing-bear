@@ -27,9 +27,9 @@ export interface IRCClientOptions {
   realname?: string;
   username?: string;
   password?: string;     // SASL PLAIN password
-  saslSessionToken?: string; // Orochi sst_ account re-entry credential
-  sessionToken?: string; // Orochi SESSION RESUME token (local node)
-  meshToken?: string;    // Orochi mesh-sealed reclaim token (any node)
+  saslSessionToken?: string; // Onyx Server sst_ account re-entry credential
+  sessionToken?: string; // Onyx Server SESSION RESUME token (local node)
+  meshToken?: string;    // Onyx Server mesh-sealed reclaim token (any node)
   hasClientCert?: boolean;
   /** called for every parsed message */
   onMessage: IRCEventHandler;
@@ -40,7 +40,7 @@ export interface IRCClientOptions {
   onConnected?: (welcome: IRCMessage) => void;
   onDisconnected?: (reason: string) => void;
   onError?: (err: string) => void;
-  /** Called only when Orochi rejects the token; true means password fallback starts. */
+  /** Called only when Onyx Server rejects the token; true means password fallback starts. */
   onSaslSessionTokenRejected?: (willRetryWithPassword: boolean) => void;
   onNickChanged?: (newNick: string) => void;
   /**
@@ -155,12 +155,12 @@ export class IRCClient {
   public binaryHandlers: Set<(data: Uint8Array) => void> = new Set();
 
   isupport: ISupport = {
-    // Defaults mirror Orochi's ISUPPORT PREFIX=(YQqov)*!.@+ (founder Q/'!',
+    // Defaults mirror Onyx Server's ISUPPORT PREFIX=(YQqov)*!.@+ (founder Q/'!',
     // owner q/'.', op o/'@', voice v/'+', plus the render-only oper Y/'*').
     // Overwritten verbatim from 005 PREFIX on connect.
     PREFIX: { Y: '*', Q: '!', q: '.', o: '@', v: '+' },
     PREFIX_MODES: { '*': 'Y', '!': 'Q', '.': 'q', '@': 'o', '+': 'v' },
-    // Orochi defaults (overwritten from 005 on connect):
+    // Onyx Server defaults (overwritten from 005 on connect):
     //   CHANMODES=beIZ,k,lfj,imnstCTNMSgWOA, CHANTYPES=#&, CASEMAPPING=ascii,
     //   NICKLEN=64, TOPICLEN=390, CHANLIMIT=#&:50, MONITOR=128, SILENCE=32.
     CHANMODES: ['beIZ', 'k', 'lfj', 'imnstCTNMSgWOA'],
@@ -177,9 +177,9 @@ export class IRCClient {
     VAPID: '',           // VAPID=<key> — Web Push server key (empty = push off)
   };
 
-  /** Map prefix char → mode letter, e.g. '@' → 'o'. Orochi: (YQqov)*!.@+ */
+  /** Map prefix char → mode letter, e.g. '@' → 'o'. Onyx Server: (YQqov)*!.@+ */
   prefixToMode: Record<string, string> = { '*': 'Y', '!': 'Q', '.': 'q', '@': 'o', '+': 'v' };
-  /** Map mode letter → prefix char (used for display). Orochi: (YQqov)*!.@+ */
+  /** Map mode letter → prefix char (used for display). Onyx Server: (YQqov)*!.@+ */
   modeToPrefix: Record<string, string> = { Y: '*', Q: '!', q: '.', o: '@', v: '+' };
 
   constructor(opts: IRCClientOptions) {
@@ -300,7 +300,7 @@ export class IRCClient {
     return this._loggedIn;
   }
 
-  /** Use a freshly issued Orochi re-entry credential on the next reconnect. */
+  /** Use a freshly issued Onyx Server re-entry credential on the next reconnect. */
   setSaslSessionToken(token: string | undefined): void {
     this.opts.saslSessionToken = token;
   }
@@ -403,7 +403,7 @@ export class IRCClient {
    * Run a server LIST and collect the reply into rows.
    *
    * Sends `LIST`, accumulates 322 RPL_LIST rows until 323 RPL_LISTEND, then
-   * resolves. Orochi merges mesh-wide results server-side, so a single LIST
+   * resolves. Onyx Server merges mesh-wide results server-side, so a single LIST
    * yields the whole network. A timeout guard resolves with whatever has been
    * collected if the end numeric never arrives (e.g. disconnect mid-reply).
    * Concurrent callers share the same in-flight request.
@@ -428,12 +428,12 @@ export class IRCClient {
   }
 
   /**
-   * True when the server ACKed `orochi/session-sync`. When active, the server
+   * True when the server ACKed `onyx/session-sync`. When active, the server
    * drives session reclaim (auto JOIN + NAMES/topic + CHATHISTORY replay) on
    * (re)connect, so the client must suppress its own blind autojoin storm.
    */
   get sessionSyncActive(): boolean {
-    return this.negotiatedCaps.has('orochi/session-sync');
+    return this.negotiatedCaps.has('onyx/session-sync');
   }
 
   // ── Internals ───────────────────────────────────────────────────────────
@@ -476,8 +476,8 @@ export class IRCClient {
     const data = typeof ev.data === 'string' ? ev.data : '';
     if (!data) return;
 
-    // Orochi follows the IRCv3 WebSocket sub-protocol: each frame carries a
-    // complete IRC message and the trailing CRLF is OPTIONAL — Orochi omits it
+    // Onyx Server follows the IRCv3 WebSocket sub-protocol: each frame carries a
+    // complete IRC message and the trailing CRLF is OPTIONAL — Onyx Server omits it
     // entirely (e.g. ":eshmaki.me CAP * LS :..." with no newline). The browser
     // reassembles continuation frames, so every onmessage delivers whole
     // message(s), never a partial line. We split on optional CR/LF and process
@@ -500,7 +500,7 @@ export class IRCClient {
         this._handleMessage(msg);
       } catch (e) {
         // A malformed line must not abort processing of the rest of the frame.
-        console.warn('[orochi] failed to handle IRC line:', line, e);
+        console.warn('[onyx] failed to handle IRC line:', line, e);
       }
     }
   }
@@ -516,7 +516,7 @@ export class IRCClient {
   private _onClose(ev: CloseEvent) {
     this._clearPingTimers();
     const reason = ev.reason || `code ${ev.code}`;
-    console.warn('[orochi] ws closed — code:', ev.code, 'reason:', ev.reason || '(none)', 'wasClean:', ev.wasClean);
+    console.warn('[onyx] ws closed — code:', ev.code, 'reason:', ev.reason || '(none)', 'wasClean:', ev.wasClean);
     this.opts.onDisconnected?.(reason);
     // Reconnect is owned exclusively by the store (bounded attempts, gated on
     // autoReconnect, with the UI countdown). The client must NOT also schedule
@@ -525,7 +525,7 @@ export class IRCClient {
   }
 
   private _onError(ev: Event) {
-    console.error('[orochi] ws error:', ev);
+    console.error('[onyx] ws error:', ev);
     this.opts.onError?.('WebSocket error');
   }
 
@@ -674,7 +674,7 @@ export class IRCClient {
         break;
       }
 
-      // NOTE: 903/904/905 are reused by Orochi's IRCX layer post-registration
+      // NOTE: 903/904/905 are reused by Onyx Server's IRCX layer post-registration
       // (903=ERR_BADLEVEL, 904=ERR_BADTAG, 905=ERR_BADPROPERTY). Only treat them
       // as the SASL result numerics while a SASL exchange is actually in flight
       // (pre-registration). Otherwise they must pass through to the store as
@@ -688,7 +688,7 @@ export class IRCClient {
           this._scramState = null;
           this._scramServerSig = null;
           // NOTE: SESSION RESUME / SESSION TOKEN are deliberately NOT sent here.
-          // Orochi's SESSION command requires a registered connection (it checks
+          // Onyx Server's SESSION command requires a registered connection (it checks
           // session.account() and lives in the post-registration command path),
           // so it is issued after 001 (see the '001' case below). Sending it
           // during CAP/SASL would be rejected as a pre-registration command.
@@ -707,7 +707,7 @@ export class IRCClient {
           this._scramState = null;
           this._scramServerSig = null;
           if (rejectedSessionToken) {
-            this.opts.onError?.('Orochi session token was rejected; enter the account password to reconnect.');
+            this.opts.onError?.('Onyx Server session token was rejected; enter the account password to reconnect.');
             this.ws?.close(4003, 'SASL session token rejected');
             break;
           }
@@ -903,7 +903,7 @@ export class IRCClient {
       // STARTTLS upgrade: DarkBear already uses WSS; requesting this is wrong.
       if (cap === 'tls') return false;
       // sts (Strict Transport Security): an informational cap whose value is the
-      // transport policy. It is advertised, not negotiated — Orochi NAKs a REQ
+      // transport policy. It is advertised, not negotiated — Onyx Server NAKs a REQ
       // for it. The TLS upgrade is already implicit in the wss:// endpoint.
       if (cap === 'sts') return false;
       // SASL: only request when we have credentials to send.
@@ -939,7 +939,7 @@ export class IRCClient {
       // account's clients. Only sent post-negotiation; harmless when unacked.
       if (cap === 'draft/read-marker') return true;
 
-      // orochi/session-sync: server-driven session reclaim. When ACKed, the
+      // onyx/session-sync: server-driven session reclaim. When ACKed, the
       // server auto-pushes JOIN + NAMES/topic + CHATHISTORY replay for every
       // channel the account's session is live in, so the client must NOT run
       // its own blind autojoin storm. Always request it when offered; the

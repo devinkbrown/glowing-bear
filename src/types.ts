@@ -82,7 +82,7 @@ export interface UserCommandAction {
 
 export type LocalePreference = 'system' | 'en' | 'de' | 'ar';
 
-/** Direct orochi WS session settings (voice/video, typing, reactions, E2EE). */
+/** Direct Onyx Server WS session settings (voice/video, typing, reactions, E2EE). */
 export interface BridgeSettings {
   enabled: boolean;
   /** Bridge WebSocket URL. '' = auto node probing. */
@@ -233,9 +233,9 @@ export interface Reaction {
 }
 
 /** Nicklist privilege tier labels, in display order. */
-// Privilege tiers spanning orochi (PREFIX=(YQqov)*!.@+ → * ! . @ +) and
+// Privilege tiers spanning Onyx Server (PREFIX=(YQqov)*!.@+ → * ! . @ +) and
 // standard IRC (qaohv → ~ & @ % +). Operator (*) and Founder (!) are
-// orochi-specific; the rest are shared.
+// Onyx Server-specific; the rest are shared.
 export type NickTier =
   | 'Operator'
   | 'Founder'

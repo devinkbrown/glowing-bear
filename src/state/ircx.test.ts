@@ -1,4 +1,4 @@
-// Tests for the IRCX / orochi extension store — orochi flags, PROP/ACCESS
+// Tests for the IRCX / Onyx Server extension store — Onyx Server flags, PROP/ACCESS
 // list assembly, bot/account tags, panels, MONITOR, and raw /quote plumbing.
 //
 // The connection module is mocked so sendTo can be spied without a relay.
@@ -30,9 +30,9 @@ import { sendTo } from './connection';
 import { clearBuffers, upsertBuffer, setActiveBuffer } from './buffers';
 import {
   ircxState,
-  markOrochi,
-  isOrochiServer,
-  isActiveOrochi,
+  markOnyxServer,
+  isOnyxServer,
+  isActiveOnyxServer,
   requestProps,
   setProp,
   addPropEntry,
@@ -135,70 +135,70 @@ describe('ircx store', () => {
     vi.useRealTimers();
   });
 
-  describe('orochi detection', () => {
-    it('markOrochi flags a server and isOrochiServer looks it up', () => {
-      expect(isOrochiServer('esh')).toBe(false);
+  describe('Onyx Server detection', () => {
+    it('markOnyxServer flags a server and isOnyxServer looks it up', () => {
+      expect(isOnyxServer('esh')).toBe(false);
 
-      markOrochi('esh', 'wss://eshmaki.me:8080');
+      markOnyxServer('esh', 'wss://eshmaki.me:8080');
 
-      expect(isOrochiServer('esh')).toBe(true);
-      expect(ircxState.orochiGateways['esh']).toBe('wss://eshmaki.me:8080');
-      expect(isOrochiServer('other')).toBe(false);
-      expect(isOrochiServer(undefined)).toBe(false);
-      expect(isOrochiServer('')).toBe(false);
+      expect(isOnyxServer('esh')).toBe(true);
+      expect(ircxState.onyxGateways['esh']).toBe('wss://eshmaki.me:8080');
+      expect(isOnyxServer('other')).toBe(false);
+      expect(isOnyxServer(undefined)).toBe(false);
+      expect(isOnyxServer('')).toBe(false);
     });
 
-    it('isActiveOrochi is true only when the active buffer belongs to an orochi server', () => {
-      expect(isActiveOrochi()).toBe(false);
+    it('isActiveOnyxServer is true only when the active buffer belongs to an Onyx Server', () => {
+      expect(isActiveOnyxServer()).toBe(false);
 
-      markOrochi('esh');
-      expect(isActiveOrochi()).toBe(true);
+      markOnyxServer('esh');
+      expect(isActiveOnyxServer()).toBe(true);
 
-      // Active buffer on a different, non-orochi server
+      // Active buffer on a different, non-Onyx Server
       upsertBuffer(makeBuffer('ptr-other', {
         number: 3,
         localVars: { type: 'channel', server: 'freenode', channel: '#x' },
       }));
       setActiveBuffer('ptr-other');
-      expect(isActiveOrochi()).toBe(false);
+      expect(isActiveOnyxServer()).toBe(false);
     });
 
-    it('isActiveOrochi is false with no active buffer', () => {
-      markOrochi('esh');
+    it('isActiveOnyxServer is false with no active buffer', () => {
+      markOnyxServer('esh');
       clearBuffers();
 
-      expect(isActiveOrochi()).toBe(false);
+      expect(isActiveOnyxServer()).toBe(false);
     });
 
-    it('isActiveOrochi falls back to the active buffer network name', () => {
+    it('isActiveOnyxServer falls back to the active buffer network name', () => {
       clearBuffers();
       upsertBuffer(makeBuffer('ptr-network-only', {
         number: 4,
         localVars: { type: 'channel', network: 'meshnet', channel: '#mesh' },
       }));
       setActiveBuffer('ptr-network-only');
-      markOrochi('meshnet');
+      markOnyxServer('meshnet');
 
-      expect(isActiveOrochi()).toBe(true);
+      expect(isActiveOnyxServer()).toBe(true);
     });
 
-    it('isActiveOrochi is false when the active buffer has no server identity', () => {
+    it('isActiveOnyxServer is false when the active buffer has no server identity', () => {
       upsertBuffer(makeBuffer('ptr-no-server-id', {
         number: 5,
         localVars: { type: 'channel', channel: '#floating' },
       }));
       setActiveBuffer('ptr-no-server-id');
-      markOrochi('esh');
+      markOnyxServer('esh');
 
-      expect(isActiveOrochi()).toBe(false);
+      expect(isActiveOnyxServer()).toBe(false);
     });
 
-    it('isOrochiServer treats empty or undefined server names as non-matches', () => {
-      markOrochi('');
+    it('isOnyxServer treats empty or undefined server names as non-matches', () => {
+      markOnyxServer('');
 
-      expect(isOrochiServer('')).toBe(false);
-      expect(isOrochiServer(undefined)).toBe(false);
-      expect(ircxState.orochiServers['']).toBe(true);
+      expect(isOnyxServer('')).toBe(false);
+      expect(isOnyxServer(undefined)).toBe(false);
+      expect(ircxState.onyxServers['']).toBe(true);
     });
   });
 
@@ -440,7 +440,7 @@ describe('ircx store', () => {
       expect(sendToMock).toHaveBeenCalledWith(SRV, '/quote LIST #d* >1,<25');
     });
 
-    it('requestChannelList can use Orochi LISTX', () => {
+    it('requestChannelList can use Onyx Server LISTX', () => {
       requestChannelList({ extended: true });
 
       expect(ircxState.channelList.extended).toBe(true);
@@ -648,7 +648,7 @@ describe('ircx store', () => {
 
   describe('clearIrcx', () => {
     it('resets every slice of the store', () => {
-      markOrochi('esh');
+      markOnyxServer('esh');
       requestProps('#general');
       addPropEntry({ target: '#general', key: 'TOPIC', value: 'x' });
       requestAccess('#general');
@@ -662,8 +662,8 @@ describe('ircx store', () => {
 
       clearIrcx();
 
-      expect(ircxState.orochiServers).toEqual({});
-      expect(ircxState.orochiGateways).toEqual({});
+      expect(ircxState.onyxServers).toEqual({});
+      expect(ircxState.onyxGateways).toEqual({});
       expect(ircxState.channelProps).toEqual({});
       expect(ircxState.userProfiles).toEqual({});
       expect(ircxState.accessLists).toEqual({});

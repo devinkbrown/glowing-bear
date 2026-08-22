@@ -6,10 +6,10 @@ import {
   encodePreferenceMetadata,
 } from '../../src/lib/preferences/sync';
 import { waitForAssetVersionReady } from './fixtures/appReady';
-import { MockOrochiAccount } from './fixtures/orochiAccount';
+import { MockOnyxAccount } from './fixtures/onyxAccount';
 import { MockWeeChatRelay } from './fixtures/weechatRelay';
 
-test('merges account preferences and publishes local changes through Orochi metadata', async ({ page }, testInfo) => {
+test('merges account preferences and publishes local changes through Onyx Server metadata', async ({ page }, testInfo) => {
   const remote = createPreferenceDocument({
     appearance: { theme: 'nord' },
     accessibility: {
@@ -19,14 +19,14 @@ test('merges account preferences and publishes local changes through Orochi meta
     buffers: { 'irc.fixture.#darkbear': { pinned: true, notify: 'all' } },
     read: { '#darkbear': 1_700_000_000_000 },
   }, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 1000, 10);
-  const account = new MockOrochiAccount(encodePreferenceMetadata(remote));
+  const account = new MockOnyxAccount(encodePreferenceMetadata(remote));
   const relay = new MockWeeChatRelay();
   await Promise.all([account.install(page), relay.install(page)]);
   await page.addInitScript(() => {
     localStorage.setItem('darkbear_settings_v2', JSON.stringify({
       bridge: {
         enabled: true,
-        wsUrl: 'wss://orochi.test/irc',
+        wsUrl: 'wss://onyx.test/irc',
         account: 'e2e-account',
         password: 'bridge-account-secret',
         autoJoinMedia: false,

@@ -2,8 +2,8 @@
 //
 // Owns the relay client lifecycle (connect/disconnect/reconnect), the 15s
 // ping loop and lag, oper detection, the lineAdded pipeline (TAGMSG typing/
-// reactions, IRCX numerics, orochi detection, notifications), slash-command
-// routing, and the seams the orochi bridge plugs into (MediaCommandSink,
+// reactions, IRCX numerics, Onyx Server detection, notifications), slash-command
+// routing, and the seams the Onyx Server bridge plugs into (MediaCommandSink,
 // RelayObserver).
 
 import { createSignal } from 'solid-js';
@@ -41,8 +41,8 @@ import { shouldNotify } from '@/lib/notifyDecision';
 import { notificationPolicyAllows } from '@/lib/notificationPolicy';
 import { recordDiagnosticEvent } from '@/lib/diagnosticsEvents';
 import { isChannelListNumeric, isIrcxNumeric, parseIrcxLine, buildPropEntry } from '@/lib/ircx/parser';
-import { NODES, wssUrlForOrochiHost } from '@/lib/irc/nodes';
-import { parseOrochiServiceFeedback } from '@/lib/irc/serviceFeedback';
+import { NODES, wssUrlForOnyxHost } from '@/lib/irc/nodes';
+import { parseOnyxServiceFeedback } from '@/lib/irc/serviceFeedback';
 import type { BufferEntry } from '@/types';
 import { settings } from './settings';
 import {
@@ -74,9 +74,9 @@ import {
 import { threadsState } from './threads';
 import { recordLineActivity } from './activity';
 import {
-  markOrochi,
-  isOrochiServer,
-  isActiveOrochi,
+  markOnyxServer,
+  isOnyxServer,
+  isActiveOnyxServer,
   addPropEntry,
   finishPropList,
   addAccessEntry,
@@ -101,9 +101,9 @@ import {
 
 const PING_INTERVAL_MS = 15_000;
 const QUERY_PENDING_TIMEOUT_MS = 10_000;
-const OROCHI_RE = /\borochi\b/i;
-const BRIDGE_REQUIRED_MSG = 'voice/video requires the orochi bridge (enable in Settings → Bridge)';
-const OROCHI_HOSTS = new Set(NODES.map((node) => node.host.toLowerCase()));
+const ONYX_RE = /\bonyx(?:-server)?\b/i;
+const BRIDGE_REQUIRED_MSG = 'voice/video requires the onyx-server bridge (enable in Settings → Bridge)';
+const ONYX_HOSTS = new Set(NODES.map((node) => node.host.toLowerCase()));
 
 // ---------------------------------------------------------------------------
 // Bridge seams
@@ -125,11 +125,11 @@ export function setMediaSink(sink: MediaCommandSink | null): void {
 
 /** Hooks the bridge uses to follow relay-side discoveries. */
 export type RelayObserver = {
-  /** A channel buffer opened on a server already known to be orochi (also
+  /** A channel buffer opened on a server already known to be Onyx Server (also
    * replayed for pre-existing channels the moment a server is detected). */
   onChannelBufferOpened?(serverName: string, channel: string): void;
-  /** A server identified as orochi via 004 (live or from history replay). */
-  onOrochiDetected?(serverName: string, wssGateway?: string): void;
+  /** A server identified as Onyx Server via 004 (live or from history replay). */
+  onOnyxServerDetected?(serverName: string, wssGateway?: string): void;
 };
 
 let relayObserver: RelayObserver | null = null;
@@ -364,29 +364,29 @@ function detectOperFromLine(line: WeeChatLine, entry: BufferEntry): void {
 }
 
 // ---------------------------------------------------------------------------
-// Orochi detection
+// Onyx Server detection (API: markOnyxServer / isOnyxServer / onOnyxServerDetected)
 // ---------------------------------------------------------------------------
 
-function orochiGatewayFromMyinfo(message: string): string | undefined {
+function onyxGatewayFromMyinfo(message: string): string | undefined {
   const parts = stripCodes(message).split(/\s+/).filter(Boolean);
   const host = parts[1] ?? '';
-  return wssUrlForOrochiHost(host) ?? undefined;
+  return wssUrlForOnyxHost(host) ?? undefined;
 }
 
-function isOrochiMyinfo(message: string): boolean {
+function isOnyxMyinfo(message: string): boolean {
   const plain = stripCodes(message);
-  if (OROCHI_RE.test(plain)) return true;
+  if (ONYX_RE.test(plain)) return true;
   const parts = plain.split(/\s+/).filter(Boolean);
   const host = parts[1]?.toLowerCase() ?? '';
-  return OROCHI_HOSTS.has(host);
+  return ONYX_HOSTS.has(host);
 }
 
-function detectOrochiForEntry(entry: BufferEntry, line?: WeeChatLine): void {
+function detectOnyxForEntry(entry: BufferEntry, line?: WeeChatLine): void {
   const sn = entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
-  if (!sn || isOrochiServer(sn)) return;
-  const gateway = line ? orochiGatewayFromMyinfo(line.message) : undefined;
-  markOrochi(sn, gateway);
-  relayObserver?.onOrochiDetected?.(sn, gateway);
+  if (!sn || isOnyxServer(sn)) return;
+  const gateway = line ? onyxGatewayFromMyinfo(line.message) : undefined;
+  markOnyxServer(sn, gateway);
+  relayObserver?.onOnyxServerDetected?.(sn, gateway);
   // Replay channel-opened notifications for channels that existed before
   // detection so the bridge sees the full channel set.
   for (const e of Object.values(buffersState.buffers)) {
@@ -519,17 +519,17 @@ function handleLineAdded(line: WeeChatLine): void {
     setAccount(line.nick, line.account);
   }
 
-  // Orochi server detection via RPL_MYINFO (004)
-  if (line.tags.includes('irc_004') && isOrochiMyinfo(line.message)) {
+  // Onyx Server detection via RPL_MYINFO (004)
+  if (line.tags.includes('irc_004') && isOnyxMyinfo(line.message)) {
     const bufEntry = buffersState.buffers[line.buffer];
-    if (bufEntry) detectOrochiForEntry(bufEntry, line);
+    if (bufEntry) detectOnyxForEntry(bufEntry, line);
   }
 
   const entry = buffersState.buffers[line.buffer];
   if (!entry) return;
 
   // Service commands are sent to the relay's server buffer. Mirror only
-  // narrowly recognised Orochi replies into the services panel; the parser
+  // narrowly recognised Onyx Server replies into the services panel; the parser
   // deliberately rejects unrelated notices and SESSIONTOKEN credentials.
   if (entry.buffer.localVars['type'] === 'server') {
     const serverName = entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
@@ -540,8 +540,8 @@ function handleLineAdded(line: WeeChatLine): void {
     // user-authored NOTICE merely because WeeChat rendered it in this buffer.
     const source = (line.nick ?? '').trim().toLowerCase();
     const serverSource = source.includes('.');
-    if (isOrochiServer(serverName) && serverSource) {
-      const feedback = parseOrochiServiceFeedback(stripCodes(line.message), line.tags);
+    if (isOnyxServer(serverName) && serverSource) {
+      const feedback = parseOnyxServiceFeedback(stripCodes(line.message), line.tags);
       if (feedback) recordServiceFeedback(serverName, feedback, line.date.getTime());
     }
   }
@@ -563,7 +563,7 @@ function handleLineAdded(line: WeeChatLine): void {
   recordLineActivity(
     entry,
     line,
-    isOperBuffer(line.buffer) && line.tags.some((tag) => tag === 'irc_wallops' || tag === 'orochi_oper_alert'),
+    isOperBuffer(line.buffer) && line.tags.some((tag) => tag === 'irc_wallops' || tag === 'onyx_oper_alert'),
   );
 
   // Coalesce the store insert into the current frame's batch (flushed on a
@@ -692,10 +692,10 @@ export function connect(): void {
           setActiveBuffer(buffer.id);
         }
       }
-      // Bridge hook: channel buffer opened on a known-orochi server
+      // Bridge hook: channel buffer opened on a known Onyx Server
       if (buffer.localVars['type'] === 'channel') {
         const sn = buffer.localVars['server'] ?? buffer.localVars['network'] ?? '';
-        if (sn && isOrochiServer(sn)) {
+        if (sn && isOnyxServer(sn)) {
           const channel = buffer.localVars['channel'] ?? buffer.shortName ?? buffer.name;
           relayObserver?.onChannelBufferOpened?.(sn, channel);
         }
@@ -755,12 +755,12 @@ export function connect(): void {
             if (operState.operServers[srvPtr]) break;
           }
         }
-        // Scan history for orochi 004 (registration replay after reconnect)
+        // Scan history for Onyx Server 004 (registration replay after reconnect)
         const sn = entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
-        if (sn && !isOrochiServer(sn)) {
+        if (sn && !isOnyxServer(sn)) {
           for (const line of lines) {
-            if (line.tags.includes('irc_004') && isOrochiMyinfo(line.message)) {
-              detectOrochiForEntry(entry, line);
+            if (line.tags.includes('irc_004') && isOnyxMyinfo(line.message)) {
+              detectOnyxForEntry(entry, line);
               break;
             }
           }
@@ -852,7 +852,7 @@ function withMediaSink(target: string, fn: (sink: MediaCommandSink) => void): vo
 /**
  * Send user input to a buffer (default: active buffer). Slash commands are
  * routed: /clear locally; media commands to the MediaCommandSink; IRCX
- * commands (orochi servers only) to the ircx store; /monitor anywhere;
+ * commands (Onyx Server only) to the ircx store; /monitor anywhere;
  * everything else to the relay. Plain messages get an optimistic local echo.
  */
 export function sendInput(text: string, pointer?: string): boolean {
@@ -863,7 +863,7 @@ export function sendInput(text: string, pointer?: string): boolean {
     const parts = text.split(/\s+/);
     const cmd = (parts[0] ?? '').toLowerCase();
 
-    // Media commands — routed through the orochi bridge sink
+    // Media commands — routed through the Onyx Server bridge sink
     if (cmd === '/call' || cmd === '/videocall') {
       const nick = parts[1];
       if (nick) withMediaSink(target, (sink) => sink.startCall(nick, true));
@@ -892,8 +892,8 @@ export function sendInput(text: string, pointer?: string): boolean {
       clearLines(target);
       return true;
     }
-    // IRCX client-side commands (orochi servers only)
-    if (isActiveOrochi()) {
+    // IRCX client-side commands (Onyx Server only)
+    if (isActiveOnyxServer()) {
       if (cmd === '/whisper' || cmd === '/w') {
         const channel = buffersState.buffers[target]?.buffer.localVars['channel'];
         const nick = parts[1];

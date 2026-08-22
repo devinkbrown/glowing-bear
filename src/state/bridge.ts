@@ -1,4 +1,4 @@
-// Bridge store — status/identity of the direct orochi WS session, plus the
+// Bridge store — status/identity of the direct Onyx Server WS session, plus the
 // UI-facing bridge API: typing, reaction tags, read-marker sync, E2EE DMs.
 //
 // This module owns only the reactive state and the API surface. The socket
@@ -65,7 +65,7 @@ export interface BridgeBackend {
   ready(): boolean;
   /** Our current nick on the bridge session, or null. */
   ownNick(): string | null;
-  /** Orochi target (channel, or DM nick) for a relay buffer pointer, or null. */
+  /** Onyx Server target (channel, or DM nick) for a relay buffer pointer, or null. */
   targetForBuffer(bufferPtr: string): string | null;
   sendTagmsg(target: string, tags: Record<string, string>): boolean;
   sendPrivmsg(target: string, text: string): boolean;
@@ -84,7 +84,7 @@ export function _setBridgeBackend(b: BridgeBackend | null): void {
 }
 
 const BRIDGE_REQUIRED_MSG =
-  'voice/video requires the orochi bridge (enable in Settings → Bridge)';
+  'voice/video requires the onyx-server bridge (enable in Settings → Bridge)';
 
 /**
  * Run an action once the bridge session is ready. Connects on demand when the
@@ -104,7 +104,7 @@ export function bridgeRun(action: () => void): void {
 // Typing / reactions / read markers
 // ---------------------------------------------------------------------------
 
-/** Send a `@+typing=<state>` TAGMSG to the buffer's mapped orochi target. */
+/** Send a `@+typing=<state>` TAGMSG to the buffer's mapped Onyx Server target. */
 export function sendTyping(bufferPtr: string, state: 'active' | 'paused' | 'done'): void {
   if (!backend?.ready()) return;
   const target = backend.targetForBuffer(bufferPtr);
@@ -175,7 +175,7 @@ export function dmSecurityFor(nick: string): DmPeerSecurity {
   return dmSecurity[nick.toLowerCase()] ?? { ...EMPTY_DM_SECURITY, nick };
 }
 
-/** Internal: scope trust pins to the authenticated Orochi endpoint and account. */
+/** Internal: scope trust pins to the authenticated Onyx Server endpoint and account. */
 export function _setBridgeCryptoScope(scope: string | null): void {
   bridgeCryptoScope = scope?.trim() ?? '';
   for (const [nick, key] of Object.entries(peerKeys)) void resolvePeerSecurity(nick, key);
@@ -344,7 +344,7 @@ export function canE2ee(nick: string): boolean {
   return peerKeys[nick.toLowerCase()] !== undefined;
 }
 
-/** Ask Orochi for the peer's current published device key. */
+/** Ask Onyx Server for the peer's current published device key. */
 export function refreshPeerDmKey(nick: string): void {
   if (backend?.ready() && nick.trim()) backend.requestPeerDmKey(nick);
 }

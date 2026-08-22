@@ -35,11 +35,11 @@ function normalizeHost(raw: string): string | null {
 }
 
 /**
- * Orochi's browser gateway is the node's WSS listener on :8080. The relay 004
+ * Onyx Server's browser gateway is the node's WSS listener on :8080. The relay 004
  * gives us the concrete server host, so synthesize a bridge endpoint from that
  * instead of relying only on the baked-in public node list.
  */
-export function wssUrlForOrochiHost(rawHost: string): string | null {
+export function wssUrlForOnyxHost(rawHost: string): string | null {
   const raw = rawHost.trim();
   if (!raw) return null;
   try {

@@ -40,7 +40,7 @@ import {
   saveCredentials,
 } from './credentials';
 
-describe('desktop Orochi credential repository', () => {
+describe('desktop Onyx Server credential repository', () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -52,11 +52,11 @@ describe('desktop Orochi credential repository', () => {
   it('merges OS-vault passwords while keeping localStorage secret-free', async () => {
     localStorage.setItem('darkbear:credentials', JSON.stringify({
       version: 2,
-      activeKey: 'wss://orochi.example|kain',
+      activeKey: 'wss://onyx.example|kain',
       entries: {
-        'wss://orochi.example|kain': {
+        'wss://onyx.example|kain': {
           nick: 'kain',
-          server: 'wss://orochi.example',
+          server: 'wss://onyx.example',
           rememberPassword: true,
           savedAt: '2026-07-16T00:00:00.000Z',
         },
@@ -64,19 +64,19 @@ describe('desktop Orochi credential repository', () => {
     }));
     vault.get.mockResolvedValue(JSON.stringify({
       version: 1,
-      passwords: { 'wss://orochi.example|kain': 'vault-secret' },
+      passwords: { 'wss://onyx.example|kain': 'vault-secret' },
     }));
 
     await hydrateDesktopCredentialPasswords();
 
-    expect(loadCredentials('wss://orochi.example', 'kain')?.password).toBe('vault-secret');
+    expect(loadCredentials('wss://onyx.example', 'kain')?.password).toBe('vault-secret');
     const local = JSON.parse(localStorage.getItem('darkbear:credentials') ?? '{}') as {
       entries?: Record<string, { password?: string }>;
     };
-    expect(local.entries?.['wss://orochi.example|kain']?.password).toBeUndefined();
+    expect(local.entries?.['wss://onyx.example|kain']?.password).toBeUndefined();
     const session = JSON.parse(sessionStorage.getItem('darkbear:tokens') ?? '{}') as
       Record<string, { password?: string }>;
-    expect(session['wss://orochi.example|kain']?.password).toBe('vault-secret');
+    expect(session['wss://onyx.example|kain']?.password).toBe('vault-secret');
     expect(vault.set).toHaveBeenCalledWith(
       'credentials-v1',
       expect.stringContaining('vault-secret'),
@@ -84,10 +84,10 @@ describe('desktop Orochi credential repository', () => {
 
     saveCredentials({
       nick: 'kain',
-      server: 'wss://orochi.example',
+      server: 'wss://onyx.example',
       password: 'replacement',
       rememberPassword: true,
     });
-    expect(loadCredentials('wss://orochi.example', 'kain')?.password).toBe('replacement');
+    expect(loadCredentials('wss://onyx.example', 'kain')?.password).toBe('replacement');
   });
 });

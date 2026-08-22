@@ -1,4 +1,4 @@
-import type { SuimyakuTranscriptEntry } from '@/lib/suimyaku-media/types';
+import type { CadenceTranscriptEntry } from '@/lib/cadence-media/types';
 
 function safeFilenamePart(value: string): string {
   const cleaned = value.normalize('NFKC').replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '');
@@ -6,7 +6,7 @@ function safeFilenamePart(value: string): string {
 }
 
 export function formatCallTranscript(
-  entries: readonly SuimyakuTranscriptEntry[],
+  entries: readonly CadenceTranscriptEntry[],
   locale?: string,
 ): string {
   return entries.map((entry) => {
@@ -26,7 +26,7 @@ export function transcriptFilename(scope: string, now = new Date()): string {
 
 /** User-initiated, current-call export. No background file or cloud write occurs. */
 export function downloadCallTranscript(
-  entries: readonly SuimyakuTranscriptEntry[],
+  entries: readonly CadenceTranscriptEntry[],
   scope: string,
 ): boolean {
   if (entries.length === 0 || typeof document === 'undefined' || typeof URL === 'undefined') return false;

@@ -18,19 +18,19 @@ vi.mock('@/state', () => ({
     buffers: {
       server: {
         buffer: {
-          id: 'server', number: 1, name: 'irc.orochi', fullName: 'irc.orochi', shortName: 'Orochi',
-          title: '', type: 0, nicksCount: 0, localVars: { type: 'server', server: 'orochi-test' }, notify: 3, hidden: false,
+          id: 'server', number: 1, name: 'irc.onyx', fullName: 'irc.onyx', shortName: 'Onyx',
+          title: '', type: 0, nicksCount: 0, localVars: { type: 'server', server: 'onyx-test' }, notify: 3, hidden: false,
         },
         lines: [
           {
             id: 'one', buffer: 'server', date: new Date('2026-07-16T12:00:00Z'), datePrinted: new Date('2026-07-16T12:00:00Z'),
             displayed: true, highlight: false, tags: [], prefix: '', nick: '', ircTags: new Map(),
-            message: '@orochi.io/severity=notice :orochi.test EVENT oper USER CONNECT alice!u@10.0.0.1',
+            message: '@onyx_server.io/severity=notice :onyx.test EVENT oper USER CONNECT alice!u@10.0.0.1',
           },
           {
             id: 'two', buffer: 'server', date: new Date('2026-07-16T12:01:00Z'), datePrinted: new Date('2026-07-16T12:01:00Z'),
             displayed: true, highlight: false, tags: [], prefix: '', nick: '', ircTags: new Map(),
-            message: '@orochi.io/severity=warn :orochi.test EVENT oper MEMBER JOIN #root alice',
+            message: '@onyx_server.io/severity=warn :onyx.test EVENT oper MEMBER JOIN #root alice',
           },
         ],
       },

@@ -1,6 +1,6 @@
 // ReactionBar — emoji reaction pills under a message line. Each pill shows
 // the emoji + reactor count with the reactor nicks as a tooltip; clicking a
-// pill sends the same reaction through the orochi bridge.
+// pill sends the same reaction through the onyx-server bridge.
 
 import { For, Show } from 'solid-js';
 import type { Reaction } from '@/types';

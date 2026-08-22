@@ -1,7 +1,7 @@
 import { expect, test, type CDPSession, type Page } from '@playwright/test';
 import { waitForAssetVersionReady } from './fixtures/appReady';
 import { installCallMedia } from './fixtures/callMedia';
-import { MockOrochiAccount } from './fixtures/orochiAccount';
+import { MockOnyxAccount } from './fixtures/onyxAccount';
 import { MockWeeChatRelay } from './fixtures/weechatRelay';
 
 interface FrameMetrics {
@@ -91,7 +91,7 @@ test('keeps low-end mobile chat and long-call state responsive and bounded', asy
       archiveRetention: 'off',
       bridge: {
         enabled: true,
-        wsUrl: 'wss://orochi.test/irc',
+        wsUrl: 'wss://onyx.test/irc',
         account: 'performance-account',
         password: 'performance-account-secret',
         autoJoinMedia: false,
@@ -101,7 +101,7 @@ test('keeps low-end mobile chat and long-call state responsive and bounded', asy
   });
 
   const relay = new MockWeeChatRelay();
-  const account = new MockOrochiAccount();
+  const account = new MockOnyxAccount();
   await Promise.all([relay.install(page), account.install(page), installCallMedia(page)]);
   const browserErrors: string[] = [];
   page.on('console', (message) => {

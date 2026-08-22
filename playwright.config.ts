@@ -11,7 +11,7 @@ import { defineConfig, devices } from '@playwright/test';
 //   (1) the WeeChat binary relay WS — the chat backbone (buffers, history,
 //       nicklists, hotlist). A connect / buffer-join / send / per-buffer-search
 //       flow needs only THIS wire up.
-//   (2) the direct orochi bridge WS (opt-in: Settings -> Connection -> Bridge) —
+//   (2) the direct Onyx Server bridge WS (opt-in: Settings -> Connection -> Bridge) —
 //       carries voice/video media, typing, reactions, read-markers, and E2EE DMs.
 //       A media or E2EE-DM flow must bring the BRIDGE up too; the relay alone
 //       does not carry them. Assert against the wire the flow actually uses.

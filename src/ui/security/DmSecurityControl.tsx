@@ -100,7 +100,7 @@ export default function DmSecurityControl(props: Props) {
                 <p class="text-[11px] leading-relaxed text-gray-400">
                   {bridgeState.status === 'ready'
                     ? 'No peer device key is available. Messages are not end-to-end encrypted.'
-                    : 'Connect the Orochi bridge to check this peer’s device key.'}
+                    : 'Connect the Onyx Server bridge to check this peer’s device key.'}
                 </p>
               }
             >

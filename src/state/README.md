@@ -151,7 +151,7 @@ Actions:
 | `connect()` | tear down + create `WeeRelayClient` from `settings.relay`, wire all events, connect |
 | `disconnect()` | full teardown: ping loop, listeners, client, oper state, buffers, ircx |
 | `reconnect()` | force-drop socket and re-dial (or `connect()` if no client) |
-| `sendInput(text, pointer?)` | route user input (default: active buffer) and return whether the action was handled or an authenticated open relay socket accepted it. Handles: `/clear` (local); media commands → `MediaCommandSink` (`/call /videocall` = video DM call, `/vcall /voicecall` = voice DM call, `/joinvoice /voice` = voice room, `/joinvideo /video` = video room, `/hangup /hup`) — without a sink, prints a local "requires the Orochi bridge" notice; IRCX commands on Orochi servers only (`/whisper /w`, `/prop`, `/access`, `/chaninfo`, `/profile`, `/services`, `/pushset`); `/monitor add\|del <nick>` anywhere. Accepted plain messages get an optimistic `_opt_` local echo; an accepted `/join` arms auto-switch. Rejected sends create neither state. Everything else goes to the relay. |
+| `sendInput(text, pointer?)` | route user input (default: active buffer) and return whether the action was handled or an authenticated open relay socket accepted it. Handles: `/clear` (local); media commands → `MediaCommandSink` (`/call /videocall` = video DM call, `/vcall /voicecall` = voice DM call, `/joinvoice /voice` = voice room, `/joinvideo /video` = video room, `/hangup /hup`) — without a sink, prints a local "requires the Onyx Server bridge" notice; IRCX commands on Onyx Server servers only (`/whisper /w`, `/prop`, `/access`, `/chaninfo`, `/profile`, `/services`, `/pushset`); `/monitor add\|del <nick>` anywhere. Accepted plain messages get an optimistic `_opt_` local echo; an accepted `/join` arms auto-switch. Rejected sends create neither state. Everything else goes to the relay. |
 | `sendTo(pointer, text)` | raw input to a buffer via the relay; returns `true` only when the authenticated, open WebSocket accepted the serialized command |
 | `requestHistory(count=100, pointer?)` | sets loading; requests existing+count lines so dedup nets `count` older lines |
 | `requestHistoryTotal(total, pointer?)` | requests an absolute history total, independent of the bounded in-memory window; used by targeted archive/thread jumps |
@@ -165,21 +165,21 @@ Bridge seams:
 |---|---|
 | `MediaCommandSink` | `{ startCall(nick, video), joinRoom(channel, video), hangup() }` |
 | `setMediaSink(sink \| null)` | install the bridge's media command sink |
-| `RelayObserver` | `{ onChannelBufferOpened?(serverName, channel), onOrochiDetected?(serverName, wssGateway?) }` |
+| `RelayObserver` | `{ onChannelBufferOpened?(serverName, channel), onOnyxServerDetected?(serverName, wssGateway?) }` |
 | `setRelayObserver(obs \| null)` | install the bridge's relay observer |
 
-Observer timing: `onOrochiDetected` fires when a 004 names Orochi, or when the
-004 server host is a known Orochi node (live line or server-buffer history
+Observer timing: `onOnyxServerDetected` fires when a 004 names Onyx Server, or when the
+004 server host is a known Onyx Server node (live line or server-buffer history
 replay).
 Immediately after detection, `onChannelBufferOpened` is replayed for every
 channel buffer already open on that server; afterwards it fires for each new
-channel buffer opened on a known Orochi server. Orochi detection also gates
+channel buffer opened on a known Onyx Server server. Onyx Server detection also gates
 the IRCX slash commands above.
 
 Internal pipeline (for reference): lineAdded handles TAGMSG `+typing`/`+react`
 (never rendered), IRCX numerics 801–825/915–919 plus LIST 322/323 and LISTX
 812/817 → ircx store, `bot`/`account`
-tags, 004 Orochi detection, oper detection, channel-mode tracking, typing
+tags, 004 Onyx Server detection, oper detection, channel-mode tracking, typing
 clear, `addLine`, highlight notifications (`notify` + optional sound, permanent
 and temporary buffer mutes plus global/scheduled DND applied), and document-title
 unread badges. Services feedback from a server buffer is parsed only when its
@@ -208,7 +208,7 @@ attempt/delay detail and calls the existing `reconnect()` action.
 ## `state/notificationActions.ts`
 
 Browser and service-worker notification actions enter through one allowlisted
-message shape. Buffer pointers, full names, short names, and Orochi targets are
+message shape. Buffer pointers, full names, short names, and Onyx Server targets are
 resolved case-insensitively; unresolved closed-tab actions wait in
 `sessionStorage` until buffers hydrate. Inline reply plaintext is never queued.
 A foreground document receives reply actions only after its random opaque scope
@@ -267,7 +267,7 @@ timeline remains canonical, and thread views are derived from loaded
 `ThreadPanel` resolves a changed buffer pointer by stable name after reconnect,
 loads missing ancestors through bounded absolute history requests, rebases when
 a fetched parent belongs to an older root, and sends root-scoped ordinary
-Orochi messages through `+draft/reply` when the direct bridge is available.
+Onyx Server messages through `+draft/reply` when the direct bridge is available.
 While open it behaves as a modal overlay: sibling app regions are inert, focus
 is trapped inside, Escape closes it, and teardown restores the opener.
 Its composer clears only when either the direct reply TAGMSG path or relay
@@ -285,7 +285,7 @@ fallback accepts the frame; otherwise the draft remains in place for retry.
 | `updateSavedNote` / `removeSavedMessage` | edit the bounded plain-text note or remove one bookmark |
 | `syncSavedRetention` / `removeSavedForBuffer` / `clearSavedMessages` | keep bookmark data inside archive retention/delete/wipe boundaries |
 | `recordLineActivity` | classify non-self displayed replies, DMs, mentions, and explicit operator alerts |
-| `recordCallActivity` | record bounded Orochi call lifecycle events |
+| `recordCallActivity` | record bounded Onyx Server call lifecycle events |
 | `activityUnreadCount` / `markActivityRead` / `clearActivity` | inbox unread and clearing semantics independent of buffer counters |
 | `openActivityPanel` / `closeActivityPanel` / `setActivityTab` | responsive activity/saved panel state (`Alt+A` opens it) |
 
@@ -311,7 +311,7 @@ filter/correlation/export layer lives in `lib/operatorIncident.ts`.
 | `clearOperatorAudit()` / `resetOperatorIncidents()` | clear audit alone or both incident stores; Forget This Device uses the full reset |
 
 `parseEventFeedText` retains `subscription` from
-`orochi.io/category` separately from the Event Spine wire `category`, and
+`onyx_server.io/category` separately from the Event Spine wire `category`, and
 retains the normalized severity tag. Incident export never includes the parser's
 raw line or source server.
 The console keeps rejected raw, broadcast, and destructive-action inputs,
@@ -344,7 +344,7 @@ while bytes arrive and cancel immediately on overflow.
 
 ## `state/preferenceSync.ts`
 
-Authenticated direct sessions use the negotiated Orochi `draft/metadata-2`
+Authenticated direct sessions use the negotiated Onyx Server `draft/metadata-2`
 capability for account-scoped non-secret preference sync. The wire codec lives
 in `lib/preferences/sync.ts`: five independently stamped families merge by a
 Lamport revision, timestamp, and stable WebCrypto-generated device ID. Read
@@ -373,10 +373,10 @@ settings stay authoritative, and the complete document is scheduled for retry.
 
 | Export | Semantics |
 |---|---|
-| `ircxState` | read-only store: `orochiServers{}, channelProps{chan:{KEY:val}}, userProfiles{nick}, accessLists{chan:[]}, botNicks{}, accountMap{}, pendingPropTarget/Entries, pendingAccessChannel/Entries, channelInfoTarget, userProfileTarget, servicesPanel, monitorList{}, channelList{}` |
-| `markOrochi(serverName)` | flag a server as Orochi |
-| `isOrochiServer(serverName?)` | lookup |
-| `isActiveOrochi()` | active buffer's server is Orochi |
+| `ircxState` | read-only store: `onyxServers{}, channelProps{chan:{KEY:val}}, userProfiles{nick}, accessLists{chan:[]}, botNicks{}, accountMap{}, pendingPropTarget/Entries, pendingAccessChannel/Entries, channelInfoTarget, userProfileTarget, servicesPanel, monitorList{}, channelList{}` |
+| `markOnyxServer(serverName)` | flag a server as Onyx Server (API still named markOnyxServer) |
+| `isOnyxServer(serverName?)` | lookup |
+| `isActiveOnyxServer()` | active buffer's server is Onyx Server (API still named isActiveOnyxServer) |
 | `requestProps(target)` | arm pending list + `PROP <target> *` |
 | `setProp(target, key, value)` | acknowledged `PROP <target> <key> :<value>`; returns false when the relay does not accept it |
 | `addPropEntry(entry)` / `finishPropList(target)` | pending assembly → `channelProps` (targets `#`/`&`) or `userProfiles` (URL GENDER PICTURE LOCATION BIO REALNAME EMAIL NO-VIDEO) |
@@ -385,14 +385,14 @@ settings stay authoritative, and the complete document is scheduled for retry.
 | `addAccessEntry(entry)` / `finishAccessList(channel)` | pending assembly → `accessLists` |
 | `clearAccessRequest()` | drop pending ACCESS state |
 | `addAccess(chan, level, mask, reason?)` / `removeAccess(chan, level, mask)` | acknowledged ACCESS ADD/DELETE, re-list after 500 ms only after acceptance |
-| `requestChannelList({ pattern?, minUsers?, maxUsers?, extended? })` | arm channel browser + raw `LIST` or Orochi `LISTX` |
+| `requestChannelList({ pattern?, minUsers?, maxUsers?, extended? })` | arm channel browser + raw `LIST` or Onyx Server `LISTX` |
 | `addChannelListRow(row)` / `finishChannelList()` / `clearChannelList()` | numeric `322/812` assembly → `ircxState.channelList` |
 | `markBot(nick)` / `unmarkBot(nick)` / `isBot(nick)` | lowercase bot registry |
 | `setAccount(nick, account)` / `getAccount(nick)` | `'*'`/`''` clears (logout) |
 | `openChannelInfo(chan)` / `closeChannelInfo()` | channel info panel target |
 | `openUserProfile(nick)` / `closeUserProfile()` | profile panel target (auto `requestProps`) |
 | `openServicesPanel('nick'\|'chan'\|'memo')` / `closeServicesPanel()` | services panel |
-| `sendAccount(cmd)` / `sendChannel(cmd)` / `sendMemo(cmd)` | acknowledged Orochi service verbs `ACCOUNT/CHANNEL/MEMO <cmd>` |
+| `sendAccount(cmd)` / `sendChannel(cmd)` / `sendMemo(cmd)` | acknowledged Onyx Server service verbs `ACCOUNT/CHANNEL/MEMO <cmd>` |
 | `sendWhisper(chan, nick, msg)` | `WHISPER <chan> <nick> :<msg>` |
 | `monitorAdd(nick)` / `monitorRemove(nick)` | track + `MONITOR +/- <nick>` |
 | `sendPushSet(key, value)` | `PUSHSET <key> <value>` |
@@ -437,11 +437,11 @@ after the corresponding IRCX frame is accepted.
 
 ## `state/bridge.ts`
 
-Status + UI API of the **Orochi bridge** — the persistent direct WSS session to
-the Orochi server (typing/reactions, read-marker sync, E2EE DMs). The socket
+Status + UI API of the **Onyx Server bridge** — the persistent direct WSS session to
+the Onyx Server (typing/reactions, read-marker sync, E2EE DMs). The socket
 lifecycle lives in `src/core/bridge.ts` (`initBridge()` — App calls it once);
 it installs itself here through the `BridgeBackend` seam. Activation:
-`settings.bridge.enabled` AND (Orochi detected on the relay OR
+`settings.bridge.enabled` AND (Onyx Server detected on the relay OR
 `settings.bridge.wsUrl` / `VITE_IRC_WS` pinned).
 
 Production and credential-bearing endpoints require `wss://`; unauthenticated
@@ -453,14 +453,14 @@ current SASL exchange.
 | Export | Semantics |
 |---|---|
 | `bridgeState` | read-only store: `{ status: 'off'\|'connecting'\|'ready'\|'error', nick: string\|null, error: string\|null, e2eeReady: boolean }` |
-| `sendTyping(bufferPtr, 'active'\|'paused'\|'done')` | `@+typing` TAGMSG to the buffer's mapped Orochi target; no-op when bridge not ready |
+| `sendTyping(bufferPtr, 'active'\|'paused'\|'done')` | `@+typing` TAGMSG to the buffer's mapped Onyx Server target; no-op when bridge not ready |
 | `sendReactionTag(bufferPtr, msgid, emoji)` | acknowledged `@+draft/react;+draft/reply` TAGMSG; local `addReaction` occurs only after socket acceptance, so rejection cannot create a false optimistic reaction |
 | `markRead(bufferPtr)` | `MARKREAD <target> timestamp=<ISO>` — cross-device read sync; call on buffer activation |
 | `canE2ee(nick)` | true when the peer's `ocean.dm-key` is cached (reactive) |
 | `dmSecurityFor(nick)` | reactive peer state: unavailable/loading/unverified/verified/changed plus current and pinned fingerprints |
-| `refreshPeerDmKey(nick)` | request the peer's current device key through Orochi metadata |
+| `refreshPeerDmKey(nick)` | request the peer's current device key through Onyx Server metadata |
 | `verifyPeerDmKey(nick)` / `forgetPeerDmTrust(nick)` | pin/re-trust or remove the endpoint/account-scoped local verification |
-| `sendE2eeDm(nick, text): Promise<boolean>` | seal (Tsumugi envelope) + PRIVMSG via the bridge; false when impossible (kicks off a key fetch) |
+| `sendE2eeDm(nick, text): Promise<boolean>` | seal (Mooring envelope) + PRIVMSG via the bridge; false when impossible (kicks off a key fetch) |
 | `decryptedFor(msgid, text)` | plaintext overlay for a line (by msgid, then exact ciphertext); reactive — unknown envelopes get a one-shot background decrypt against known keys |
 | `bridgeRun(action)` | run once the bridge is ready (connect-on-demand; settings notice when disabled) |
 | `BridgeBackend` / `_setBridgeBackend` / `_set*` | internal controller seams — `src/core/bridge.ts` only |
@@ -473,7 +473,7 @@ the verified policy also requires a current local pin before delivery.
 
 ## `state/media.ts`
 
-Voice/video call state + actions wrapping the Suimyaku media engine. The
+Voice/video call state + actions wrapping the Cadence media engine. The
 engine mounts here; the bridge controller attaches its IRCClient
 (`_attachBridgeClient`). Actions connect the bridge on demand via `bridgeRun`.
 

@@ -7,7 +7,7 @@
 //   Messages   — timestamp format, display toggles, sidebar unread filter,
 //                highlight words editor.
 //   Alerts     — desktop notifications, sound, read-on-focus, auto-reconnect.
-//   Connection — relay settings + saved profiles manager + orochi bridge
+//   Connection — relay settings + saved profiles manager + onyx-server bridge
 //                (enabled, wsUrl override, account, password, autoJoinMedia,
 //                e2eeDms + verified-only delivery policy).
 //   Advanced   — upload URL, Tenor key, custom CSS, keyboard shortcut list,
@@ -762,12 +762,12 @@ export default function SettingsModal(props: Props) {
               </div>
             </Section>
 
-            <Section label="Orochi Bridge" desc="Direct session to the IRCXNet orochi server for realtime extras">
+            <Section label="Onyx Server Bridge" desc="Direct session to the Onyx Server for realtime extras">
               <p class="text-[10px] text-gray-600 leading-relaxed mb-1">
                 Adds realtime voice/video, typing, reactions and E2EE DMs by opening a direct
-                session to the IRCXNet orochi server alongside your relay.
+                session to the Onyx Server alongside your relay.
               </p>
-              <Toggle label="Enable Bridge" desc="Open the direct orochi session when connecting" on={bridge().enabled} onChange={(v) => patchBridge({ enabled: v })} />
+              <Toggle label="Enable Bridge" desc="Open the direct Onyx Server session when connecting" on={bridge().enabled} onChange={(v) => patchBridge({ enabled: v })} />
               <Show when={bridge().enabled}>
                 <div class="mt-2 space-y-3 animate-fade-in">
                   <InputField label="WebSocket URL" value={bridge().wsUrl} placeholder="wss://node.example.com/irc (empty = auto node probing)"
@@ -807,7 +807,7 @@ export default function SettingsModal(props: Props) {
               </Show>
             </Section>
 
-            <Section label="Cross-device preferences" desc="Account-scoped sync when Orochi metadata is available">
+            <Section label="Cross-device preferences" desc="Account-scoped sync when Onyx Server metadata is available">
               <div data-testid="preference-sync-status" class="rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
                 <div class="flex items-center gap-3">
                   <span
@@ -1000,7 +1000,7 @@ export default function SettingsModal(props: Props) {
                 <DiagnosticValue label="Phase" value={relayDiagnostics().phase} detail={relayPhaseDetail()} />
                 <DiagnosticValue label="Protocol" value={relayDiagnostics().protocolMode} detail={protocolDetail()} />
                 <DiagnosticValue label="Bridge" value={bridgeState.status} detail={bridgeState.error ? bridgeErrorId() : (bridgeState.e2eeReady ? 'device key published' : 'DM encryption idle')} />
-                <DiagnosticValue label="Orochi Media" value={mediaState.mediaAvailable ? mediaState.callState : 'unavailable'} detail={mediaState.error ? mediaErrorId() : `${mediaState.health.status} · ${Object.keys(mediaState.peers).length} peers`} />
+                <DiagnosticValue label="Onyx Server Media" value={mediaState.mediaAvailable ? mediaState.callState : 'unavailable'} detail={mediaState.error ? mediaErrorId() : `${mediaState.health.status} · ${Object.keys(mediaState.peers).length} peers`} />
                 <DiagnosticValue label="Codec Runtime" value={mediaRuntimeDiagnostics().webAssembly && mediaRuntimeDiagnostics().mediaDevices ? 'capable' : 'limited'} detail={`${mediaRuntimeDiagnostics().audioWorklet ? 'audio worklet' : 'audio fallback'} · ${mediaRuntimeDiagnostics().videoWorker ? 'video worker' : 'video fallback'}`} />
                 <DiagnosticValue label="Service Worker" value={typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? (navigator.serviceWorker.controller ? 'controlled' : 'uncontrolled') : 'unsupported'} detail="deploy shell" />
                 <DiagnosticValue label="Auth" value={relayDiagnostics().authMode} detail={relayDiagnostics().totp ? 'TOTP available' : relayDiagnostics().handshake} />
@@ -1061,7 +1061,7 @@ function PreferenceOverview(props: { bridgeEnabled: boolean }) {
         <OverviewTile label="Theme" value={String(settings.theme)} tone="accent" />
         <OverviewTile label="Messages" value={settings.compactMode ? 'compact' : 'comfortable'} />
         <OverviewTile label="Alerts" value={settings.notifications ? 'enabled' : 'quiet'} hot={settings.notifications} />
-        <OverviewTile label="Bridge" value={props.bridgeEnabled ? 'orochi on' : 'relay only'} hot={props.bridgeEnabled} />
+        <OverviewTile label="Bridge" value={props.bridgeEnabled ? 'Onyx Server on' : 'relay only'} hot={props.bridgeEnabled} />
       </div>
       <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <QuickToggle label="Compact" on={settings.compactMode} onClick={() => updateSettings({ compactMode: !settings.compactMode })} />

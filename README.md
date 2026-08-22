@@ -1,6 +1,6 @@
 # DarkBear
 
-A WeeChat relay client with real voice/video. Connect to your IRC bouncer from any browser — and when your network is Orochi, DarkBear opens a companion session that carries realtime voice, video, screenshare, typing, reactions, and E2EE DMs.
+A WeeChat relay client with real voice/video. Connect to your IRC bouncer from any browser — and when your network is Onyx Server, DarkBear opens a companion session that carries realtime voice, video, screenshare, typing, reactions, and E2EE DMs.
 
 ## Architecture
 
@@ -8,12 +8,12 @@ DarkBear v3 is a SolidJS + Vite SPA with two wire connections:
 
 ```
 Browser ──weechat relay (binary protocol over WS)──▶ WeeChat ──IRC──▶ any network   (chat)
-Browser ──direct WSS (Orochi bridge)──▶ Orochi                                      (media + extras)
+Browser ──direct WSS (Onyx Server bridge)──▶ Onyx Server                                      (media + extras)
 ```
 
 - **Chat backbone**: the WeeChat relay protocol. WeeChat runs on your server as the bouncer; DarkBear speaks its binary relay protocol over WebSocket. Buffers, history, nicklists, hotlist — all relay-driven.
-- **Orochi bridge** (optional, Settings → Connection → Bridge): a persistent direct secure WebSocket session to the Orochi server, auto-activated when the relay's network is detected as Orochi. Production and credentialed endpoints require `wss://`; plain `ws://` is limited to unauthenticated loopback development. It carries:
-  - **Voice/video/screenshare** — KaguraVox/KaguraVis WASM codecs over binary WS frames with per-stream HMAC, MEDIA control plane, EVENT MEDIA presence
+- **Onyx Server bridge** (optional, Settings → Connection → Bridge): a persistent direct secure WebSocket session to the Onyx Server, auto-activated when the relay's network is detected as Onyx Server. Production and credentialed endpoints require `wss://`; plain `ws://` is limited to unauthenticated loopback development. It carries:
+  - **Voice/video/screenshare** — CadenceVox/CadenceVis WASM codecs over binary WS frames with per-stream HMAC, MEDIA control plane, EVENT MEDIA presence
   - **Typing notifications & emoji reactions** (TAGMSG) sent and received
   - **Read-marker sync** across devices (MARKREAD)
   - **Verifiable E2EE DMs** (P-256 ECDH + AES-GCM `TSUMUGI1` envelopes; full peer fingerprints, local trust pins, rotation warnings, and verified-only fail-closed delivery)
@@ -36,7 +36,7 @@ Browser ──direct WSS (Orochi bridge)──▶ Orochi                        
 - IRC formatting: bold, italic, colors 0–98, opt-in no-referrer inline images, and YouTube/Twitch/video/audio embeds
 - IRCv3: SASL, away-notify, account-notify, message tags, typing, reactions, bot mode
 - IRCX: PROP (channel/user properties), ACCESS lists, WHISPER, CREATE, LISTX
-- Localized, accessible services panels for Orochi's built-in services (REGISTER/IDENTIFY/GHOST/VHOST/TOTP/CHANNEL/TEGAMI — real commands, no pseudo-clients) with mobile scrolling, RTL-aware keyboard tabs, relay-enqueue acknowledgement, retained retry input, and authenticated server-scoped reply feedback
+- Localized, accessible services panels for Onyx Server's built-in services (REGISTER/IDENTIFY/GHOST/VHOST/TOTP/CHANNEL/TEGAMI — real commands, no pseudo-clients) with mobile scrolling, RTL-aware keyboard tabs, relay-enqueue acknowledgement, retained retry input, and authenticated server-scoped reply feedback
 - User profiles (IRCX PROP): avatar, bio, location, URL, gender; remote avatars
   remain initials until inline images are explicitly enabled, then load lazily
   without a referrer
@@ -113,7 +113,7 @@ pnpm desktop:verify-package    # verify Linux package metadata and payload
 
 Browser builds continue using `/darkbear/` and the deploy-version service
 worker. The desktop build uses relative assets and never registers that worker.
-On desktop, an explicitly remembered relay or Orochi password is stored in the
+On desktop, an explicitly remembered relay or Onyx Server password is stored in the
 OS credential vault; bearer tokens and non-remembered passwords remain
 session-only. `src-tauri/tauri.linux.conf.json` selects the verified Debian
 installer on Linux. Other native formats should be produced on their supported
@@ -144,8 +144,18 @@ offline document when network navigation fails.
 
 ### Env (build-time, optional)
 
-- `VITE_IRC_WS` — pin the Orochi bridge WS endpoint (unset = latency-probe node selection)
+- `VITE_IRC_WS` — pin the Onyx Server bridge WS endpoint (unset = latency-probe node selection)
 - `VITE_MEDIA_URL` — upload service base (unset = settings uploadUrl / same-origin `/upload`)
+
+## Protocol reference
+
+Direct Onyx Server wire surface used by the bridge (CAP/SASL/sessions, IRCX,
+services, Event Spine, MEDIA):
+[`docs/ONYX_SERVER_PROTOCOL.md`](docs/ONYX_SERVER_PROTOCOL.md).
+
+Product brand is **Onyx Server** / network **Onyx**. Wire residuals such as
+`onyx/*` vendor caps, `onyx-<hash>` version strings, and historical
+`NETWORK=IRCXNet` are documented there — they are not product names.
 
 ## Source layout
 
@@ -153,15 +163,15 @@ offline document when network navigation fails.
 src/
 ├── lib/
 │   ├── weechat/         # binary relay protocol: parser, serializer, client
-│   ├── irc/             # direct Orochi WS client (CAP/SASL/SCRAM/session resume)
+│   ├── irc/             # direct Onyx Server WS client (CAP/SASL/SCRAM/session resume)
 │   ├── irc-classic/     # IRC line parsing + mIRC formatting + embeds
 │   ├── ircx/            # IRCX numerics (PROP/ACCESS)
 │   ├── archive/         # IndexedDB v3 repository + Worker trigram search/accounting/retention
-│   ├── suimyaku-media/  # voice/video engine (WASM codecs, WS frames, MAC; Audio E2EE primitives hard-disabled)
+│   ├── cadence-media/  # voice/video engine (WASM codecs, WS frames, MAC; Audio E2EE primitives hard-disabled)
 │   └── e2ee/            # DM cipher + typed local peer-trust repository
 ├── state/               # Solid stores: settings, buffers, connection, ircx, ui,
 │                        # completion, bridge, media (see state/README.md)
-├── core/bridge.ts       # Orochi bridge controller
+├── core/bridge.ts       # Onyx Server bridge controller
 ├── ui/                  # components: layout, chat, input, modals, panels, media, bits
 ├── primitives/          # keyboard, swipe, viewport, media-query, favicon badge
 └── styles/global.css    # 19 themes, irc color classes

@@ -191,7 +191,7 @@ describe('deploy-safe offline shell contract', () => {
 });
 
 describe('service-worker notification contract', () => {
-  it('persists DND policy and checks it before displaying Orochi push', () => {
+  it('persists DND policy and checks it before displaying Onyx Server push', () => {
     expect(source).toContain("const POLICY_DB = 'darkbear-notification-policy-v1'");
     expect(source).toContain("if (event.data?.type === POLICY_MESSAGE)");
     expect(source).toContain('if (!policyAllows(policy, payload.target || payload.bufferId)) return;');

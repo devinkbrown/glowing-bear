@@ -557,8 +557,8 @@ describe('buffers store', () => {
       expect(groups['Regular']?.map((n) => n.name)).toEqual(['reg']);
     });
 
-    it('maps orochi prefixes (*!.@+) to Operator/Founder/Owner/Op/Voice in rank order', () => {
-      // orochi PREFIX=(YQqov)*!.@+  → * oper, ! founder, . owner, @ op, + voice
+    it('maps Onyx Server prefixes (*!.@+) to Operator/Founder/Owner/Op/Voice in rank order', () => {
+      // Onyx Server PREFIX=(YQqov)*!.@+  → * oper, ! founder, . owner, @ op, + voice
       setNicklist(A, [
         makeNick('vic', '+'),
         makeNick('operator', '*'),
@@ -578,7 +578,7 @@ describe('buffers store', () => {
       expect(groups['Regular']?.map((n) => n.name)).toEqual(['plain']);
     });
 
-    it('NICK_TIER_ORDER spans orochi + standard tiers, highest first', () => {
+    it('NICK_TIER_ORDER spans Onyx Server + standard tiers, highest first', () => {
       expect([...NICK_TIER_ORDER]).toEqual([
         'Operator', 'Founder', 'Owner', 'Admin', 'Op', 'Halfop', 'Voice', 'Regular',
       ]);

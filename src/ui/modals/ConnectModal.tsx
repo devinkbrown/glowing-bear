@@ -4,7 +4,7 @@
 // lightweight animated theme-aware washes, horizontal theme picker (all 19 themes),
 // saved profile chips, host/port/TLS/password form (show-password toggle),
 // Advanced section (compression toggle, TOTP toggle + 6-digit code appended
-// to the password at connect time only, orochi bridge card), Connect button
+// to the password at connect time only, onyx-server bridge card), Connect button
 // (Ctrl+Enter), "Save as profile", "Back to chat", and the embedded
 // SetupGuide (quickstart / relay setup / TLS / nginx+Caddy reverse proxy /
 // TOTP / security hardening / troubleshooting) with copy-to-clipboard blocks.
@@ -1176,7 +1176,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                       </Show>
                     </div>
 
-                    {/* Orochi bridge (voice/video) */}
+                    {/* Onyx Server bridge (voice/video) */}
                     <div class="flex flex-col gap-2 rounded-xl bg-white/[0.02] border border-white/[0.05] px-3 py-2.5">
                       <div class="flex items-center justify-between min-h-[36px]">
                         <div class="flex items-center gap-2.5">
@@ -1184,7 +1184,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                             <rect x="1.5" y="4" width="9" height="8" rx="2" /><path d="M10.5 7l4-2.5v7l-4-2.5" />
                           </svg>
                           <span class="text-[13px] text-gray-400">
-                            {t('connect.orochiBridge')} <span class="text-[10px] text-gray-600">({t('connect.voiceVideo')})</span>
+                            {t('connect.onyxServerBridge')} <span class="text-[10px] text-gray-600">({t('connect.voiceVideo')})</span>
                           </span>
                         </div>
                         <button type="button" onClick={() => setBridgeEnabled(!bridgeEnabled())}

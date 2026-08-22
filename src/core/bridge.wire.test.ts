@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 //
-// Wire-level tests for the orochi bridge controller's INBOUND message
+// Wire-level tests for the onyx-server bridge controller's INBOUND message
 // handling. Lines are taken verbatim from the live wire transcript
-// (tests/fixtures/orochi-live-capture.txt), parsed with the production
+// (tests/fixtures/onyx-live-capture.txt), parsed with the production
 // parser, and delivered through the bridge IRCClient's extraMessageHandlers
 // fan-out — the exact path production messages take.
 //
@@ -41,7 +41,7 @@ interface FakeBridgeClient {
 }
 
 interface RelayObserverShape {
-  onOrochiDetected?: (serverName: string) => void;
+  onOnyxServerDetected?: (serverName: string) => void;
   onChannelBufferOpened?: (serverName: string, channel: string) => void;
 }
 
@@ -122,7 +122,7 @@ vi.mock('@/state/buffers', async (importOriginal) => {
 // ── live capture fixture (ground truth for message shapes) ──────────────────
 
 const capture = readFileSync(
-  resolve(process.cwd(), 'tests/fixtures/orochi-live-capture.txt'),
+  resolve(process.cwd(), 'tests/fixtures/onyx-live-capture.txt'),
   'utf8',
 );
 
@@ -220,11 +220,11 @@ async function setup(options: {
   client.sessionSyncActive = options.sessionSyncActive ?? false;
   if (!options.deferWelcome) {
     client.opts.onConnected?.(
-      parseIRCMessage(`:orochi.test 001 ${client.currentNick} :Welcome to Orochi`),
+      parseIRCMessage(`:onyx.test 001 ${client.currentNick} :Welcome to Onyx Server`),
     );
   }
 
-  // Relay world: server buffer + channel buffer + DM query on an orochi server.
+  // Relay world: server buffer + channel buffer + DM query on an Onyx Server server.
   buffers.upsertBuffer(
     makeBuffer('0xsrv', 1, { type: 'server', server: 'eshmaki', nick: 'kain' }, 'irc.server.eshmaki'),
   );
@@ -234,7 +234,7 @@ async function setup(options: {
   buffers.upsertBuffer(
     makeBuffer('0xdm', 3, { type: 'private', server: 'eshmaki', channel: 'trev' }, 'irc.eshmaki.trev'),
   );
-  (harness.observer as RelayObserverShape | null)?.onOrochiDetected?.('eshmaki');
+  (harness.observer as RelayObserverShape | null)?.onOnyxServerDetected?.('eshmaki');
 
   const deliver = (line: string) => {
     const msg = parseIRCMessage(line);
@@ -296,7 +296,7 @@ describe('bridge welcome', () => {
     expect(client.join).toHaveBeenCalledWith('#dbtest19036');
   });
 
-  it('lets Orochi session-sync restore channels without a competing JOIN storm', async () => {
+  it('lets Onyx Server session-sync restore channels without a competing JOIN storm', async () => {
     const { client } = await setup({ sessionSyncActive: true });
     expect(client.join).not.toHaveBeenCalled();
   });
@@ -309,7 +309,7 @@ describe('bridge welcome', () => {
     expect(vi.mocked(media._setMediaTransportConnected)).toHaveBeenCalledWith(false);
 
     client.opts.onConnected?.(
-      parseIRCMessage(`:orochi.test 001 ${client.currentNick} :Welcome to Orochi`),
+      parseIRCMessage(`:onyx.test 001 ${client.currentNick} :Welcome to Onyx Server`),
     );
     expect(vi.mocked(media._setMediaTransportConnected)).toHaveBeenLastCalledWith(true);
   });
@@ -322,7 +322,7 @@ describe('bridge welcome', () => {
     expect(client.destroy).toHaveBeenCalledOnce();
     expect(bridge.bridgeState).toMatchObject({
       status: 'error',
-      error: 'Orochi session expired. Enter the account password to reconnect.',
+      error: 'Onyx Server session expired. Enter the account password to reconnect.',
     });
   });
 
@@ -565,7 +565,7 @@ describe('METADATA peer keys', () => {
 describe('NOTE routing', () => {
   it('stores NOTE SESSION TOKEN', async () => {
     const { deliver, credentials } = await setup();
-    deliver(':orochi.test NOTE SESSION TOKEN :tok-abc123');
+    deliver(':onyx.test NOTE SESSION TOKEN :tok-abc123');
     expect(vi.mocked(credentials.storeSessionToken)).toHaveBeenCalledWith('tok-abc123');
   });
 
@@ -601,8 +601,8 @@ describe('SASL SESSION-TOKEN routing', () => {
     expect(vi.mocked(credentials.storeSaslSessionToken)).not.toHaveBeenCalled();
 
     // IRCClient marks loggedIn before fanning the real 903 out to the bridge.
-    deliver(`:orochi.test 903 ${client.currentNick} :SASL authentication successful`);
-    deliver(`:orochi.test NOTICE ${client.currentNick} :SESSIONTOKEN kain ${token} expires=1784217600`);
+    deliver(`:onyx.test 903 ${client.currentNick} :SASL authentication successful`);
+    deliver(`:onyx.test NOTICE ${client.currentNick} :SESSIONTOKEN kain ${token} expires=1784217600`);
 
     expect(client.setSaslSessionToken).toHaveBeenCalledWith(token);
     expect(vi.mocked(credentials.storeSaslSessionToken)).toHaveBeenCalledWith(
@@ -615,7 +615,7 @@ describe('SASL SESSION-TOKEN routing', () => {
   it('stores a bounded credential only from the exact server identity learned from 001', async () => {
     const { deliver, client, credentials } = await setup();
     const token = 'sst_0123456789abcdef0123456789abcdef';
-    deliver(`:orochi.test NOTICE ${client.currentNick} :SESSIONTOKEN kain ${token} expires=1784217600`);
+    deliver(`:onyx.test NOTICE ${client.currentNick} :SESSIONTOKEN kain ${token} expires=1784217600`);
 
     expect(client.setSaslSessionToken).toHaveBeenCalledWith(token);
     expect(vi.mocked(credentials.storeSaslSessionToken)).toHaveBeenCalledWith(
@@ -631,9 +631,9 @@ describe('SASL SESSION-TOKEN routing', () => {
     const text = `SESSIONTOKEN kain ${token} expires=1784217600`;
 
     deliver(`:mallory!user@evil.example NOTICE ${client.currentNick} :${text}`);
-    deliver(`:orochi.test!user@evil.example NOTICE ${client.currentNick} :${text}`);
-    deliver(`:orochi.test.evil NOTICE ${client.currentNick} :${text}`);
-    deliver(`:orochi.test NOTICE somebody-else :${text}`);
+    deliver(`:onyx.test!user@evil.example NOTICE ${client.currentNick} :${text}`);
+    deliver(`:onyx.test.evil NOTICE ${client.currentNick} :${text}`);
+    deliver(`:onyx.test NOTICE somebody-else :${text}`);
 
     expect(client.setSaslSessionToken).not.toHaveBeenCalled();
     expect(vi.mocked(credentials.storeSaslSessionToken)).not.toHaveBeenCalled();

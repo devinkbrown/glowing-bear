@@ -2,9 +2,9 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseIRCMessage } from '@/lib/irc/parser';
-import { SuimyakuMediaEngine } from './MediaEngine';
+import { CadenceMediaEngine } from './MediaEngine';
 import type { IRCMessage } from '@/lib/irc/types';
-import type { SuimyakuCallHealth, SuimyakuMediaCallbacks } from './types';
+import type { CadenceCallHealth, CadenceMediaCallbacks } from './types';
 
 type FakeClient = {
   currentNick: string;
@@ -14,7 +14,7 @@ type FakeClient = {
   sendBinary: ReturnType<typeof vi.fn>;
 };
 
-function callbacks(overrides: Partial<SuimyakuMediaCallbacks> = {}): SuimyakuMediaCallbacks {
+function callbacks(overrides: Partial<CadenceMediaCallbacks> = {}): CadenceMediaCallbacks {
   return {
     onCallState: vi.fn(),
     onPeerLeft: vi.fn(),
@@ -24,10 +24,10 @@ function callbacks(overrides: Partial<SuimyakuMediaCallbacks> = {}): SuimyakuMed
   };
 }
 
-function harness(overrides: Partial<SuimyakuMediaCallbacks> = {}) {
-  const seenHealth: SuimyakuCallHealth[] = [];
+function harness(overrides: Partial<CadenceMediaCallbacks> = {}) {
+  const seenHealth: CadenceCallHealth[] = [];
   const cbs = callbacks({ onCallHealth: (health) => seenHealth.push(health), ...overrides });
-  const engine = new SuimyakuMediaEngine(cbs);
+  const engine = new CadenceMediaEngine(cbs);
   const client: FakeClient = {
     currentNick: 'me',
     binaryHandlers: new Set(),
@@ -60,32 +60,32 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('SuimyakuMediaEngine call health', () => {
+describe('CadenceMediaEngine call health', () => {
   it('keeps one participant pipeline when reconnect roster events repeat', () => {
     const { engine, deliver } = harness();
-    deliver(':orochi.test EVENT me MEDIA JOIN #root alice video');
-    deliver(':orochi.test EVENT me MEDIA JOIN #root alice video');
-    deliver(':orochi.test EVENT me MEDIA ROSTER #root alice video');
+    deliver(':onyx.test EVENT me MEDIA JOIN #root alice video');
+    deliver(':onyx.test EVENT me MEDIA JOIN #root alice video');
+    deliver(':onyx.test EVENT me MEDIA ROSTER #root alice video');
     expect(engine.getPeers().size).toBe(1);
   });
 
   it('applies bitrate changes with hysteresis and recovers one tier at a time', () => {
     const onNetworkQuality = vi.fn();
     const { deliver } = harness({ onNetworkQuality });
-    const poor = ':orochi.test EVENT me MEDIA MEDIA_STATS #root :{"suggested_bps":100000}';
+    const poor = ':onyx.test EVENT me MEDIA MEDIA_STATS #root :{"suggested_bps":100000}';
     deliver(poor);
     expect(onNetworkQuality).not.toHaveBeenCalled();
     deliver(poor);
     expect(onNetworkQuality).toHaveBeenLastCalledWith(1, 100_000);
 
-    const good = ':orochi.test EVENT me MEDIA MEDIA_STATS #root :{"suggested_bps":400000}';
+    const good = ':onyx.test EVENT me MEDIA MEDIA_STATS #root :{"suggested_bps":400000}';
     for (let i = 0; i < 3; i++) deliver(good);
     expect(onNetworkQuality).toHaveBeenCalledTimes(1);
     deliver(good);
     expect(onNetworkQuality).toHaveBeenLastCalledWith(0, 400_000);
   });
 
-  it('reports measured loss through Orochi MEDIA ABR', () => {
+  it('reports measured loss through Onyx Server MEDIA ABR', () => {
     const { client, internal } = harness();
     internal.lastLossRate = 0.12;
     internal.measuredBps = 240_000;

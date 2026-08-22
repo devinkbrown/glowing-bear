@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from 'vitest';
-import { SuimyakuMediaEngine } from './MediaEngine';
-import { KaguraCodec, type KaguraFrame } from './kaguraFrame';
+import { CadenceMediaEngine } from './MediaEngine';
+import { CadenceCodec, type CadenceFrame } from './cadenceFrame';
 import { getDropCount, resetDropCounters } from './mediaDropCounter';
 import type { MediaStreamSource } from './mediaStream';
-import type { SuimyakuMediaCallbacks } from './types';
+import type { CadenceMediaCallbacks } from './types';
 
-function callbacks(overrides: Partial<SuimyakuMediaCallbacks> = {}): SuimyakuMediaCallbacks {
+function callbacks(overrides: Partial<CadenceMediaCallbacks> = {}): CadenceMediaCallbacks {
   return {
     onCallState: vi.fn(),
     onPeerLeft: vi.fn(),
@@ -21,8 +21,8 @@ function callbacks(overrides: Partial<SuimyakuMediaCallbacks> = {}): SuimyakuMed
 type EngineInternals = {
   activeRoom: string | null;
   audEnc: { encode: (i16: Int16Array) => Uint8Array } | null;
-  tsumugiGroupKey: { encrypt: (pt: Uint8Array) => Promise<Uint8Array> } | null;
-  tsumugiSessions: Map<string, { established: boolean; encrypt: (pt: Uint8Array) => Promise<Uint8Array> }>;
+  mooringGroupKey: { encrypt: (pt: Uint8Array) => Promise<Uint8Array> } | null;
+  mooringSessions: Map<string, { established: boolean; encrypt: (pt: Uint8Array) => Promise<Uint8Array> }>;
   sendFrame: (channel: string, ftype: string, data: Uint8Array) => void;
   onAudioFrame: (i16: Int16Array) => void;
   sendProtectedAudioFrame: (encoded: Uint8Array, room: string) => void;
@@ -33,23 +33,23 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function makeEngine() {
   const onError = vi.fn();
-  const engine = new SuimyakuMediaEngine(callbacks({ onError }));
+  const engine = new CadenceMediaEngine(callbacks({ onError }));
   const internals = engine as unknown as EngineInternals;
   const encoded = new Uint8Array([1, 2, 3, 4]);
   internals.audEnc = { encode: () => encoded };
   internals.activeRoom = 'alice'; // 1:1 room — does NOT start with '#'
-  internals.tsumugiGroupKey = null;
+  internals.mooringGroupKey = null;
   // Spy on the wire-emit seam so we assert the branch decision without the MAC/WS stack.
   const sendFrame = vi.fn();
   internals.sendFrame = sendFrame;
   return { engine, internals, sendFrame, encoded, onError };
 }
 
-describe('SuimyakuMediaEngine audio send path — 1:1 TSUMUGI encryption', () => {
+describe('CadenceMediaEngine audio send path — 1:1 TSUMUGI encryption', () => {
   it('emits the ciphertext as a TSUMUGI_DATA frame on a successful 1:1 encrypt (never silence, never plaintext)', async () => {
     const { internals, sendFrame, encoded } = makeEngine();
     const ciphertext = new Uint8Array([9, 9, 9]);
-    internals.tsumugiSessions = new Map([
+    internals.mooringSessions = new Map([
       ['bob', { established: true, encrypt: vi.fn(async () => ciphertext) }],
     ]);
 
@@ -65,7 +65,7 @@ describe('SuimyakuMediaEngine audio send path — 1:1 TSUMUGI encryption', () =>
 
   it('fails closed and surfaces an error when established 1:1 encryption rejects', async () => {
     const { internals, sendFrame, encoded, onError } = makeEngine();
-    internals.tsumugiSessions = new Map([
+    internals.mooringSessions = new Map([
       ['bob', { established: true, encrypt: vi.fn(async () => { throw new Error('encrypt failed'); }) }],
     ]);
 
@@ -80,7 +80,7 @@ describe('SuimyakuMediaEngine audio send path — 1:1 TSUMUGI encryption', () =>
 
   it('sends plaintext AUDIO when no session is established (no encrypted path available yet)', async () => {
     const { internals, sendFrame, encoded } = makeEngine();
-    internals.tsumugiSessions = new Map(); // no peer session
+    internals.mooringSessions = new Map(); // no peer session
 
     internals.sendEncryptedAudioFrame(encoded, 'alice');
     await flush();
@@ -93,8 +93,8 @@ describe('SuimyakuMediaEngine audio send path — 1:1 TSUMUGI encryption', () =>
     const { internals, sendFrame, encoded } = makeEngine();
     const ciphertext = new Uint8Array([7, 7]);
     internals.activeRoom = '#root';
-    internals.tsumugiGroupKey = { encrypt: vi.fn(async () => ciphertext) };
-    internals.tsumugiSessions = new Map();
+    internals.mooringGroupKey = { encrypt: vi.fn(async () => ciphertext) };
+    internals.mooringSessions = new Map();
 
     internals.sendEncryptedAudioFrame(encoded, '#root');
     await flush();
@@ -106,10 +106,10 @@ describe('SuimyakuMediaEngine audio send path — 1:1 TSUMUGI encryption', () =>
   it('fails closed and surfaces an error when established group encryption rejects', async () => {
     const { internals, sendFrame, encoded, onError } = makeEngine();
     internals.activeRoom = '#root';
-    internals.tsumugiGroupKey = {
+    internals.mooringGroupKey = {
       encrypt: vi.fn(async () => { throw new Error('group encrypt failed'); }),
     };
-    internals.tsumugiSessions = new Map();
+    internals.mooringSessions = new Map();
 
     internals.sendEncryptedAudioFrame(encoded, '#root');
     await flush();
@@ -123,7 +123,7 @@ describe('SuimyakuMediaEngine audio send path — 1:1 TSUMUGI encryption', () =>
   it('does not send room audio plaintext while an established peer session awaits a group key', async () => {
     const { internals, sendFrame, encoded, onError } = makeEngine();
     internals.activeRoom = '#root';
-    internals.tsumugiSessions = new Map([
+    internals.mooringSessions = new Map([
       ['bob', { established: true, encrypt: vi.fn() }],
     ]);
 
@@ -136,7 +136,7 @@ describe('SuimyakuMediaEngine audio send path — 1:1 TSUMUGI encryption', () =>
 
   it('keeps production audio plaintext while the explicit E2EE gate is disabled', async () => {
     const { internals, sendFrame, encoded } = makeEngine();
-    internals.tsumugiSessions = new Map([
+    internals.mooringSessions = new Map([
       ['bob', { established: true, encrypt: vi.fn(async () => new Uint8Array([9])) }],
     ]);
 
@@ -159,35 +159,35 @@ describe('SuimyakuMediaEngine audio send path — 1:1 TSUMUGI encryption', () =>
 type ReceiveInternals = EngineInternals & {
   activeRoom: string | null;
   dispatchFrame: ReturnType<typeof vi.fn>;
-  dispatchDecodedFrame: (frame: KaguraFrame, src: MediaStreamSource, room: string) => void;
+  dispatchDecodedFrame: (frame: CadenceFrame, src: MediaStreamSource, room: string) => void;
   decryptProtectedAudio: (nick: string, channel: string, ciphertext: Uint8Array) => void;
   decryptEncryptedAudio: (nick: string, channel: string, ciphertext: Uint8Array) => void;
   allowInboundPlaintextAudioWithProtection: () => boolean;
-  sendTsumugiHandshake: (target: string) => Promise<void>;
-  ensureTsumugiIdentity: ReturnType<typeof vi.fn>;
+  sendMooringHandshake: (target: string) => Promise<void>;
+  ensureMooringIdentity: ReturnType<typeof vi.fn>;
   registry: {
     getOrCreate: ReturnType<typeof vi.fn>;
     decodeAudio: ReturnType<typeof vi.fn>;
   };
 };
 
-const audioFrame = (bandId = 64): KaguraFrame => ({
+const audioFrame = (bandId = 64): CadenceFrame => ({
   bandId,
   streamId: 1,
   sequence: 1,
   timestamp: 1,
   keyframe: false,
-  codec: KaguraCodec.kaguravoxAudio,
+  codec: CadenceCodec.cadencevoxAudio,
   payload: new Uint8Array([1, 2, 3]),
 });
 
 const b64 = (bytes = new Uint8Array([1, 2, 3])) =>
   btoa(String.fromCharCode(...bytes));
 
-describe('SuimyakuMediaEngine production Audio E2EE gate and inbound downgrade guard', () => {
+describe('CadenceMediaEngine production Audio E2EE gate and inbound downgrade guard', () => {
   it('rejects TSUMUGI_DATA at the final sendFrame seam while disabled', () => {
     resetDropCounters();
-    const engine = new SuimyakuMediaEngine(callbacks());
+    const engine = new CadenceMediaEngine(callbacks());
     const internals = engine as unknown as ReceiveInternals;
 
     internals.sendFrame('#root', 'TSUMUGI_DATA', new Uint8Array([1]));
@@ -196,28 +196,28 @@ describe('SuimyakuMediaEngine production Audio E2EE gate and inbound downgrade g
   });
 
   it('does not initialize or accept TSUMUGI controls while the production gate is disabled', async () => {
-    const onTsumugiState = vi.fn();
-    const engine = new SuimyakuMediaEngine(callbacks({ onTsumugiState }));
+    const onMooringState = vi.fn();
+    const engine = new CadenceMediaEngine(callbacks({ onMooringState }));
     const internals = engine as unknown as ReceiveInternals;
     const ensureIdentity = vi.fn();
-    internals.ensureTsumugiIdentity = ensureIdentity;
+    internals.ensureMooringIdentity = ensureIdentity;
 
-    await internals.sendTsumugiHandshake('bob');
+    await internals.sendMooringHandshake('bob');
     engine.handleMediaMessage('bob', 'alice', 'TSUMUGI_HANDSHAKE', b64());
     await flush();
 
     expect(ensureIdentity).not.toHaveBeenCalled();
-    expect(internals.tsumugiSessions.size).toBe(0);
-    expect(onTsumugiState).not.toHaveBeenCalled();
+    expect(internals.mooringSessions.size).toBe(0);
+    expect(onMooringState).not.toHaveBeenCalled();
   });
 
   it('drops TSUMUGI control and binary data while the production gate is disabled', async () => {
-    const engine = new SuimyakuMediaEngine(callbacks());
+    const engine = new CadenceMediaEngine(callbacks());
     const internals = engine as unknown as ReceiveInternals;
     const groupDecrypt = vi.fn(async () => new Uint8Array([9]));
     const dispatchFrame = vi.fn();
     internals.activeRoom = '#root';
-    internals.tsumugiGroupKey = { encrypt: vi.fn(), decrypt: groupDecrypt } as never;
+    internals.mooringGroupKey = { encrypt: vi.fn(), decrypt: groupDecrypt } as never;
     internals.dispatchFrame = dispatchFrame;
 
     engine.handleMediaMessage('bob', '#root', 'TSUMUGI_DATA', b64());
@@ -229,11 +229,11 @@ describe('SuimyakuMediaEngine production Audio E2EE gate and inbound downgrade g
   });
 
   it('keeps every legacy plaintext-audio ingress working with stale keys while disabled', () => {
-    const engine = new SuimyakuMediaEngine(callbacks());
+    const engine = new CadenceMediaEngine(callbacks());
     const internals = engine as unknown as ReceiveInternals;
     const dispatchFrame = vi.fn();
     internals.dispatchFrame = dispatchFrame;
-    internals.tsumugiSessions = new Map([
+    internals.mooringSessions = new Map([
       ['bob', { established: true, encrypt: vi.fn() }],
     ]);
 
@@ -246,12 +246,12 @@ describe('SuimyakuMediaEngine production Audio E2EE gate and inbound downgrade g
   });
 
   it('keeps normal binary audio working with stale keys while disabled', () => {
-    const engine = new SuimyakuMediaEngine(callbacks());
+    const engine = new CadenceMediaEngine(callbacks());
     const internals = engine as unknown as ReceiveInternals;
     const decodeAudio = vi.fn();
     const getOrCreate = vi.fn(() => ({}));
     internals.registry = { getOrCreate, decodeAudio };
-    internals.tsumugiSessions = new Map([
+    internals.mooringSessions = new Map([
       ['bob', { established: true, encrypt: vi.fn() }],
     ]);
 
@@ -262,7 +262,7 @@ describe('SuimyakuMediaEngine production Audio E2EE gate and inbound downgrade g
   });
 
   it('preserves plaintext audio before any protection is established', () => {
-    const engine = new SuimyakuMediaEngine(callbacks());
+    const engine = new CadenceMediaEngine(callbacks());
     const internals = engine as unknown as ReceiveInternals;
     const dispatchFrame = vi.fn();
     internals.dispatchFrame = dispatchFrame;
@@ -273,9 +273,9 @@ describe('SuimyakuMediaEngine production Audio E2EE gate and inbound downgrade g
   });
 
   it('retains a fail-closed plaintext guard for the future enabled protection path', () => {
-    const engine = new SuimyakuMediaEngine(callbacks());
+    const engine = new CadenceMediaEngine(callbacks());
     const internals = engine as unknown as ReceiveInternals;
-    internals.tsumugiSessions = new Map([
+    internals.mooringSessions = new Map([
       ['bob', { established: true, encrypt: vi.fn() }],
     ]);
 
@@ -283,7 +283,7 @@ describe('SuimyakuMediaEngine production Audio E2EE gate and inbound downgrade g
   });
 
   it('drops every chunked TSUMUGI control/data name or alias instead of generic dispatch', () => {
-    const engine = new SuimyakuMediaEngine(callbacks());
+    const engine = new CadenceMediaEngine(callbacks());
     const internals = engine as unknown as ReceiveInternals;
     const dispatchFrame = vi.fn();
     internals.dispatchFrame = dispatchFrame;
@@ -305,11 +305,11 @@ describe('SuimyakuMediaEngine production Audio E2EE gate and inbound downgrade g
   });
 
   it('rejects the direct protected-decrypt entry while disabled', async () => {
-    const engine = new SuimyakuMediaEngine(callbacks());
+    const engine = new CadenceMediaEngine(callbacks());
     const internals = engine as unknown as ReceiveInternals;
     const peerDecrypt = vi.fn(async () => new Uint8Array([9]));
     internals.activeRoom = 'alice';
-    internals.tsumugiSessions = new Map([
+    internals.mooringSessions = new Map([
       ['bob', { established: true, encrypt: vi.fn(), decrypt: peerDecrypt } as never],
     ]);
 
@@ -320,13 +320,13 @@ describe('SuimyakuMediaEngine production Audio E2EE gate and inbound downgrade g
   });
 
   it('selects one explicit decrypt mode without group-to-pairwise fallback', async () => {
-    const engine = new SuimyakuMediaEngine(callbacks());
+    const engine = new CadenceMediaEngine(callbacks());
     const internals = engine as unknown as ReceiveInternals;
     const groupDecrypt = vi.fn(async () => { throw new Error('bad group frame'); });
     const peerDecrypt = vi.fn(async () => new Uint8Array([9]));
     internals.activeRoom = '#root';
-    internals.tsumugiGroupKey = { decrypt: groupDecrypt } as never;
-    internals.tsumugiSessions = new Map([
+    internals.mooringGroupKey = { decrypt: groupDecrypt } as never;
+    internals.mooringSessions = new Map([
       ['bob', { established: true, encrypt: vi.fn(), decrypt: peerDecrypt } as never],
     ]);
 

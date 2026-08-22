@@ -8,13 +8,19 @@ document drifts._
 ## Product direction
 
 DarkBear should become the most dependable way to use a WeeChat relay from a
-browser, with Orochi adding secure realtime communication rather than becoming
+browser, with Onyx Server adding secure realtime communication rather than becoming
 a requirement for basic chat. The next gains will come from confidence,
 continuity, and media reliability, not from adding more disconnected controls.
 
+Onyx Server integration details (transport, CAP/SASL, sessions, IRCX, services,
+Event Spine, MEDIA) live in
+[`docs/ONYX_SERVER_PROTOCOL.md`](docs/ONYX_SERVER_PROTOCOL.md). Branding is
+**Onyx Server** / **Onyx** — not IRCXNet; wire ids like `onyx/*` remain as
+stable protocol tokens only.
+
 Five rules guide the roadmap:
 
-1. Relay chat must remain fully useful without the optional Orochi bridge.
+1. Relay chat must remain fully useful without the optional Onyx Server bridge.
 2. Security and accessibility are release criteria, not later polish.
 3. Secrets are never persisted by default, and diagnostic exports are redacted.
 4. Every major workflow gets a deterministic Playwright path before it is called
@@ -31,7 +37,7 @@ DarkBear already ships the foundations this roadmap builds on:
   compatibility fallback.
 - IRCv3 replies and read markers, typing, reactions, per-buffer notification
   tiers, IRCX channel/account tools, and operator workflows.
-- Optional Orochi bridge for E2EE DMs, voice, video, screen sharing, captions,
+- Optional Onyx Server bridge for E2EE DMs, voice, video, screen sharing, captions,
   cross-device markers, and Web Push. Call Audio E2EE remains unavailable until
   its signalling and lifecycle are complete; camera video and screen sharing
   are not end-to-end encrypted.
@@ -49,7 +55,7 @@ confidence, so it leads the plan.
 
 ### R0.1 Connected Playwright matrix
 
-**Status: COMPLETE.** A deterministic binary relay fixture and direct Orochi
+**Status: COMPLETE.** A deterministic binary relay fixture and direct Onyx Server
 account fixture now exercise every production connection transition without an
 external service. The complete 160-case matrix covers 152 journeys with eight
 intentional project-scoped performance skips across desktop Chromium, Firefox,
@@ -128,7 +134,7 @@ in logs, settings exports, traces, or support bundles.
 ### R0.4 Diagnostics and support bundle
 
 **Status: COMPLETE.** Settings exposes bounded relay phases and reconnect detail,
-negotiated protocol/auth/compression capabilities, bridge and Orochi media
+negotiated protocol/auth/compression capabilities, bridge and Onyx Server media
 health, codec/runtime availability, service-worker and asset versions, scoped
 error identifiers, and a copyable whitelist-built support bundle. Raw errors,
 endpoints, credentials, message text, keys, and identities cannot enter it.
@@ -212,7 +218,7 @@ reconnects, edits to the loaded window, and mobile navigation.
 
 **Status: COMPLETE.** Archive-opted-in messages can be saved locally with a
 private note and are pruned or wiped with the selected archive policy. A bounded
-local inbox collects mentions, linked replies, DMs, Orochi call transitions, and
+local inbox collects mentions, linked replies, DMs, Onyx Server call transitions, and
 explicit operator alerts with independent unread state. Desktop/mobile entry
 points and `Alt+A` open one responsive panel; every timeline-backed item jumps
 when loaded or gives a specific unavailable/expired explanation. State/component
@@ -228,7 +234,7 @@ bookmarks follow the user’s chosen archive-retention policy.
 
 ### R1.4 Cross-device preferences
 
-**Status: COMPLETE.** Authenticated direct sessions negotiate Orochi
+**Status: COMPLETE.** Authenticated direct sessions negotiate Onyx Server
 `draft/metadata-2`, read one versioned account snapshot, and publish only the
 allowlisted theme, font/motion accessibility, alert controls, stable-name
 notification tiers, pins, mutes, and monotonic read positions. Per-family
@@ -241,7 +247,7 @@ the existing credential-free export/import path remains the capability fallback.
 Unit, controller, wire, Settings, scoped axe, and five-project browser coverage
 verify the complete path without syncing local-only data.
 
-Sync non-secret preferences through an account-scoped Orochi capability when
+Sync non-secret preferences through an account-scoped Onyx Server capability when
 available: theme, accessibility settings, notification tiers, pins, mutes, and
 read state. Keep export/import as the relay-only fallback. Never sync passwords,
 custom CSS, local history, or device media choices.
@@ -257,7 +263,7 @@ ignore the capability without losing local settings.
 menu action, and media slash command now passes through one typed preflight
 state machine before the media engine can act. It probes browser permissions,
 opens the selected microphone/camera for a local meter and preview, constructs
-the shipped KaguraVox and KaguraVis encoders, offers an isolated echo test, and
+the shipped CadenceVox and CadenceVis encoders, offers an isolated echo test, and
 keeps output selection synchronized with the mounted engine. Device IDs remain
 local, disconnected selections retry the system default and are removed, and
 device-change events refresh the available choices. Capture and codec failures
@@ -279,7 +285,7 @@ fixed 128-packet window per stream with a hard stream cap, samples per-peer
 audio jitter and Worker/main-thread encode pressure, and renders those signals
 with the selected quality tier in an accessible compact call-health inspector.
 Quality degrades after consecutive bad samples and recovers only after a longer
-headroom hold. Loss is reported through Orochi `MEDIA ABR`, recovery keyframes
+headroom hold. Loss is reported through Onyx Server `MEDIA ABR`, recovery keyframes
 are forced, and transient bridge drops retain one capture/decoder pipeline for
 a bounded grace period before re-announcing the room and roster. Intentional
 detach and grace expiry still release every track. The live audio worklet is now
@@ -300,7 +306,7 @@ active media pipeline per participant, and understandable degraded states.
 
 **Status: COMPLETE.** Every query now exposes the currently observed peer key,
 a complete grouped SHA-256 fingerprint, its short generation marker, and a
-local verification state scoped to the authenticated Orochi endpoint/account.
+local verification state scoped to the authenticated Onyx Server endpoint/account.
 Trust pins live behind a typed IndexedDB repository and never sync. A changed
 verified key is shown against the previous fingerprint and blocks sending until
 the user explicitly compares and re-trusts it. The optional verified-only
@@ -349,7 +355,7 @@ obeys the archive wipe controls.
 
 ### R3.1 Quiet hours and actionable notifications
 
-**Status: COMPLETE.** Foreground alerts and closed-tab Orochi Web Push now
+**Status: COMPLETE.** Foreground alerts and closed-tab Onyx Server Web Push now
 share a device-local policy with scheduled overnight/daytime quiet windows,
 IANA or system time zones, and one-hour/eight-hour/until-tomorrow global pause
 controls. Expiring per-buffer mutes persist separately from the existing synced
@@ -382,7 +388,7 @@ scope, accessibility, rejection, relay delivery, and credential-safe storage.
 
 ### R3.3 Operator incident workspace
 
-**Status: COMPLETE.** The operator console now preserves Orochi's subscription
+**Status: COMPLETE.** The operator console now preserves Onyx Server's subscription
 category and severity tags alongside the structured Event Spine domain/verb,
 then supports named device-local views of category subscriptions, severity
 thresholds, and text queries. A bounded 500-event timeline exposes exact nick,
@@ -443,7 +449,7 @@ relative-asset build; the browser build and deploy-version service worker stay
 unchanged. One local-only window receives four reviewed native interfaces:
 events, notifications, controlled deep links, and a custom credential vault.
 The vault exposes only two fixed records through bounded, redacted Rust
-commands and maps explicitly remembered relay/profile/Orochi passwords to the
+commands and maps explicitly remembered relay/profile/Onyx Server passwords to the
 operating-system secret store. Non-remembered passwords and all bearer tokens
 remain session-only, and localStorage contains metadata rather than desktop
 secrets. Remote frames receive no native capability.
@@ -468,11 +474,11 @@ messages readable. Shared Intl helpers now own user-facing dates, times, relativ
 labels, and numbers across the chat, archive, uploads, calls, activity, operator,
 settings, sidebar, and thread surfaces.
 
-The extracted core shell covers connection credentials and Orochi bridge copy,
+The extracted core shell covers connection credentials and Onyx Server bridge copy,
 navigation, sidebar/user list, chat header and search, composer, threads, mobile
 dock, command palette actions, and settings navigation. A single IME predicate
 guards global shortcuts and every key-driven high-risk surface, including relay
-and Orochi credentials, TOTP, the main and thread composers, message/user/buffer
+and Onyx Server credentials, TOTP, the main and thread composers, message/user/buffer
 search, and the command palette. Unit/source contracts plus a connected Arabic
 journey verify live locale switching, RTL overflow, composition preservation, and
 WCAG A/AA behavior in Chromium, Firefox, WebKit, Pixel 7, and iPhone 15.
@@ -503,9 +509,9 @@ settling time, samples low-tier frames, joins a real mocked voice call, delivers
 growth. Source contracts and unit tests protect capability detection, lazy chunk
 boundaries, reduced-motion behavior, and cross-frame line batching.
 
-### R5.1 Orochi authentication and session continuity
+### R5.1 Onyx Server authentication and session continuity
 
-**Status: COMPLETE.** DarkBear now distinguishes Orochi's account-bound SASL
+**Status: COMPLETE.** DarkBear now distinguishes Onyx Server's account-bound SASL
 `SESSION-TOKEN` credential from local/mesh logical-session reclaim tokens. The
 TLS-issued bounded `sst_...` credential remains in session storage, is preferred
 over replaying the password on reconnect, and falls back once to password/SCRAM
@@ -513,17 +519,17 @@ after an explicit rejection while preserving `SESSION RESUME` state. The SASL
 authcid can differ from the visible nick, so nick-collision aliases never change
 the authenticated account.
 
-When `orochi/session-sync` is active, both welcome-time and late-discovered
-channel mirroring suppress client JOINs and let Orochi restore membership and
+When `onyx/session-sync` is active, both welcome-time and late-discovered
+channel mirroring suppress client JOINs and let Onyx Server restore membership and
 history without a competing JOIN/NAMES storm. Parser, credential, IRC state-
 machine, bridge-controller, and connected five-profile call-recovery tests cover
 the complete first-login, token capture, reconnect, fallback, and session-sync
 contract.
 
-### R5.2 Orochi service reply feedback
+### R5.2 Onyx Server service reply feedback
 
 **Status: COMPLETE.** Server-buffer `FAIL`, `WARN`, `NOTE`, command-shaped
-registration replies, and narrowly recognised Orochi service `NOTICE` lines now
+registration replies, and narrowly recognised Onyx Server service `NOTICE` lines now
 feed a typed, server-scoped services log. The session-only store retains at most
 24 entries, presents the latest four in the Services panel, and can clear one
 network without affecting another. Unrelated server chatter and account-bound
@@ -537,7 +543,7 @@ and token non-display in Chromium, Firefox, WebKit, Pixel 7, and iPhone 15. The
 versioned `2026-07-16-192841-darkbear-00b824a` release is live and passed the
 public postflight smoke.
 
-### R5.3 Orochi service command hygiene
+### R5.3 Onyx Server service command hygiene
 
 **Status: COMPLETE.** Every Services-panel command now crosses one
 2,048-character, control-byte-free dispatch boundary before `/quote`. Rejected
@@ -577,7 +583,7 @@ check, and asset budgets at 147.72 KiB initial JS, 25.43 KiB CSS, 173.14 KiB
 combined, and 33.96 KiB lazy scenes. This slice is live in version
 `2026-07-16-230427-darkbear-00b824a`.
 
-### R5.5 Orochi services accessibility
+### R5.5 Onyx Server services accessibility
 
 **Status: COMPLETE.** Every Services-panel input and textarea now has
 an explicit accessible name, and the account-setting, VHost, and auto-kick
@@ -586,14 +592,14 @@ are explicit non-submit buttons. Small headings, helper copy, inactive tabs,
 clear/cancel actions, and reply-log labels use contrast-safe theme roles that
 remain legible under DarkBear's most demanding palette.
 
-The connected Orochi services journey now runs `@axe-core/playwright` over the
+The connected Onyx Server services journey now runs `@axe-core/playwright` over the
 settled Account, Channel, and Memo views. The gate waits for the modal overlay's
 actual Web Animations completion instead of sampling its transient opacity or
 using a timing sleep. It passes Chromium, Firefox, WebKit, Pixel 7, and iPhone
 15; focused component tests and strict TypeScript/ESLint also pass. This slice
 is live in version `2026-07-16-230427-darkbear-00b824a`.
 
-### R5.6 Localized Orochi services
+### R5.6 Localized Onyx Server services
 
 **Status: COMPLETE.** The entire Account, Channel, Memo, local-error,
 confirmation, helper-copy, and accessibility-name surface now uses DarkBear's
@@ -604,7 +610,7 @@ layout fork.
 
 Component coverage renders German account controls and Arabic memo controls,
 including the RTL root and localized accessible names. The connected Arabic
-IME journey now establishes current Orochi detection, opens the translated
+IME journey now establishes current Onyx Server detection, opens the translated
 services dialog, audits it with axe, and retains its full-document WCAG gate in
 Chromium, Firefox, WebKit, Pixel 7, and iPhone 15. That broader gate found and
 fixed a 20 px channel-info target and a short topic expander; both now meet the
@@ -616,7 +622,7 @@ asset budgets at 150.39 KiB initial JS, 25.43 KiB CSS, 175.82 KiB combined, and
 
 ### R5.7 Release-candidate hardening
 
-**Status: COMPLETE.** The optional direct Orochi bridge now fails closed
+**Status: COMPLETE.** The optional direct Onyx Server bridge now fails closed
 unless production and credential-bearing endpoints use `wss://`. The only plain
 `ws://` exception is an unauthenticated loopback endpoint for local development,
 and the desktop content-security policy no longer permits generic plain
@@ -652,7 +658,7 @@ than buffering an unbounded response first.
 The Services dialog now owns a bounded vertical scroll region with sticky tabs
 and no horizontal overflow on mobile. Account, Channel, and Memo are real ARIA
 tabs with roving focus plus Home/End and RTL-aware arrow navigation. The relay
-and direct Orochi clients now return whether an authenticated open socket
+and direct Onyx Server clients now return whether an authenticated open socket
 actually accepted each frame. Rejected sends retain ordinary and encrypted
 composer text, drafted upload URLs, thread replies, every Services field and
 confirmation, notification reply text, operator raw/broadcast/destructive
@@ -793,7 +799,7 @@ every later slice.
 ## Not planned
 
 - Replacing WeeChat as the chat backbone.
-- Making the Orochi bridge mandatory for normal chat.
+- Making the Onyx Server bridge mandatory for normal chat.
 - Persisting passwords or bearer tokens by default for convenience.
 - An offline mode that appears connected or accepts messages it cannot deliver.
 - Arbitrary scripts in command-palette actions.

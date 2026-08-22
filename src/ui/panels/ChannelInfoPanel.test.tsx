@@ -10,7 +10,7 @@ const state = vi.hoisted(() => ({
       chan: {
         buffer: {
           id: 'chan',
-          localVars: { type: 'channel', channel: '#darkbear', server: 'orochi' },
+          localVars: { type: 'channel', channel: '#darkbear', server: 'onyx' },
           shortName: '#darkbear',
         },
         modes: ['n', 't', 'm'],

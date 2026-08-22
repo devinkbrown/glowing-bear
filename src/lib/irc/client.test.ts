@@ -178,16 +178,16 @@ describe('frame handling', () => {
     const c = makeClient({ onConnected });
     c.connect();
     lastSocket().open();
-    lastSocket().message(':orochi.test 001 kain :Welcome');
+    lastSocket().message(':onyx.test 001 kain :Welcome');
 
     expect(onConnected).toHaveBeenCalledWith(expect.objectContaining({
       command: '001',
-      prefix: 'orochi.test',
+      prefix: 'onyx.test',
       params: ['kain', 'Welcome'],
     }));
   });
 
-  it('handles a CRLF-less frame (Orochi omits the trailing newline)', () => {
+  it('handles a CRLF-less frame (Onyx Server omits the trailing newline)', () => {
     const c = makeClient();
     expect(c.loggedIn).toBe(false);
     c.connect();

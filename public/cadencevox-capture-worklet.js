@@ -1,8 +1,8 @@
-class KaguraVoxCapture extends AudioWorkletProcessor {
+class CadenceVoxCapture extends AudioWorkletProcessor {
   constructor(options) {
     super();
     // frameSize is the interleaved-stereo sample count the encoder expects
-    // (KAGURAVOX_FRAME_48K * 2). The microphone delivers mono, so accumulate
+    // (CADENCEVOX_FRAME_48K * 2). The microphone delivers mono, so accumulate
     // half that many samples and duplicate each one into left and right.
     const stereoFrame = options.processorOptions.frameSize || 1920;
     this._mono = stereoFrame >> 1;
@@ -37,4 +37,4 @@ class KaguraVoxCapture extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor('kaguravox-capture', KaguraVoxCapture);
+registerProcessor('cadencevox-capture', CadenceVoxCapture);

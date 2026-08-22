@@ -100,14 +100,14 @@ describe('SettingsModal', () => {
     expect(getByLabelText('Sync preferences now')).toBeDisabled();
   });
 
-  it('shows redacted phase, protocol, Orochi media, and runtime diagnostics', () => {
+  it('shows redacted phase, protocol, Onyx Server media, and runtime diagnostics', () => {
     const { getAllByText, getByText } = render(() => <SettingsModal open onClose={vi.fn()} />);
 
     fireEvent.click(getAllByText('Advanced')[0]!);
 
     expect(getByText('Phase')).toBeInTheDocument();
     expect(getByText('Protocol')).toBeInTheDocument();
-    expect(getByText('Orochi Media')).toBeInTheDocument();
+    expect(getByText('Onyx Server Media')).toBeInTheDocument();
     expect(getByText('Codec Runtime')).toBeInTheDocument();
     expect(getByText('Service Worker')).toBeInTheDocument();
   });

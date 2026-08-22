@@ -118,7 +118,7 @@ export function parseIrcxLine(line: WeeChatLine): IrcxParsed | null {
     case '803': return parseAccessStart(plain);
     case '804': return parseAccessEntry(plain, 'access_entry');
     case '805': return parseAccessEnd(plain);
-    // EVENT numerics per draft-pfenning-04, live-verified against orochi:
+    // EVENT numerics per draft-pfenning-04, live-verified against Onyx Server:
     // "806 <me> MEDIA * :Event added", "807 ... :Event removed",
     // "808 <me> :Start of event list", "809 <me> <cat> <mask>", "810 :End".
     case '806': return parseEventAck('event_add', plain);
@@ -182,7 +182,7 @@ function parsePropEnd(plain: string): ParsedPropEnd | null {
   return null;
 }
 
-// Orochi wire shapes (live-verified):
+// Onyx Server wire shapes (live-verified):
 //   804 RPL_ACCESSENTRY:  "<channel> <level> <mask> <set_by> <duration>"
 //   801/802 ADD/DELETE:   "<channel> <level> <mask> :ACCESS entry added|deleted"
 // The relay may render the trailing text with or without its ':' marker, so
@@ -394,8 +394,8 @@ export function parseEventFeedText(text: string): ParsedEventFeed | null {
 
   if (plain[0] === '@' || plain[0] === ':') {
     const msg = parseIRCMessage(plain);
-    const severity = msg.tags['orochi.io/severity']?.toLocaleLowerCase();
-    const subscription = msg.tags['orochi.io/category']?.toLocaleUpperCase();
+    const severity = msg.tags['onyx_server.io/severity']?.toLocaleLowerCase();
+    const subscription = msg.tags['onyx_server.io/category']?.toLocaleUpperCase();
     if (msg.command === 'EVENT') return parseEventParams(msg.params, plain, msg.prefix ?? undefined, severity, subscription);
     if (msg.command === 'NOTE') return parseNoteEventParams(msg.params, plain, msg.prefix ?? undefined, severity, subscription);
   }
@@ -475,7 +475,7 @@ function parseChannelListRow(plain: string): ParsedChannelListRow | null {
   };
 }
 
-// Orochi LISTX live shape: "[<me>] <#channel> <users> <modes> <created> :<topic>"
+// Onyx Server LISTX live shape: "[<me>] <#channel> <users> <modes> <created> :<topic>"
 function parseListxRow(plain: string): ParsedChannelListRow | null {
   const colonIdx = plain.indexOf(' :');
   const before = colonIdx !== -1 ? plain.slice(0, colonIdx) : plain;

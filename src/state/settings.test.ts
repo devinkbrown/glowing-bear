@@ -539,7 +539,7 @@ describe('settings store', () => {
         `https://${userSecret}:${passwordSecret}@uploads.example/private/upload` +
         `?signature=${querySecret}#${fragmentSecret}`;
       const privateBridgeUrl =
-        `wss://${bridgeUserSecret}:${passwordSecret}@orochi.example/irc` +
+        `wss://${bridgeUserSecret}:${passwordSecret}@onyx.example/irc` +
         `?token=${bridgeQuerySecret}#${fragmentSecret}`;
       const privateBackgroundUrl = `https://wall.example/private.jpg?token=${backgroundSecret}`;
       updateSettings({
@@ -566,7 +566,7 @@ describe('settings store', () => {
       }
       expect(exported.tenorApiKey).toBe('');
       expect(exported.uploadUrl).toBe('https://uploads.example/private/upload');
-      expect(exported.bridge.wsUrl).toBe('wss://orochi.example/irc');
+      expect(exported.bridge.wsUrl).toBe('wss://onyx.example/irc');
       expect(exported.bgImage).toBe('https://wall.example/private.jpg');
       expect(settings.tenorApiKey).toBe(apiSecret);
       expect(settings.uploadUrl).toBe(privateUploadUrl);
@@ -586,13 +586,13 @@ describe('settings store', () => {
         bgImage: `https://user:password@wall.example/private.jpg?token=${backgroundSecret}`,
         bridge: {
           ...DEFAULT_BRIDGE,
-          wsUrl: `wss://user:password@orochi.example/irc?token=${bridgeSecret}`,
+          wsUrl: `wss://user:password@onyx.example/irc?token=${bridgeSecret}`,
         },
       }))).toBe(true);
 
       expect(settings.tenorApiKey).toBe('');
       expect(settings.uploadUrl).toBe('https://uploads.example/upload');
-      expect(settings.bridge.wsUrl).toBe('wss://orochi.example/irc');
+      expect(settings.bridge.wsUrl).toBe('wss://onyx.example/irc');
       expect(settings.bgImage).toBe('https://wall.example/private.jpg');
       expect(JSON.stringify(settings)).not.toContain(apiSecret);
       expect(JSON.stringify(settings)).not.toContain(urlSecret);
@@ -709,8 +709,8 @@ describe('settings store', () => {
 
   describe('sanitizePortableBridgeUrl', () => {
     it('preserves only policy-safe WS origin/path data', () => {
-      expect(sanitizePortableBridgeUrl('wss://u:p@orochi.example/irc?token=secret#private'))
-        .toBe('wss://orochi.example/irc');
+      expect(sanitizePortableBridgeUrl('wss://u:p@onyx.example/irc?token=secret#private'))
+        .toBe('wss://onyx.example/irc');
       expect(sanitizePortableBridgeUrl('ws://127.0.0.1:8080/irc?token=secret'))
         .toBe('ws://127.0.0.1:8080/irc');
       expect(sanitizePortableBridgeUrl('ws://[::1]:8080/irc#secret'))
@@ -718,9 +718,9 @@ describe('settings store', () => {
     });
 
     it('fails closed for remote plaintext, non-WS, and malformed values', () => {
-      expect(sanitizePortableBridgeUrl('ws://orochi.example/irc')).toBe('');
-      expect(sanitizePortableBridgeUrl('https://orochi.example/irc')).toBe('');
-      expect(sanitizePortableBridgeUrl('//orochi.example/irc')).toBe('');
+      expect(sanitizePortableBridgeUrl('ws://onyx.example/irc')).toBe('');
+      expect(sanitizePortableBridgeUrl('https://onyx.example/irc')).toBe('');
+      expect(sanitizePortableBridgeUrl('//onyx.example/irc')).toBe('');
       expect(sanitizePortableBridgeUrl('not a url')).toBe('');
     });
   });

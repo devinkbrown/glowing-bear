@@ -11,19 +11,19 @@
  *     They survive reloads but are cleared when the browser session ends.
  * Reads and writes transparently merge and split the two stores.
  *
- * Session tokens are issued by Orochi after successful SASL auth via:
+ * Session tokens are issued by Onyx Server after successful SASL auth via:
  *   NOTE SESSION TOKEN :<token>
  * Saved tokens are reused with SESSION RESUME after SASL succeeds. They are
  * not SASL mechanisms and must not replace the account password.
  *
- * On mesh deployments Orochi additionally emits:
+ * On mesh deployments Onyx Server additionally emits:
  *   NOTE SESSION MTOKEN :<token>
  * a mesh-sealed reclaim token usable to resume the session from ANY node in the
  * mesh (server.zig handleSession TOKEN). It is longer than the 32-hex local
  * token; `SESSION RESUME <mtoken>` routes through handleMeshReclaim, which either
  * reclaims a detached session held locally or redirects to the owning node.
  *
- * Orochi separately issues an account-bound `sst_...` credential after a
+ * Onyx Server separately issues an account-bound `sst_...` credential after a
  * secure password/SCRAM login. That credential is preferred through SASL
  * SESSION-TOKEN on reconnect; rejection clears only it and falls back to the
  * password. It never substitutes for the logical-session reclaim tokens above.
@@ -61,13 +61,13 @@ export interface SavedCredentials {
   password?: string;
   /** True only when the user explicitly allowed localStorage persistence. */
   rememberPassword?: boolean;
-  /** Orochi-issued session resume token (local node only) */
+  /** Onyx Server-issued session resume token (local node only) */
   sessionToken?: string;
-  /** Orochi-issued mesh-sealed reclaim token (resumes from any mesh node) */
+  /** Onyx Server-issued mesh-sealed reclaim token (resumes from any mesh node) */
   meshToken?: string;
   /** Token validity deadline — ISO string */
   tokenExpiry?: string;
-  /** Orochi-issued account re-entry credential for SASL SESSION-TOKEN. */
+  /** Onyx Server-issued account re-entry credential for SASL SESSION-TOKEN. */
   saslSessionToken?: string;
   /** Canonical account bound to the SASL credential. */
   saslAccount?: string;
@@ -329,7 +329,7 @@ async function persistDesktopCredentialPasswords(): Promise<void> {
   }));
 }
 
-/** Load remembered Orochi passwords before the direct bridge may connect. */
+/** Load remembered Onyx Server passwords before the direct bridge may connect. */
 export async function hydrateDesktopCredentialPasswords(): Promise<void> {
   if (!isDesktopRuntime()) return;
   const payload = await desktopVaultGet('credentials-v1');
@@ -456,7 +456,7 @@ export function saveCredentials(opts: {
 }
 
 /**
- * Store a session token received from Orochi.
+ * Store a session token received from Onyx Server.
  * expiresAt is a Unix timestamp (seconds).
  * canonicalNick — if provided, overwrites the stored nick with the account
  *   name so future auto-connects use the real nick, not a '_'-suffixed alias.
@@ -515,7 +515,7 @@ export function clearSessionToken(server?: string, nick?: string): void {
   } catch { /* quota */ }
 }
 
-/** Store a finite account re-entry token received after secure Orochi SASL. */
+/** Store a finite account re-entry token received after secure Onyx Server SASL. */
 export function storeSaslSessionToken(token: string, expiresAt: number, account?: string): void {
   if (typeof window === 'undefined') return;
   if (!/^sst_[a-f\d]{32}$/i.test(token) || !Number.isSafeInteger(expiresAt) || expiresAt <= 0) return;
@@ -556,7 +556,7 @@ export function clearSaslSessionToken(server?: string, nick?: string): void {
 }
 
 /**
- * Store a mesh-sealed reclaim token received from Orochi via
+ * Store a mesh-sealed reclaim token received from Onyx Server via
  * `NOTE SESSION MTOKEN`. Unlike the local session token, this one is usable to
  * reclaim/redirect the session from ANY node in the mesh, so it survives a
  * reconnect that lands on a different node. Persisted against the active

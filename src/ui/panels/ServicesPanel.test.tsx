@@ -11,13 +11,13 @@ const state = vi.hoisted(() => ({
       server: {
         buffer: {
           id: 'server',
-          localVars: { type: 'server', server: 'orochi', network: 'orochi' },
+          localVars: { type: 'server', server: 'onyx', network: 'onyx' },
         },
       },
       chan: {
         buffer: {
           id: 'chan',
-          localVars: { type: 'channel', channel: '#darkbear', server: 'orochi' },
+          localVars: { type: 'channel', channel: '#darkbear', server: 'onyx' },
         },
       },
     },
@@ -148,7 +148,7 @@ describe('ServicesPanel', () => {
         message: 'Wrong server',
       },
       {
-        serverName: 'orochi',
+        serverName: 'onyx',
         receivedAt: 2,
         kind: 'error',
         command: 'REGISTER',
@@ -164,7 +164,7 @@ describe('ServicesPanel', () => {
     expect(queryByText('Wrong server')).not.toBeInTheDocument();
 
     fireEvent.click(getByRole('button', { name: 'Clear' }));
-    expect(state.clearServiceFeedback).toHaveBeenCalledWith('orochi');
+    expect(state.clearServiceFeedback).toHaveBeenCalledWith('onyx');
   });
 
   it('flattens memo line breaks before dispatch and clears only after routing', () => {
@@ -191,7 +191,7 @@ describe('ServicesPanel', () => {
     fireEvent.click(getByRole('button', { name: 'Send' }));
 
     expect(state.sendTo).not.toHaveBeenCalled();
-    expect(state.recordServiceFeedback).toHaveBeenCalledWith('orochi', {
+    expect(state.recordServiceFeedback).toHaveBeenCalledWith('onyx', {
       kind: 'error',
       command: 'TEGAMI',
       code: 'CLIENT_INVALID_INPUT',
@@ -226,7 +226,7 @@ describe('ServicesPanel', () => {
     fireEvent.click(getByRole('button', { name: 'Register' }));
 
     expect(password).toHaveValue('do-not-reflect-this-secret');
-    expect(state.recordServiceFeedback).toHaveBeenCalledWith('orochi', {
+    expect(state.recordServiceFeedback).toHaveBeenCalledWith('onyx', {
       kind: 'error',
       command: 'REGISTER',
       code: 'CLIENT_NOT_CONNECTED',

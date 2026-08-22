@@ -7,7 +7,7 @@ import type { JSX } from 'solid-js';
 import {
   buffersState, NICK_TIER_ORDER, settings,
   openQuery, sendInput, isOperBuffer,
-  isActiveOrochi, isBot, openUserProfile, sendWhisper,
+  isActiveOnyxServer, isBot, openUserProfile, sendWhisper,
 } from '@/state';
 import type { WeeChatNick } from '@/types';
 import { mediaState, requestStartCall } from '@/state/media';
@@ -61,8 +61,8 @@ interface NickAction {
 
 function tierAccent(label: string): string {
   switch (label) {
-    case 'Operator': return '#fb7185'; // rose — network staff (orochi *)
-    case 'Founder': return '#f59e0b';  // amber-gold — orochi founder (!)
+    case 'Operator': return '#fb7185'; // rose — network staff (Onyx Server *)
+    case 'Founder': return '#f59e0b';  // amber-gold — Onyx Server founder (!)
     case 'Owner': return '#f87171';
     case 'Admin': return '#c084fc';
     case 'Op': return '#4ade80';
@@ -406,10 +406,10 @@ export default function UserList(props: Props) {
                 <div class="py-1.5">
                   <PopupBtn icon="msg" label={t('users.message')} onClick={() => doAction('query')} />
                   <PopupBtn icon="whois" label={t('users.whois')} onClick={() => doAction('whois')} />
-                  <Show when={isActiveOrochi()}>
+                  <Show when={isActiveOnyxServer()}>
                     <PopupBtn icon="profile" label={t('users.profile')} onClick={() => doAction('profile')} />
                   </Show>
-                  <Show when={isActiveOrochi() && entry()?.buffer.localVars['type'] === 'channel'}>
+                  <Show when={isActiveOnyxServer() && entry()?.buffer.localVars['type'] === 'channel'}>
                     <PopupBtn icon="whisper" label={t('users.whisper')} onClick={() => doAction('whisper')} />
                   </Show>
                   <Show when={mediaState.callState === 'idle'}>

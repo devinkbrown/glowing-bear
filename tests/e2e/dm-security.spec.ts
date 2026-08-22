@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { waitForAssetVersionReady } from './fixtures/appReady';
-import { MockOrochiAccount } from './fixtures/orochiAccount';
+import { MockOnyxAccount } from './fixtures/onyxAccount';
 import { MockWeeChatRelay } from './fixtures/weechatRelay';
 
 async function peerPublicKey(): Promise<string> {
@@ -17,7 +17,7 @@ async function peerPublicKey(): Promise<string> {
 test('verifies a DM fingerprint and blocks a rotated key until explicit re-trust', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const relay = new MockWeeChatRelay({ includeQuery: true });
-  const account = new MockOrochiAccount();
+  const account = new MockOnyxAccount();
   const firstKey = await peerPublicKey();
   const rotatedKey = await peerPublicKey();
   account.setPeerKey('alice', firstKey);
@@ -26,7 +26,7 @@ test('verifies a DM fingerprint and blocks a rotated key until explicit re-trust
     localStorage.setItem('darkbear_settings_v2', JSON.stringify({
       bridge: {
         enabled: true,
-        wsUrl: 'wss://orochi.test/irc',
+        wsUrl: 'wss://onyx.test/irc',
         account: 'dm-account',
         password: 'dm-secret',
         autoJoinMedia: false,

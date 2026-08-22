@@ -1,21 +1,21 @@
-// WS/browser media datagram MAC — the JS twin of Orochi's native-media MAC
-// (orochi/src/substrate/kagura_frame.zig). Authenticates each kagura media
+// WS/browser media datagram MAC — the JS twin of Onyx Server's native-media MAC
+// (onyx/src/substrate/cadence_frame.zig). Authenticates each cadence media
 // frame the browser sends over a binary WebSocket frame so the server (SFU/relay)
 // can attribute it to the issued per-stream key before fanning it out.
 //
 // The cross-repo contract is pinned by a shared known-answer test:
-//   orochi: docs/reference/vectors/ws_media_mac.json + the Zig KAT test
+//   Onyx Server: docs/reference/vectors/ws_media_mac.json + the Zig KAT test
 //   onyx:   ./ws_media_mac.vectors.json + ./mediaMac.test.ts
 // Any change here MUST update both repos in lockstep.
 
-/** MAC tag appended after the kagura frame (HMAC-SHA256 truncated to 128 bits). */
+/** MAC tag appended after the cadence frame (HMAC-SHA256 truncated to 128 bits). */
 export const MEDIA_MAC_TAG_BYTES = 16;
 /** Per-stream MAC key size handed to the participant by the server. */
 export const MEDIA_MAC_KEY_BYTES = 32;
 
-// HKDF-style domain separation labels — must match kagura_frame.zig exactly.
-const EXTRACT_KEY = 'orochi native-media mac extract v1';
-const EXPAND_LABEL = 'orochi native-media datagram mac v1';
+// HKDF-style domain separation labels — must match cadence_frame.zig exactly.
+const EXTRACT_KEY = 'onyx native-media mac extract v1';
+const EXPAND_LABEL = 'onyx native-media datagram mac v1';
 
 function subtle(): SubtleCrypto {
   const s = globalThis.crypto?.subtle;
@@ -25,7 +25,7 @@ function subtle(): SubtleCrypto {
 
 // Web Crypto wants a plain ArrayBuffer-backed view; a Uint8Array<ArrayBufferLike>
 // is not assignable to BufferSource under strict lib types. Copy into a fresh
-// ArrayBuffer (matches the existing TsumugiSession idiom).
+// ArrayBuffer (matches the existing MooringSession idiom).
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
@@ -79,7 +79,7 @@ export async function importMediaMacKey(k32: Uint8Array): Promise<CryptoKey> {
   return subtle().importKey('raw', toArrayBuffer(k32), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
 
-/** Compute the 16-byte MAC tag over the exact kagura frame bytes. */
+/** Compute the 16-byte MAC tag over the exact cadence frame bytes. */
 export async function mediaMacTag(key: CryptoKey, frame: Uint8Array): Promise<Uint8Array> {
   const sig = await subtle().sign('HMAC', key, toArrayBuffer(frame));
   return new Uint8Array(sig).slice(0, MEDIA_MAC_TAG_BYTES);

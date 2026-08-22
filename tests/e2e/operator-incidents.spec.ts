@@ -22,9 +22,9 @@ test('saves and pivots incident views, confirms destructive targets, audits, and
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page.getByText('#darkbear', { exact: true }).first()).toBeVisible();
 
-  relay.sendServerIncoming('You are now an IRC operator — staff', 'orochi.test', ['irc_381']);
-  relay.sendServerIncoming('@orochi.io/category=CONNECT;orochi.io/severity=notice :orochi.test EVENT oper USER CONNECT alice!u@10.0.0.1 account=private-account');
-  relay.sendServerIncoming('@orochi.io/category=OPER_ACTION;orochi.io/severity=warn :orochi.test EVENT oper MEMBER JOIN #darkbear alice');
+  relay.sendServerIncoming('You are now an IRC operator — staff', 'onyx.test', ['irc_381']);
+  relay.sendServerIncoming('@onyx_server.io/category=CONNECT;onyx_server.io/severity=notice :onyx.test EVENT oper USER CONNECT alice!u@10.0.0.1 account=private-account');
+  relay.sendServerIncoming('@onyx_server.io/category=OPER_ACTION;onyx_server.io/severity=warn :onyx.test EVENT oper MEMBER JOIN #darkbear alice');
 
   await page.keyboard.press('Control+k');
   await expect(page.getByText('Toggle oper console', { exact: true })).toBeVisible();

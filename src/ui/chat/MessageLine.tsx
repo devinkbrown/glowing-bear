@@ -50,7 +50,7 @@ export interface MessageLineProps {
 }
 
 const URL_RE = /https?:\/\/[^\s<"']+/g;
-// Channel status sigils, orochi (*!.@+) + standard IRC (~&@%+) prefixes.
+// Channel status sigils, Onyx Server (*!.@+) + standard IRC (~&@%+) prefixes.
 const NICK_PREFIX_RE = /^([*!.~&@%+])/;
 const E2EE_PREFIX = 'TSUMUGI1 ';
 const E2EE_PLACEHOLDER = '\u{1F512} encrypted message';

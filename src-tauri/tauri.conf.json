@@ -31,7 +31,7 @@
     "active": true,
     "targets": "all",
     "category": "SocialNetworking",
-    "shortDescription": "DarkBear chat client for Orochi",
+    "shortDescription": "DarkBear chat client for Onyx Server",
     "longDescription": "Installable DarkBear client sharing the browser protocol and state implementation.",
     "icon": [
       "icons/32x32.png",

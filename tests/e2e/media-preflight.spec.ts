@@ -73,7 +73,7 @@ test.describe('media preflight', () => {
 
     // Playwright WebKit cannot synthesize a usable video track. Keep its
     // browser journey audio-only; the same preflight still constructs the real
-    // KaguraVis encoder, while Chromium/Firefox also exercise camera UI.
+    // CadenceVis encoder, while Chromium/Firefox also exercise camera UI.
     const video = !testInfo.project.name.includes('webkit');
     const action = video ? 'Join video' : 'Join voice';
     await page.getByRole('button', { name: action }).click();

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Focused unit tests for the pure parts of the orochi bridge: activation
+// Focused unit tests for the pure parts of the onyx-server bridge: activation
 // predicate, relay↔bridge channel mapping, reaction dedupe guard, identity
 // resolution, and the E2EE decrypted-text overlay.
 
@@ -67,7 +67,7 @@ const buffers: Record<string, BufferEntry> = {
   '0x6': entry('0x6', { type: 'private', server: 'eshmaki', channel: 'Trev' }, 'irc.eshmaki.trev'),
 };
 
-const orochi = new Set(['eshmaki']);
+const onyx_server = new Set(['eshmaki']);
 
 // ── activation predicate ────────────────────────────────────────────────────
 
@@ -77,7 +77,7 @@ describe('bridgeShouldRun', () => {
     expect(bridgeShouldRun(false, false, '')).toBe(false);
   });
 
-  it('runs when enabled and orochi was detected on the relay', () => {
+  it('runs when enabled and Onyx Server was detected on the relay', () => {
     expect(bridgeShouldRun(true, true, '')).toBe(true);
   });
 
@@ -93,17 +93,17 @@ describe('bridgeShouldRun', () => {
 
 describe('isSecureBridgeTransport', () => {
   it('allows bearer re-entry only over WSS', () => {
-    expect(isSecureBridgeTransport('wss://orochi.example/irc')).toBe(true);
-    expect(isSecureBridgeTransport('WSS://OROCHI.EXAMPLE/irc')).toBe(true);
-    expect(isSecureBridgeTransport('ws://orochi.example/irc')).toBe(false);
+    expect(isSecureBridgeTransport('wss://onyx.example/irc')).toBe(true);
+    expect(isSecureBridgeTransport('WSS://ONYX.EXAMPLE/irc')).toBe(true);
+    expect(isSecureBridgeTransport('ws://onyx.example/irc')).toBe(false);
     expect(isSecureBridgeTransport('not a url')).toBe(false);
   });
 });
 
 describe('bridge transport policy', () => {
   it('allows WSS with or without credentials', () => {
-    expect(bridgeTransportAllowed('wss://orochi.example/irc', false)).toBe(true);
-    expect(bridgeTransportAllowed('wss://orochi.example/irc', true)).toBe(true);
+    expect(bridgeTransportAllowed('wss://onyx.example/irc', false)).toBe(true);
+    expect(bridgeTransportAllowed('wss://onyx.example/irc', true)).toBe(true);
   });
 
   it('allows plain WS only on credential-free loopback endpoints', () => {
@@ -115,13 +115,13 @@ describe('bridge transport policy', () => {
   });
 
   it('rejects remote or malformed plain-text endpoints even without credentials', () => {
-    expect(bridgeTransportAllowed('ws://orochi.example/irc', false)).toBe(false);
+    expect(bridgeTransportAllowed('ws://onyx.example/irc', false)).toBe(false);
     expect(bridgeTransportAllowed('ws://127.example/irc', false)).toBe(false);
     expect(bridgeTransportAllowed('ws://user:secret@localhost:8080/irc', false)).toBe(false);
     expect(bridgeTransportAllowed('http://localhost/irc', false)).toBe(false);
     expect(bridgeTransportAllowed('not a url', false)).toBe(false);
     expect(INSECURE_BRIDGE_TRANSPORT_ERROR).toBe(
-      'Orochi bridge requires wss://; ws:// is allowed only for unauthenticated loopback endpoints.',
+      'Onyx Server bridge requires wss://; ws:// is allowed only for unauthenticated loopback endpoints.',
     );
   });
 });
@@ -136,8 +136,8 @@ describe('channel mapping', () => {
     expect(serverNameOf(entry('x', {}, 'core.weechat'))).toBe('');
   });
 
-  it('sweepChannelBuffers only mirrors channels on detected orochi servers', () => {
-    const swept = sweepChannelBuffers(buffers, orochi);
+  it('sweepChannelBuffers only mirrors channels on detected Onyx Server nodes', () => {
+    const swept = sweepChannelBuffers(buffers, onyx_server);
     expect(swept).toEqual([
       { channel: '#Root', ptr: '0x2' },
       { channel: '#dev', ptr: '0x3' },
@@ -168,8 +168,8 @@ describe('channel mapping', () => {
 // ── identity resolution ─────────────────────────────────────────────────────
 
 describe('identity resolution', () => {
-  it('relayOwnNick reads the orochi server buffer nick, not other networks', () => {
-    expect(relayOwnNick(buffers, orochi)).toBe('kain');
+  it('relayOwnNick reads the Onyx Server buffer nick, not other networks', () => {
+    expect(relayOwnNick(buffers, onyx_server)).toBe('kain');
     expect(relayOwnNick(buffers, new Set(['libera']))).toBe('otherme');
   });
 
@@ -179,7 +179,7 @@ describe('identity resolution', () => {
   });
 
   it('relayOwnNick returns null with no server buffers', () => {
-    expect(relayOwnNick({}, orochi)).toBeNull();
+    expect(relayOwnNick({}, onyx_server)).toBeNull();
   });
 
   it('randomGuestNick is darkbear-prefixed with a numeric suffix', () => {

@@ -10,7 +10,7 @@ import { test, expect } from '@playwright/test';
 //
 // Connection(s) exercised: NEITHER. This is deliberately relay-free and
 // bridge-free (see the two-connection note in playwright.config.ts) — it needs
-// no live WeeChat relay and no orochi bridge, so it is fully deterministic.
+// no live WeeChat relay and no Onyx Server bridge, so it is fully deterministic.
 // On load the app's connect surface is shown by default: the store seeds
 // activeModal='connect' and the disconnected-state policy keeps it open while
 // there is no relay (src/state/ui.ts + connectModalPolicy.ts), so the full
