@@ -762,11 +762,11 @@ export default function SettingsModal(props: Props) {
               </div>
             </Section>
 
-            <Section label="Onyx Server Bridge" desc="Direct session to the Onyx Server for realtime extras">
+            <Section label={t('settings.extras')} desc={t('settings.extrasDesc')}>
               <p class="text-[10px] text-gray-600 leading-relaxed mb-1">
                 {t('settings.bridgeBlurb')}
               </p>
-              <Toggle label="Enable Bridge" desc="Open the direct Onyx Server session when connecting" on={bridge().enabled} onChange={(v) => patchBridge({ enabled: v })} />
+              <Toggle label={t('settings.enableExtras')} desc={t('settings.enableExtrasDesc')} on={bridge().enabled} onChange={(v) => patchBridge({ enabled: v })} />
               <Show when={bridge().enabled}>
                 <div class="mt-2 space-y-3 animate-fade-in">
                   <InputField label="WebSocket URL" value={bridge().wsUrl} placeholder="wss://node.example.com/irc (empty = auto node probing)"
@@ -778,7 +778,7 @@ export default function SettingsModal(props: Props) {
                       onChange={(v) => patchBridge({ password: v })} />
                   </div>
                   <div class="space-y-0">
-                    <Toggle label="Remember Bridge Password" desc="Persist across browser restarts on this device" on={settings.rememberBridgePassword}
+                    <Toggle label={t('connect.rememberBridge')} desc={t('connect.sessionOnly')} on={settings.rememberBridgePassword}
                       onChange={(v) => updateSettings({ rememberBridgePassword: v })} />
                     <Toggle label="Auto-join Media" desc="Automatically join a channel's voice/video room when one is live" on={bridge().autoJoinMedia} onChange={(v) => patchBridge({ autoJoinMedia: v })} />
                     <Toggle label="E2EE DMs" desc="Encrypt direct messages when the peer publishes a DarkBear device key" on={bridge().e2eeDms} onChange={(v) => patchBridge({ e2eeDms: v })} />
@@ -998,7 +998,7 @@ export default function SettingsModal(props: Props) {
                 <DiagnosticValue label="Relay" value={connectionState()} detail={connectionError() ? relayErrorId() : (relayDiagnostics().serverVersion || 'not connected')} />
                 <DiagnosticValue label="Phase" value={relayDiagnostics().phase} detail={relayPhaseDetail()} />
                 <DiagnosticValue label="Protocol" value={relayDiagnostics().protocolMode} detail={protocolDetail()} />
-                <DiagnosticValue label="Bridge" value={bridgeState.status} detail={bridgeState.error ? bridgeErrorId() : (bridgeState.e2eeReady ? 'device key published' : 'DM encryption idle')} />
+                <DiagnosticValue label="Onyx" value={bridgeState.status} detail={bridgeState.error ? bridgeErrorId() : (bridgeState.e2eeReady ? 'device key published' : 'DM encryption idle')} />
                 <DiagnosticValue label="Onyx Server Media" value={mediaState.mediaAvailable ? mediaState.callState : 'unavailable'} detail={mediaState.error ? mediaErrorId() : `${mediaState.health.status} · ${Object.keys(mediaState.peers).length} peers`} />
                 <DiagnosticValue label="Codec Runtime" value={mediaRuntimeDiagnostics().webAssembly && mediaRuntimeDiagnostics().mediaDevices ? 'capable' : 'limited'} detail={`${mediaRuntimeDiagnostics().audioWorklet ? 'audio worklet' : 'audio fallback'} · ${mediaRuntimeDiagnostics().videoWorker ? 'video worker' : 'video fallback'}`} />
                 <DiagnosticValue label="Service Worker" value={typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? (navigator.serviceWorker.controller ? 'controlled' : 'uncontrolled') : 'unsupported'} detail="deploy shell" />
@@ -1060,13 +1060,13 @@ function PreferenceOverview(props: { bridgeEnabled: boolean }) {
         <OverviewTile label="Theme" value={String(settings.theme)} tone="accent" />
         <OverviewTile label="Messages" value={settings.compactMode ? 'compact' : 'comfortable'} />
         <OverviewTile label="Alerts" value={settings.notifications ? 'enabled' : 'quiet'} hot={settings.notifications} />
-        <OverviewTile label="Bridge" value={props.bridgeEnabled ? 'Onyx Server on' : 'relay only'} hot={props.bridgeEnabled} />
+        <OverviewTile label="Onyx" value={props.bridgeEnabled ? 'extras on' : 'relay only'} hot={props.bridgeEnabled} />
       </div>
       <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <QuickToggle label="Compact" on={settings.compactMode} onClick={() => updateSettings({ compactMode: !settings.compactMode })} />
         <QuickToggle label="Images" on={settings.inlineImages} onClick={() => updateSettings({ inlineImages: !settings.inlineImages })} />
         <QuickToggle label="Alerts" on={settings.notifications} onClick={() => updateSettings({ notifications: !settings.notifications })} />
-        <QuickToggle label="Bridge" on={props.bridgeEnabled} onClick={() => updateBridge({ enabled: !props.bridgeEnabled })} />
+        <QuickToggle label="Onyx" on={props.bridgeEnabled} onClick={() => updateBridge({ enabled: !props.bridgeEnabled })} />
       </div>
     </div>
   );

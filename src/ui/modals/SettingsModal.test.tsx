@@ -20,7 +20,7 @@ describe('SettingsModal', () => {
     expect(getAllByText('Preferences').length).toBeGreaterThan(0);
     expect(getByText('Tune the relay console without leaving the buffer.')).toBeInTheDocument();
     expect(getAllByText('Theme').length).toBeGreaterThan(0);
-    expect(getAllByText('Bridge').length).toBeGreaterThan(0);
+    expect(getAllByText('Onyx').length).toBeGreaterThan(0);
   });
 
   it('switches tabs from the preferences rail', () => {
@@ -133,7 +133,7 @@ describe('SettingsModal', () => {
     expect(settings.compactMode).toBe(true);
 
     expect(settings.bridge.enabled).toBe(false);
-    fireEvent.click(getByLabelText('Toggle Bridge'));
+    fireEvent.click(getByLabelText('Toggle Onyx'));
     expect(settings.bridge.enabled).toBe(true);
   });
 

@@ -295,26 +295,24 @@ function embedsFor(line: WeeChatLine): MediaEmbed[] {
 
 function DaySeparator(props: { date: Date }) {
   return (
-    <div class="flex items-center gap-3 sm:gap-4 py-3 sm:py-4 my-1 sm:my-2 px-3 sm:px-1">
-      <div class="flex-1 h-px bg-white/[0.04]" />
-      <span class="text-[10px] font-semibold uppercase tracking-[0.12em] sm:tracking-[0.15em] text-gray-500 select-none whitespace-nowrap px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.05]">
+    <div class="flex items-center gap-2 py-2 my-0.5 px-3 sm:px-1">
+      <div class="flex-1 h-px bg-white/[0.035]" />
+      <span class="text-[10px] font-medium text-gray-600 select-none whitespace-nowrap">
         {formatDate(props.date, { weekday: 'short', month: 'short', day: 'numeric' })}
       </span>
-      <div class="flex-1 h-px bg-white/[0.04]" />
+      <div class="flex-1 h-px bg-white/[0.035]" />
     </div>
   );
 }
 
 function ReadMarkerRow() {
   return (
-    <div class="flex items-center gap-3 my-2 px-3 sm:px-1">
-      <div class="flex-1 h-px bg-red-500/25" />
-      <span class="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-red-500/40 select-none">
-        <span class="w-1 h-1 rounded-full bg-red-500/40" />
+    <div class="flex items-center gap-2 my-1.5 px-3 sm:px-1">
+      <div class="flex-1 h-px bg-[var(--role-mention,#f87171)]/25" />
+      <span class="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--role-mention,#f87171)]/55 select-none">
         {t('message.new')}
-        <span class="w-1 h-1 rounded-full bg-red-500/40" />
       </span>
-      <div class="flex-1 h-px bg-red-500/25" />
+      <div class="flex-1 h-px bg-[var(--role-mention,#f87171)]/25" />
     </div>
   );
 }
@@ -924,6 +922,7 @@ export default function MessageView(props: MessageViewProps) {
           class="flex-1 overflow-y-auto overflow-x-hidden px-0 sm:px-2 py-2 sm:py-3 msg-area"
           style={{ 'font-size': `${settings.fontSize}px` }}
         >
+          <div class="mx-auto w-full max-w-[72ch]">
           <Show when={entry()?.loading}>
             <div class="flex items-center justify-center py-6">
               <div class="flex items-center gap-2.5 text-gray-400 text-[12px]">
@@ -999,6 +998,7 @@ export default function MessageView(props: MessageViewProps) {
                 );
               }}
             </For>
+          </div>
           </div>
         </div>
 

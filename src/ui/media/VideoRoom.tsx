@@ -44,10 +44,10 @@ const KBD_CLASS =
   'px-1.5 py-0.5 bg-white/[0.06] rounded text-gray-400 text-[10px] font-mono';
 
 const BRIDGE_DOT: Record<BridgeStatus, { cls: string; label: string }> = {
-  ready: { cls: 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]', label: 'bridge ready' },
-  connecting: { cls: 'bg-amber-400 animate-pulse', label: 'bridge connecting' },
-  error: { cls: 'bg-red-400', label: 'bridge error' },
-  off: { cls: 'bg-gray-600', label: 'bridge off' },
+  ready: { cls: 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]', label: 'Onyx ready' },
+  connecting: { cls: 'bg-amber-400 animate-pulse', label: 'Onyx connecting' },
+  error: { cls: 'bg-red-400', label: 'Onyx error' },
+  off: { cls: 'bg-gray-600', label: 'Onyx off' },
 };
 
 const HEALTH_STYLE: Record<CallHealthStatus, { dot: string; text: string; label: string }> = {

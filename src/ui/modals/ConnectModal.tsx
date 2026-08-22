@@ -98,6 +98,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
   const [showPassword, setShowPassword] = createSignal(false);
   const [showSetup, setShowSetup] = createSignal(false);
   const [showAlsoRelay, setShowAlsoRelay] = createSignal(false);
+  const [showOnyxTotp, setShowOnyxTotp] = createSignal(false);
   const [passwordFromUrl, setPasswordFromUrl] = createSignal(false);
   const [profileName, setProfileName] = createSignal('');
   const [showSaveProfile, setShowSaveProfile] = createSignal(false);
@@ -311,60 +312,60 @@ function ConnectScreen(props: { onClose?: () => void }) {
       <div class="min-h-dvh flex flex-col relative z-10">
         <div class="flex-1 min-h-[24px] sm:min-h-0" />
 
-        <div class="flex flex-col items-center px-6 pb-2 sm:pb-4 select-none"
+        <div class="flex flex-col items-center px-6 pb-1 sm:pb-2 select-none"
           style={{ animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both' }}>
           <Show
             when={decorativeMotionEnabled()}
             fallback={
               <div
                 data-testid="connect-compact-mark"
-                class="flex h-20 w-20 items-center justify-center rounded-[26px] border border-white/[0.08] bg-white/[0.035] font-mono text-lg font-black tracking-[0.18em] text-gray-300 shadow-2xl shadow-black/30"
+                class="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.035] font-mono text-[13px] font-black tracking-[0.16em] text-gray-300"
                 aria-hidden="true"
               >
                 DB
               </div>
             }
           >
-            <Suspense fallback={<div class="h-[120px] w-[120px] sm:h-[150px] sm:w-[150px]" />}>
-              <AstronautBear animated={false} size={120} class="sm:w-[150px] sm:h-[150px]" accent={tc().accent} theme={settings.theme} />
+            <Suspense fallback={<div class="h-[72px] w-[72px] sm:h-[88px] sm:w-[88px]" />}>
+              <AstronautBear animated={false} size={72} class="sm:w-[88px] sm:h-[88px]" accent={tc().accent} theme={settings.theme} />
             </Suspense>
           </Show>
-          <h1 class="text-[26px] sm:text-[32px] font-bold tracking-tight text-gray-100 mt-1 sm:mt-2">DarkBear</h1>
-          <p class="text-[12px] font-medium text-gray-500 mt-1.5 text-center max-w-[22rem]">
-            {mode() === 'onyx-wss' || mode() === 'onyx-tls' ? t('connect.taglineOnyx') : t('connect.taglineWeechat')}
-          </p>
+          <h1 class="text-[22px] sm:text-[26px] font-bold tracking-tight text-gray-100 mt-1">DarkBear</h1>
         </div>
 
         <div class="w-full sm:max-w-[440px] sm:mx-auto" style={{ animation: 'fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both' }}>
           <div class="px-5 pb-6 sm:px-0 sm:pb-0">
             <div class="login-card-inner">
-              <div class="mb-5" role="radiogroup" aria-label={t('connect.serverType')}>
-                <div class="grid grid-cols-2 gap-2">
+              <div class="mb-4" role="radiogroup" aria-label={t('connect.serverType')}>
+                <div class="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white/[0.035] border border-white/[0.06]">
                   <ModeButton
                     id="weechat"
                     active={mode() === 'weechat'}
-                    title={t('connect.modeWeechat')}
-                    hint={t('connect.modeWeechatHint')}
+                    title={t('connect.modeWeechatShort')}
                     onSelect={() => setMode('weechat')}
                   />
                   <ModeButton
                     id="onyx-wss"
                     active={mode() === 'onyx-wss'}
-                    title={t('connect.modeOnyxWss')}
-                    hint={t('connect.modeOnyxWssHint')}
+                    title={t('connect.modeOnyxShort')}
                     onSelect={() => setMode('onyx-wss')}
                   />
                 </div>
-                <div class="mt-2">
-                  <ModeButton
-                    id="onyx-tls"
-                    active={mode() === 'onyx-tls'}
-                    title={t('connect.modeOnyxTls')}
-                    hint={t('connect.modeOnyxTlsHint')}
-                    quiet
-                    onSelect={() => setMode('onyx-tls')}
-                  />
-                </div>
+                <p class="mt-2 text-center text-[11px] leading-snug text-gray-500 min-h-[2.75rem]">
+                  {mode() === 'weechat' && t('connect.taglineWeechat')}
+                  {mode() === 'onyx-wss' && t('connect.taglineOnyx')}
+                  {mode() === 'onyx-tls' && t('connect.modeOnyxTlsUnavailable')}
+                </p>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={mode() === 'onyx-tls'}
+                  data-testid="connect-mode-onyx-tls"
+                  onClick={() => setMode('onyx-tls')}
+                  class="mt-0.5 w-full min-h-[44px] text-[11px] text-gray-600 hover:text-gray-400"
+                >
+                  {t('connect.modeOnyxTls')}
+                </button>
               </div>
 
               <Show when={settings.profiles.length > 0}>
@@ -385,17 +386,17 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   role="alert"
                   data-testid="connect-diagnose"
                   data-error-code={errorCode() ?? ''}
-                  class="flex flex-col gap-1 bg-red-500/8 border border-red-500/15 rounded-xl p-4 text-[13px] text-red-300 mb-5"
+                  class="mb-4 rounded-lg border border-red-500/20 bg-red-500/[0.07] px-3 py-2 text-[12px] leading-snug text-red-200"
                 >
-                  <span>{errorText()}</span>
+                  <p>{errorText()}</p>
                   <Show when={nextAction()}>
-                    <span data-testid="connect-next-action" class="text-[11px] text-red-200/80">{nextAction()}</span>
+                    <p data-testid="connect-next-action" class="mt-0.5 text-red-200/70">{nextAction()}</p>
                   </Show>
                 </div>
               </Show>
 
               <Show when={mixedBlocked()}>
-                <div role="status" class="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2.5 text-[12px] text-amber-200">
+                <div role="status" class="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2 text-[12px] leading-snug text-amber-200">
                   {t('connect.error.mixed_content')} {t('connect.next.mixed_content')}
                 </div>
               </Show>
@@ -410,10 +411,12 @@ function ConnectScreen(props: { onClose?: () => void }) {
                 </p>
               </Show>
 
-              <Show when={mode() === 'onyx-tls'}>
-                <p class="text-[13px] text-gray-400 leading-relaxed">{t('connect.modeOnyxTlsUnavailable')}</p>
-              </Show>
-
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  doConnect();
+                }}
+              >
               <Show when={mode() === 'weechat'}>
                 <WeeChatFields
                   host={host()}
@@ -444,7 +447,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
               </Show>
 
               <Show when={mode() === 'onyx-wss'}>
-                <div class="flex flex-col gap-4">
+                <div class="flex flex-col gap-3">
                   <Field label={t('connect.endpoint')} id="c-endpoint">
                     <input id="c-endpoint" class="login-input" value={bridgeEndpoint()}
                       onInput={(e) => setBridgeEndpoint(e.currentTarget.value)} autocomplete="off" spellcheck={false} />
@@ -464,8 +467,15 @@ function ConnectScreen(props: { onClose?: () => void }) {
                       onInput={(e) => setBridgePassword(e.currentTarget.value)}
                       placeholder={t('connect.passwordOrToken')} autocomplete="current-password" />
                   </Field>
-                  <div>
-                    <span class="login-label">{t('connect.onyxTotp')}</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowOnyxTotp(!showOnyxTotp())}
+                    class="text-left text-[12px] text-gray-500 hover:text-gray-300 min-h-[44px]"
+                    aria-expanded={showOnyxTotp()}
+                  >
+                    {t('connect.onyxTotp')}
+                  </button>
+                  <Show when={showOnyxTotp()}>
                     <div class="flex gap-2 justify-center">
                       <Index each={new Array<number>(6).fill(0)}>
                         {(_, i) => (
@@ -489,7 +499,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                         )}
                       </Index>
                     </div>
-                  </div>
+                  </Show>
                   <button type="button" onClick={() => setRememberBridgePassword(!rememberBridgePassword())}
                     aria-pressed={rememberBridgePassword()} class="flex items-center gap-2 text-[11px] text-gray-500">
                     <span class={`login-toggle ${rememberBridgePassword() ? 'login-toggle-on' : ''}`}><span class="login-toggle-dot" /></span>
@@ -530,8 +540,8 @@ function ConnectScreen(props: { onClose?: () => void }) {
                 </div>
               </Show>
 
-              <div class="pt-4">
-                <button type="button" onClick={doConnect} disabled={!ready()}
+              <div class="pt-3">
+                <button type="submit" disabled={!ready()}
                   class={`group w-full login-btn-height text-[15px] font-semibold rounded-xl flex items-center justify-center gap-2.5 transition-all
                     ${ready()
                       ? 'bg-[var(--custom-accent,#818cf8)] text-white cursor-pointer'
@@ -542,6 +552,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   </Show>
                 </button>
               </div>
+              </form>
 
               <button type="button" onClick={() => setShowSetup(!showSetup())}
                 class="mt-3 w-full text-[12px] text-gray-500 hover:text-gray-300 min-h-[44px]"
@@ -623,6 +634,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
             padding: 28px;
           }
         }
+        .login-field { display: flex; flex-direction: column; gap: 0; }
         .login-label {
           display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
           text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-gray-500, #6b6f8a);
@@ -677,9 +689,7 @@ function ModeButton(props: {
   id: string;
   active: boolean;
   title: string;
-  hint: string;
   disabled?: boolean;
-  quiet?: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -690,14 +700,13 @@ function ModeButton(props: {
       data-testid={`connect-mode-${props.id}`}
       disabled={props.disabled}
       onClick={() => { if (!props.disabled) props.onSelect(); }}
-      class={`text-left rounded-xl border px-3 ${props.quiet ? 'py-2 min-h-[44px]' : 'py-2.5 min-h-[52px]'} ${
+      class={`min-h-[44px] rounded-lg px-2 text-center text-[13px] font-semibold transition-colors ${
         props.active
-          ? 'border-[var(--custom-accent,#818cf8)]/40 bg-[var(--custom-accent,#818cf8)]/[0.08]'
-          : 'border-white/[0.06] bg-white/[0.02]'
-      } ${props.disabled ? 'opacity-60 cursor-not-allowed' : ''} ${props.quiet ? 'opacity-90' : ''}`}
+          ? 'bg-[var(--custom-accent,#818cf8)] text-white shadow-sm'
+          : 'text-gray-400 hover:text-gray-200'
+      } ${props.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
     >
-      <span class="block text-[13px] font-semibold text-gray-200">{props.title}</span>
-      <span class="block text-[11px] text-gray-500 leading-snug">{props.hint}</span>
+      {props.title}
     </button>
   );
 }
@@ -738,7 +747,7 @@ function WeeChatFields(props: {
   onTotpKeyDown: (i: number, e: KeyboardEvent) => void;
 }) {
   return (
-    <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-3">
       <Field label={t('connect.hostname')} id="c-host">
         <input ref={props.hostRef} id="c-host" type="text" value={props.host}
           onInput={(e) => props.onHost(e.currentTarget.value)}
