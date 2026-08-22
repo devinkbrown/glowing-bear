@@ -44,6 +44,7 @@ describe('DEFAULT_RELAY', () => {
 			tls: true,
 			password: '',
 			compression: true,
+			path: 'weechat',
 		});
 	});
 
@@ -54,6 +55,7 @@ describe('DEFAULT_RELAY', () => {
 			tls: false,
 			password: '',
 			compression: false,
+			path: '',
 		});
 
 		expect(settings).toStrictEqual({
@@ -62,6 +64,7 @@ describe('DEFAULT_RELAY', () => {
 			tls: false,
 			password: '',
 			compression: false,
+			path: '',
 		});
 	});
 });

@@ -6,6 +6,7 @@ import {
   getTotalHighlights,
   getTotalUnread,
   connectionState,
+  connectServerType,
   setActive,
   uiState,
   openModal,
@@ -31,7 +32,7 @@ import {
 } from '@/state';
 import { connectModalAction } from '@/state/connectModalPolicy';
 import { mediaState } from '@/state/media';
-import { markRead } from '@/state/bridge';
+import { bridgeState, markRead } from '@/state/bridge';
 import { threadsState } from '@/state/threads';
 import { initBridge } from '@/core/bridge';
 import { syncNotificationPolicy, updateTitle } from '@/lib/notifications';
@@ -394,7 +395,11 @@ export default function App() {
   // Connect modal follows the relay state (see connectModalPolicy): close it
   // once connected, re-open it when the relay drops with nothing else open.
   createEffect(() => {
-    const action = connectModalAction(connectionState(), uiState.activeModal);
+    const firstParty = connectServerType() === 'onyx-wss';
+    const action = connectModalAction(connectionState(), uiState.activeModal, {
+      firstPartyReady: firstParty && bridgeState.status === 'ready',
+      firstPartyConnecting: firstParty && (bridgeState.status === 'connecting' || settings.bridge.enabled),
+    });
     if (action === 'close') closeModal();
     else if (action === 'open') openModal('connect');
   });

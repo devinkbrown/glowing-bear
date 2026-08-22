@@ -22,6 +22,7 @@ class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
 
   url: string;
+  protocols: string[] = [];
   binaryType = 'blob';
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
@@ -34,8 +35,9 @@ class FakeWebSocket {
   onerror: ((ev: Event) => void) | null = null;
   onclose: ((ev: CloseEvent) => void) | null = null;
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string | string[]) {
     this.url = url;
+    this.protocols = typeof protocols === 'string' ? [protocols] : [...(protocols ?? [])];
     FakeWebSocket.instances.push(this);
   }
 
@@ -236,6 +238,14 @@ describe('frame handling', () => {
 });
 
 // ── CAP / SASL selection ───────────────────────────────────────────────────────
+
+describe('WebSocket subprotocols', () => {
+  it('offers onyx.irc-media.v1 then text.ircv3.net', () => {
+    const c = makeClient();
+    c.connect();
+    expect(lastSocket().protocols).toEqual(['onyx.irc-media.v1', 'text.ircv3.net']);
+  });
+});
 
 describe('CAP negotiation', () => {
   it('waits for the final multiline CAP LS before requesting accumulated caps', () => {

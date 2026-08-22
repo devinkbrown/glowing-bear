@@ -36,12 +36,14 @@ commands (`REGISTER`, `CHANNEL`, `TEGAMI`, …), never ChanServ/NickServ fake us
 Live network is **Onyx**, two nodes: `eshmaki.me` and `ircx.us`. Listeners are
 **dual-stack IPv6** (`[listen] host = "::"`).
 
-| Port | Transport | Use |
+| Port | Transport | DarkBear connect type |
 |---|---|---|
-| `6667` | Plaintext TCP | Plain IRC (dev/local only) |
-| `6697` | Implicit TLS | TLS IRC (TLS 1.3 + hardened 1.2 profile) |
-| `8080` | **Secure WebSocket (wss)** | **Browser clients — DarkBear uses this** |
-| `6900` | Mesh S2S (Mooring PQ) | Server↔server only — **not for clients** |
+| `[listen].irc` (often `6667`) | Plaintext TCP | Dev/LAN only. Not offered from the HTTPS web app. |
+| `[tls]` default `6697` | Implicit TLS | Desktop-only if a TLS TCP client exists (current Tauri shell does not). Never STARTTLS. |
+| `[listen].ws` (typically `8080`) | **Secure WebSocket (wss)** | **First-class Onyx WSS.** Production `wss://`; `ws_plain` is loopback/dev. |
+| `[listen].s2s` | Mesh S2S (Mooring PQ) | Not a client connect type |
+| `[listen].webtransport` | WebTransport/HTTP3 | Not a client connect type |
+| webhook / native UDP media | HTTP / UDP | Not a client connect type |
 
 TLS is **1.3 plus a hardened 1.2 profile** (AEAD/ECDHE-only; no RSA key exchange,
 CBC, compression, or renegotiation). There is no plaintext→TLS upgrade; pick a TLS

@@ -13,7 +13,9 @@ import {
   buffersState,
   clearBuffers,
   clearDraftsAndHistory,
+  clearIrcx,
   getDraft,
+  markOnyxServer,
   resetSettings,
   resetUploads,
   restoreComposerDraft,
@@ -109,6 +111,7 @@ const QUERY: WeeChatBuffer = {
 beforeEach(() => {
   resetThreads();
   clearBuffers();
+  clearIrcx();
   resetSettings();
   resetUploads();
   clearDraftsAndHistory();
@@ -328,7 +331,14 @@ describe('InputBar relay acknowledgement', () => {
     expect(getDraft(CHANNEL.fullName)).toBe('failed notification reply');
   });
 
+  it('hides GIF and attach on a generic IRC buffer', () => {
+    const { queryByLabelText } = render(() => <InputBar />);
+    expect(queryByLabelText('GIF picker')).toBeNull();
+    expect(queryByLabelText('Upload file')).toBeNull();
+  });
+
   it('restores a selected GIF URL when relay dispatch is rejected', async () => {
+    markOnyxServer('eshmaki');
     updateSettings({ tenorApiKey: 'test-key' });
     inputMocks.sendInput.mockReturnValueOnce(false);
     vi.stubGlobal('fetch', vi.fn(async () => ({

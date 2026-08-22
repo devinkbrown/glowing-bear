@@ -20,6 +20,15 @@ describe('connectModalAction', () => {
     expect(connectModalAction(ConnectionState.CONNECTED, 'connect')).toBe('close');
   });
 
+  it('closes the connect modal when first-party Onyx WSS is ready without a relay', () => {
+    expect(connectModalAction(ConnectionState.DISCONNECTED, 'connect', { firstPartyReady: true })).toBe('close');
+  });
+
+  it('leaves the modal open while first-party Onyx WSS is dialing', () => {
+    expect(connectModalAction(ConnectionState.DISCONNECTED, 'connect', { firstPartyConnecting: true })).toBe('none');
+    expect(connectModalAction(ConnectionState.DISCONNECTED, null, { firstPartyConnecting: true })).toBe('none');
+  });
+
   it('leaves other modals alone when connected', () => {
     expect(connectModalAction(ConnectionState.CONNECTED, 'settings')).toBe('none');
     expect(connectModalAction(ConnectionState.CONNECTED, null)).toBe('none');

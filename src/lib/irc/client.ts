@@ -7,6 +7,7 @@ import {
   selectSaslMechanism,
   type SaslMechanism,
 } from './parser';
+import { ONYX_WEBSOCKET_PROTOCOLS, wantedCaps } from './wantedCaps';
 import type { IRCMessage, ISupport } from './types';
 
 export type IRCEventHandler = (msg: IRCMessage) => void;
@@ -166,7 +167,7 @@ export class IRCClient {
     CHANMODES: ['beIZ', 'k', 'lfj', 'imnstCTNMSgWOA'],
     CHANTYPES: '#&',
     CHANLIMITS: {},
-    NETWORK: 'IRCXNet',
+    NETWORK: 'Onyx',
     CASEMAPPING: 'ascii',
     MODES: 4,
     MAXCHANNELS: 50,
@@ -232,7 +233,7 @@ export class IRCClient {
     this._clearPingTimers();
 
     try {
-      this.ws = new WebSocket(this.opts.url);
+      this.ws = new WebSocket(this.opts.url, [...ONYX_WEBSOCKET_PROTOCOLS]);
       // Browser media datagrams ride binary frames on this same socket; deliver
       // them as ArrayBuffers (not Blobs) so onBinary gets bytes synchronously.
       this.ws.binaryType = 'arraybuffer';
@@ -898,55 +899,8 @@ export class IRCClient {
   }
 
   private _wantedCaps(caps: string[]) {
-    return [...new Set(caps)].filter(cap => {
-      // ── Always-off caps ──────────────────────────────────────────────────
-      // STARTTLS upgrade: DarkBear already uses WSS; requesting this is wrong.
-      if (cap === 'tls') return false;
-      // sts (Strict Transport Security): an informational cap whose value is the
-      // transport policy. It is advertised, not negotiated — Onyx Server NAKs a REQ
-      // for it. The TLS upgrade is already implicit in the wss:// endpoint.
-      if (cap === 'sts') return false;
-      // SASL: only request when we have credentials to send.
-      if (cap === 'sasl') {
-        return Boolean(this.opts.saslSessionToken || this.opts.password || this.opts.hasClientCert);
-      }
-      // no-implicit-names: DarkBear relies on the automatic 353 NAMREPLY on
-      // JOIN to populate the member list; opting in would suppress it.
-      if (cap === 'no-implicit-names') return false;
-
-      // ── Unimplemented protocol caps ───────────────────────────────────────
-      // draft/multiline: requested — the store sends newline-containing
-      // composer text as a BATCH-based multiline message (see
-      // src/lib/irc/multiline.ts) and reassembles incoming multiline batches
-      // into a single ChatMessage. Falls back to per-line PRIVMSGs when the
-      // cap is not ACKed.
-      // draft/search: requested — the store's searchServerHistory() drives
-      // the server-side SEARCH command (results replay as a chathistory-shaped
-      // batch, diverted into serverSearch.results); the MessageSearch bar
-      // exposes it as "Search full history".
-      // labeled-response: no @label= request/response correlation in DarkBear.
-      if (cap === 'labeled-response') return false;
-      // draft/channel-rename: requested — the store handles the native
-      // `:renamer RENAME #old #new [:reason]` line and migrates channel state
-      // (messages, membership, unread, active view) under the new key.
-      // draft/file-upload: DarkBear uses HTTP POST to a media server;
-      // the IRC-level file-upload protocol is not implemented.
-      if (cap === 'draft/file-upload') return false;
-      // bot: DarkBear is a human client, not a bot.
-      if (cap === 'bot') return false;
-      // draft/read-marker: requested when offered — enables MARKREAD send/receive
-      // so the read position (see setReadMarker/onReadMarker) syncs across this
-      // account's clients. Only sent post-negotiation; harmless when unacked.
-      if (cap === 'draft/read-marker') return true;
-
-      // onyx/session-sync: server-driven session reclaim. When ACKed, the
-      // server auto-pushes JOIN + NAMES/topic + CHATHISTORY replay for every
-      // channel the account's session is live in, so the client must NOT run
-      // its own blind autojoin storm. Always request it when offered; the
-      // store gates autojoin suppression on negotiatedCaps having it.
-      // (Falls through to `return true` — listed here only for documentation.)
-
-      return true;
+    return wantedCaps(caps, {
+      hasSaslCredentials: Boolean(this.opts.saslSessionToken || this.opts.password || this.opts.hasClientCert),
     });
   }
 

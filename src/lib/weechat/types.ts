@@ -6,6 +6,7 @@ export type {
   WeeChatNick,
   WeeChatHotlist,
   RelaySettings,
+  RelayDialSettings,
 } from './model';
 export { ConnectionState } from './model';
 

@@ -30,6 +30,10 @@ import {
   type StateChangedEvent,
 } from '@/lib/weechat/client';
 import { stripColors } from '@/lib/weechat/strip-colors';
+import { isOnyxMyinfo, onyxGatewayFromMyinfo } from '@/lib/irc/onyxDetect';
+import type { ConnectServerType } from '@/lib/connect/serverTypes';
+import type { RelayFailureCode } from '@/lib/weechat/relayErrors';
+import { mixedContentBlocked } from '@/lib/weechat/relayUrl';
 import {
   claimAlertDelivery,
   notify,
@@ -41,10 +45,9 @@ import { shouldNotify } from '@/lib/notifyDecision';
 import { notificationPolicyAllows } from '@/lib/notificationPolicy';
 import { recordDiagnosticEvent } from '@/lib/diagnosticsEvents';
 import { isChannelListNumeric, isIrcxNumeric, parseIrcxLine, buildPropEntry } from '@/lib/ircx/parser';
-import { NODES, wssUrlForOnyxHost } from '@/lib/irc/nodes';
 import { parseOnyxServiceFeedback } from '@/lib/irc/serviceFeedback';
 import type { BufferEntry } from '@/types';
-import { settings } from './settings';
+import { settings, updateBridge, saveSettings } from './settings';
 import {
   buffersState,
   upsertBuffer,
@@ -101,9 +104,7 @@ import {
 
 const PING_INTERVAL_MS = 15_000;
 const QUERY_PENDING_TIMEOUT_MS = 10_000;
-const ONYX_RE = /\bonyx(?:-server)?\b/i;
 const BRIDGE_REQUIRED_MSG = 'voice/video requires the onyx-server bridge (enable in Settings → Bridge)';
-const ONYX_HOSTS = new Set(NODES.map((node) => node.host.toLowerCase()));
 
 // ---------------------------------------------------------------------------
 // Bridge seams
@@ -144,6 +145,9 @@ export function setRelayObserver(obs: RelayObserver | null): void {
 
 const [connectionState, setConnectionState] = createSignal<ConnectionState>(ConnectionState.DISCONNECTED);
 const [connectionError, setConnectionError] = createSignal<string | null>(null);
+const [connectionErrorCode, setConnectionErrorCode] = createSignal<RelayFailureCode | null>(null);
+const [connectServerType, setConnectServerType] = createSignal<ConnectServerType>('weechat');
+const [onyxExtrasOffered, setOnyxExtrasOffered] = createSignal(false);
 const [lag, setLag] = createSignal(0);
 const [historyReceipt, setHistoryReceipt] = createSignal({ bufferPtr: '', returnedCount: 0, nonce: 0 });
 const [relayDiagnostics, setRelayDiagnostics] = createSignal<RelayDiagnostics>({
@@ -166,6 +170,14 @@ const [relayDiagnostics, setRelayDiagnostics] = createSignal<RelayDiagnostics>({
 export { connectionState };
 /** Last connection error message, or null (signal accessor). */
 export { connectionError };
+export { connectionErrorCode, connectServerType, onyxExtrasOffered, setConnectServerType };
+export { isOnyxMyinfo } from '@/lib/irc/onyxDetect';
+
+export function enableOnyxExtras(): void {
+  updateBridge({ enabled: true });
+  saveSettings();
+  setOnyxExtrasOffered(false);
+}
 /** Round-trip lag in ms from the 15s ping loop (signal accessor). */
 export { lag };
 /** Latest relay history response metadata (no message content). */
@@ -367,26 +379,15 @@ function detectOperFromLine(line: WeeChatLine, entry: BufferEntry): void {
 // Onyx Server detection (API: markOnyxServer / isOnyxServer / onOnyxServerDetected)
 // ---------------------------------------------------------------------------
 
-function onyxGatewayFromMyinfo(message: string): string | undefined {
-  const parts = stripCodes(message).split(/\s+/).filter(Boolean);
-  const host = parts[1] ?? '';
-  return wssUrlForOnyxHost(host) ?? undefined;
-}
-
-function isOnyxMyinfo(message: string): boolean {
-  const plain = stripCodes(message);
-  if (ONYX_RE.test(plain)) return true;
-  const parts = plain.split(/\s+/).filter(Boolean);
-  const host = parts[1]?.toLowerCase() ?? '';
-  return ONYX_HOSTS.has(host);
-}
-
 function detectOnyxForEntry(entry: BufferEntry, line?: WeeChatLine): void {
   const sn = entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
   if (!sn || isOnyxServer(sn)) return;
   const gateway = line ? onyxGatewayFromMyinfo(line.message) : undefined;
   markOnyxServer(sn, gateway);
   relayObserver?.onOnyxServerDetected?.(sn, gateway);
+  if (connectServerType() === 'weechat' && !settings.bridge.enabled) {
+    setOnyxExtrasOffered(true);
+  }
   // Replay channel-opened notifications for channels that existed before
   // detection so the bridge sees the full channel set.
   for (const e of Object.values(buffersState.buffers)) {
@@ -519,8 +520,8 @@ function handleLineAdded(line: WeeChatLine): void {
     setAccount(line.nick, line.account);
   }
 
-  // Onyx Server detection via RPL_MYINFO (004)
-  if (line.tags.includes('irc_004') && isOnyxMyinfo(line.message)) {
+  // Onyx Server detection via RPL_MYINFO (004) or ISUPPORT NETWORK (005)
+  if ((line.tags.includes('irc_004') || line.tags.includes('irc_005')) && isOnyxMyinfo(line.message)) {
     const bufEntry = buffersState.buffers[line.buffer];
     if (bufEntry) detectOnyxForEntry(bufEntry, line);
   }
@@ -611,12 +612,21 @@ function handleLineAdded(line: WeeChatLine): void {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-export function connect(): void {
+export function connect(opts?: { totp?: string }): void {
   // Tear down existing
   disconnect();
   bindNotificationConnectionScope();
+  setConnectionErrorCode(null);
 
-  const c = new WeeRelayClient({ ...settings.relay });
+  if (mixedContentBlocked(settings.relay.tls, settings.relay.host)) {
+    setConnectionErrorCode('mixed_content');
+    setConnectionError(
+      'This page is HTTPS, so the browser blocks an unencrypted WebSocket to a remote host. Enable TLS, or connect to loopback.',
+    );
+    return;
+  }
+
+  const c = new WeeRelayClient({ ...settings.relay, totp: opts?.totp });
   client = c;
   setConnectionError(null);
   setRelayDiagnostics(c.diagnostics());
@@ -641,8 +651,9 @@ export function connect(): void {
       }
     }),
 
-    on<RelayErrorEvent>(c, 'error', ({ message }) => {
+    on<RelayErrorEvent>(c, 'error', ({ message, code }) => {
       setConnectionError(message);
+      setConnectionErrorCode(code ?? null);
       recordDiagnosticEvent('relay-error');
     }),
 
@@ -759,7 +770,7 @@ export function connect(): void {
         const sn = entry.buffer.localVars['server'] ?? entry.buffer.localVars['network'] ?? '';
         if (sn && !isOnyxServer(sn)) {
           for (const line of lines) {
-            if (line.tags.includes('irc_004') && isOnyxMyinfo(line.message)) {
+            if ((line.tags.includes('irc_004') || line.tags.includes('irc_005')) && isOnyxMyinfo(line.message)) {
               detectOnyxForEntry(entry, line);
               break;
             }

@@ -450,7 +450,7 @@ function stopBridge(): void {
   pendingActions.length = 0;
   teardownClient();
   _setBridgeCryptoScope(null);
-  _setBridgeState({ status: 'off', error: null, e2eeReady: false });
+  _setBridgeState({ status: 'off', error: null, e2eeReady: false, sessionRestored: false });
 }
 
 function scheduleReconnect(): void {
@@ -490,7 +490,12 @@ function onWelcome(welcome: IRCMessage): void {
   backoffMs = BACKOFF_MIN_MS;
   const trustAccount = settings.bridge.account.trim() || c.currentNick;
   _setBridgeCryptoScope(`${currentUrl}\n${trustAccount.toLowerCase()}`);
-  _setBridgeState({ status: 'ready', error: null, nick: c.currentNick });
+  _setBridgeState({
+    status: 'ready',
+    error: null,
+    nick: c.currentNick,
+    sessionRestored: c.sessionSyncActive,
+  });
   _setMediaAvailable(true);
   _setMediaTransportConnected(true);
 

@@ -13,8 +13,11 @@ import {
   activityUnreadCount,
   ConnectionState,
   connectionState,
+  connectServerType,
+  enableOnyxExtras,
   isActiveOnyxServer,
   lag,
+  onyxExtrasOffered,
   openChannelInfo,
   openModal,
   openActivityPanel,
@@ -25,6 +28,7 @@ import {
   toggleUserList,
   uiState,
 } from '@/state';
+import { bridgeState } from '@/state/bridge';
 import { mediaState, requestRoomJoin, requestStartCall } from '@/state/media';
 import { formatText } from '@/lib/irc-classic/formatter';
 import { BUFFER_KIND_LABEL, bufferKind, isIrcBuffer } from '@/lib/bufferKind';
@@ -77,7 +81,15 @@ export default function Header() {
     return isPrivate();
   });
 
-  const canCall = () => connected() && mediaState.callState === 'idle' && isIrc() && (isPrivate() || isChannel());
+  const canCall = () =>
+    connected() &&
+    onOnyxServer() &&
+    mediaState.callState === 'idle' &&
+    isIrc() &&
+    (isPrivate() || isChannel());
+  const relayUp = () => connected();
+  const bridgeUp = () => bridgeState.status === 'ready';
+  const showHops = () => relayUp() || settings.bridge.enabled || bridgeState.status !== 'off';
 
   // Collapse the topic + menus whenever the active buffer changes
   createEffect(on(() => buffersState.activeBuffer, () => {
@@ -114,9 +126,31 @@ export default function Header() {
             </span>
           </Show>
           <Show when={onOnyxServer()}>
-            <span class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-[var(--custom-accent,#818cf8)]/[0.08] text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/15 shrink-0">
-              Onyx Server
+            <span
+              data-testid="onyx-chip"
+              class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-[var(--custom-accent,#818cf8)]/[0.08] text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/15 shrink-0"
+            >
+              {t('header.onyxChip')}
             </span>
+          </Show>
+          <Show when={bridgeState.sessionRestored}>
+            <span
+              data-testid="session-restored"
+              class="hidden md:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-emerald-500/12 text-emerald-300 border border-emerald-500/20 shrink-0"
+            >
+              {t('header.sessionRestored')}
+            </span>
+          </Show>
+          <Show when={onyxExtrasOffered()}>
+            <button
+              type="button"
+              data-testid="enable-onyx-extras"
+              onClick={() => enableOnyxExtras()}
+              class="hidden md:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/25 shrink-0"
+              title={t('header.extrasHint')}
+            >
+              {t('header.enableExtras')}
+            </button>
           </Show>
           <Show when={isChannel() && onOnyxServer()}>
             <button
@@ -175,6 +209,26 @@ export default function Header() {
 
       {/* Right side */}
       <div class="mobile-header-actions flex items-center gap-0.5 sm:gap-2 shrink-0">
+        <Show when={showHops()}>
+          <div class="flex items-center gap-1.5 pr-1" data-testid="connectivity-hops" aria-label={t('connectivity.hops')}>
+            <span class="flex items-center gap-1" title={t('connectivity.relay')}>
+              <span
+                class={`h-1.5 w-1.5 rounded-full ${relayUp() ? 'bg-emerald-400' : 'bg-gray-600'}`}
+                aria-hidden="true"
+              />
+              <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.relay')}</span>
+            </span>
+            <Show when={settings.bridge.enabled || bridgeState.status !== 'off' || connectServerType() === 'onyx-wss'}>
+              <span class="flex items-center gap-1" title={t('connectivity.bridge')}>
+                <span
+                  class={`h-1.5 w-1.5 rounded-full ${bridgeUp() ? 'bg-emerald-400' : bridgeState.status === 'connecting' ? 'bg-amber-400' : 'bg-gray-600'}`}
+                  aria-hidden="true"
+                />
+                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.bridge')}</span>
+              </span>
+            </Show>
+          </div>
+        </Show>
         <Show when={connected()}>
           <div class="flex items-center gap-1.5">
             <Show when={settings.relay.tls}>

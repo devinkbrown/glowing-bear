@@ -32,6 +32,8 @@ interface BridgeStateShape {
   error: string | null;
   /** True when our E2EE device key exists and has been published this session. */
   e2eeReady: boolean;
+  /** True after 001 when the server ACKed `onyx/session-sync`. */
+  sessionRestored: boolean;
 }
 
 const [bridgeState, setBridgeStateStore] = createStore<BridgeStateShape>({
@@ -39,6 +41,7 @@ const [bridgeState, setBridgeStateStore] = createStore<BridgeStateShape>({
   nick: null,
   error: null,
   e2eeReady: false,
+  sessionRestored: false,
 });
 
 /** Read-only bridge session state. Mutated only by the bridge controller. */
@@ -52,7 +55,10 @@ export function _setBridgeState(partial: Partial<BridgeStateShape>): void {
   // as the bridge goes 'off' (disconnect / teardown / bridge disable) drop all
   // decrypted plaintext, cached peer keys and parked envelopes so nothing
   // leaks into (or is matched against) a later, different session.
-  if (partial.status === 'off') _resetBridgeCrypto();
+  if (partial.status === 'off') {
+    setBridgeStateStore({ sessionRestored: false });
+    _resetBridgeCrypto();
+  }
 }
 
 // ---------------------------------------------------------------------------

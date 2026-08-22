@@ -13,13 +13,22 @@ import type { ModalType } from '@/types';
 
 export type ConnectModalAction = 'open' | 'close' | 'none';
 
+export interface ConnectModalPolicyOptions {
+  /** First-party Onyx WSS reached 001 without a WeeChat relay. */
+  firstPartyReady?: boolean;
+  /** First-party Onyx WSS is dialing — keep the connect card visible. */
+  firstPartyConnecting?: boolean;
+}
+
 export function connectModalAction(
   state: ConnectionState,
   activeModal: ModalType,
+  opts: ConnectModalPolicyOptions = {},
 ): ConnectModalAction {
-  if (state === ConnectionState.CONNECTED) {
+  if (state === ConnectionState.CONNECTED || opts.firstPartyReady) {
     return activeModal === 'connect' ? 'close' : 'none';
   }
+  if (opts.firstPartyConnecting) return 'none';
   if (state === ConnectionState.DISCONNECTED) {
     return activeModal === null ? 'open' : 'none';
   }

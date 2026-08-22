@@ -16,6 +16,7 @@ import {
   connect,
   ConnectionState,
   disconnect,
+  markOnyxServer,
   resetSettings,
   setActiveBuffer,
   uiState,
@@ -203,6 +204,7 @@ describe('Header', () => {
 
   it('shows room join buttons for a channel and routes clicks to joinRoom', () => {
     goOnline(); // connect() tears down state first, so arrange buffers after
+    markOnyxServer('eshmaki');
     upsertBuffer(CHANNEL);
     setActiveBuffer('0xc');
 
@@ -219,6 +221,7 @@ describe('Header', () => {
 
   it('shows 1:1 call buttons for a query buffer and routes clicks to startCall', () => {
     goOnline(); // connect() tears down state first, so arrange buffers after
+    markOnyxServer('eshmaki');
     upsertBuffer(QUERY);
     setActiveBuffer('0xq');
 
@@ -231,6 +234,21 @@ describe('Header', () => {
     fireEvent.click(getByLabelText('Video call'));
     expect(startCallMock).toHaveBeenCalledWith('trev', true);
     expect(joinRoomMock).not.toHaveBeenCalled();
+  });
+
+  it('hides call buttons on a generic IRC buffer even when connected', () => {
+    goOnline();
+    upsertBuffer(makeBuffer('0xl', {
+      name: 'irc.libera.#linux',
+      fullName: 'irc.libera.#linux',
+      shortName: '#linux',
+      localVars: { type: 'channel', server: 'libera', channel: '#linux' },
+    }));
+    setActiveBuffer('0xl');
+
+    const { queryByLabelText } = render(() => <Header />);
+    expect(queryByLabelText('Join voice')).toBeNull();
+    expect(queryByLabelText('Join video')).toBeNull();
   });
 
   it('hides the call buttons while disconnected', () => {

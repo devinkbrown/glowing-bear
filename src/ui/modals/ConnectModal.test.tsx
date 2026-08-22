@@ -67,6 +67,29 @@ describe('ConnectModal', () => {
     expect(queryByTestId('connect-decorative-background')).toBeNull();
   });
 
+  it('exposes the typed server picker and keeps TLS documented, not fake-connectable', () => {
+    const { getByTestId, getByRole, getByText } = render(() => <ConnectModal open />);
+    expect(getByTestId('connect-mode-weechat')).toBeInTheDocument();
+    expect(getByTestId('connect-mode-onyx-wss')).toBeInTheDocument();
+    expect(getByTestId('connect-mode-onyx-tls')).toBeEnabled();
+    fireEvent.click(getByTestId('connect-mode-onyx-tls'));
+    expect(getByRole('button', { name: /^Connect$/ })).toBeDisabled();
+    expect(getByText(/Browsers cannot open raw TLS IRC/)).toBeInTheDocument();
+    expect(getByRole('button', { name: /^How do I set this up/ })).toHaveAttribute('aria-expanded', 'false');
+  }, RENDER_TIMEOUT_MS);
+
+  it('shows Onyx WSS account fields and enables Connect without a relay', () => {
+    const { getByTestId, getByLabelText, getByRole } = render(() => <ConnectModal open />);
+    fireEvent.click(getByTestId('connect-mode-onyx-wss'));
+    expect(getByLabelText('Endpoint')).toBeInTheDocument();
+    expect(getByLabelText('Account')).toBeInTheDocument();
+    const connect = getByRole('button', { name: /^Connect$/ });
+    expect(connect).toBeDisabled();
+    fireEvent.input(getByLabelText('Account'), { target: { value: 'kain' } });
+    fireEvent.input(getByLabelText('Password'), { target: { value: 'secret' } });
+    expect(connect).toBeEnabled();
+  }, RENDER_TIMEOUT_MS);
+
   it('keeps Connect disabled until required fields are filled', () => {
     const { getByLabelText, getByRole } = render(() => <ConnectModal open />);
     const connect = getByRole('button', { name: /^Connect$/ });

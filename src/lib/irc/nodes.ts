@@ -1,5 +1,5 @@
 /**
- * IRCXNet node registry + automatic node selection.
+ * Onyx Server node registry + automatic node selection.
  *
  * The network is a single mesh — every node reaches the whole network, so which
  * node a client attaches to is purely a routing/latency concern, never a feature
@@ -7,6 +7,7 @@
  * each reachable node and attach to the fastest (nearest) one automatically,
  * falling back to a random node when probing is inconclusive.
  *
+ * Host ids such as `ircx.us` are wire/routing names, not product branding.
  * Override with VITE_IRC_WS to pin a specific endpoint (dev / self-host).
  */
 

@@ -1,6 +1,8 @@
 # DarkBear
 
-A WeeChat relay client with real voice/video. Connect to your IRC bouncer from any browser — and when your network is Onyx Server, DarkBear opens a companion session that carries realtime voice, video, screenshare, typing, reactions, and E2EE DMs.
+A WeeChat relay client with first-class Onyx Server extras. Connect to your IRC bouncer from any browser — and when your network is Onyx Server, DarkBear can open a companion WSS session that carries realtime voice, video, screenshare, typing, reactions, and E2EE DMs.
+
+**Live app:** [https://eshmaki.me/darkbear/](https://eshmaki.me/darkbear/). The GitHub Pages copy at `https://devinkbrown.github.io/darkbear/` may still be an older Glowing Bear snapshot; treat eshmaki.me as the current build.
 
 ## Architecture
 
@@ -11,8 +13,9 @@ Browser ──weechat relay (binary protocol over WS)──▶ WeeChat ──IRC
 Browser ──direct WSS (Onyx Server bridge)──▶ Onyx Server                                      (media + extras)
 ```
 
-- **Chat backbone**: the WeeChat relay protocol. WeeChat runs on your server as the bouncer; DarkBear speaks its binary relay protocol over WebSocket. Buffers, history, nicklists, hotlist — all relay-driven.
-- **Onyx Server bridge** (optional, Settings → Connection → Bridge): a persistent direct secure WebSocket session to the Onyx Server, auto-activated when the relay's network is detected as Onyx Server. Production and credentialed endpoints require `wss://`; plain `ws://` is limited to unauthenticated loopback development. It carries:
+- **Chat backbone**: the WeeChat binary `weechat` relay protocol. WeeChat runs on your server as the bouncer; DarkBear speaks that protocol over WebSocket. Buffers, history, nicklists, hotlist — all relay-driven. The HTTP `api` relay is not supported.
+- **Onyx Server first-party WSS** (`[listen].ws`, typically 8080): production `wss://` only. DarkBear offers `onyx.irc-media.v1` then `text.ircv3.net`. Implicit TLS IRC (`[tls]` :6697) and plain IRC (`[listen].irc` :6667) are not openable from the browser; the current desktop shell has no raw TLS TCP client, so those paths are documented as “use WeeChat or WSS.” Mesh S2S, WebTransport, webhooks, and native UDP media ports are not connect types.
+- **Onyx Server extras** (optional companion session): a persistent direct secure WebSocket to Onyx Server. Auto-offered when the relay's 004/005 looks like Onyx (`onyx-`, `NETWORK=Onyx` or residual `IRCXNet`, known hosts). Production and credentialed endpoints require `wss://`; plain `ws://` is limited to unauthenticated loopback development (`ws_plain`). It carries:
   - **Voice/video/screenshare** — CadenceVox/CadenceVis WASM codecs over binary WS frames with per-stream HMAC, MEDIA control plane, EVENT MEDIA presence
   - **Typing notifications & emoji reactions** (TAGMSG) sent and received
   - **Read-marker sync** across devices (MARKREAD)
@@ -77,15 +80,19 @@ Browser ──direct WSS (Onyx Server bridge)──▶ Onyx Server              
 In WeeChat:
 
 ```
+/secure set relay_password your-password
+/set relay.network.password "${sec.data.relay_password}"
+/set relay.network.websocket_allowed_origins "*"
 /relay add weechat 9001
-/set relay.network.password your-password
 ```
 
-For TLS (recommended if not behind a reverse proxy):
+For TLS (WeeChat ≥ 4.0; older builds use `ssl.weechat`):
 
 ```
-/relay add ssl.weechat 9001
+/relay add tls.weechat 9001
 ```
+
+The first-run screen generates these snippets from the form you filled in. Never use `weechat.weechat` as a listener name.
 
 ### Dev
 
