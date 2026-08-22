@@ -107,6 +107,22 @@ describe('ConnectModal', () => {
     expect(connect).toBeEnabled();
   }, RENDER_TIMEOUT_MS);
 
+  it('keeps the theme picker and setup drawer off the first-run card', () => {
+    const { getByRole, queryByLabelText, queryByTestId } = render(() => <ConnectModal open />);
+    expect(getByRole('radiogroup', { name: 'Server type' })).toBeInTheDocument();
+    expect(queryByLabelText('Open settings')).toBeNull();
+    expect(queryByTestId('setup-drawer')).toBeNull();
+  }, RENDER_TIMEOUT_MS);
+
+  it('shows Onyx TOTP and account remember copy, not WeeChat TOTP, on first-party Onyx', () => {
+    const { getByTestId, getByText, queryByText } = render(() => <ConnectModal open />);
+    fireEvent.click(getByTestId('connect-mode-onyx-wss'));
+    expect(getByText('Onyx TOTP (IDENTIFY)')).toBeInTheDocument();
+    expect(getByText('Remember account password on this device')).toBeInTheDocument();
+    expect(queryByText('WeeChat TOTP')).toBeNull();
+    expect(queryByText('Remember extras password on this device')).toBeNull();
+  }, RENDER_TIMEOUT_MS);
+
   it('dispatches the connect intent when the ready form is submitted', () => {
     const { getByLabelText, getByRole } = render(() => <ConnectModal open />);
 

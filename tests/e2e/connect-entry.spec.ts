@@ -45,7 +45,7 @@ test.describe('connect entry surface', () => {
     await expect(page.getByLabel('Endpoint', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Account', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
-    await expect(page.getByText(/Chat history and multi-device buffers/)).toBeVisible();
+    await expect(page.getByText('First-party Onyx: one socket for chat and media.')).toBeVisible();
 
     await page.getByRole('button', { name: 'How do I set this up?' }).click();
     await expect(page.getByTestId('setup-drawer')).toBeVisible();

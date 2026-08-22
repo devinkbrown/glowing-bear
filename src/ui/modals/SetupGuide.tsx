@@ -114,7 +114,7 @@ export default function SetupGuide(props: SetupGuideProps) {
               <CopyBlock text={letsEncryptRelayPemLines().join('\n')} />
             </Show>
             <p class="text-[11px] text-gray-500">{t('setup.noApi')}</p>
-            <p class="text-[10px] text-gray-600 font-mono">listener: {weechatListenerName(props.tls)}</p>
+            <p class="text-[10px] text-gray-600 font-mono">{t('setup.listenerName', { name: weechatListenerName(props.tls) })}</p>
           </div>
         </Show>
 
@@ -122,8 +122,8 @@ export default function SetupGuide(props: SetupGuideProps) {
           <div class="flex flex-col gap-2">
             <CopyBlock label={t('setup.bind')} text={weechatBindLocalhostCommand()} />
             <CopyBlock label={t('setup.listener')} text={`/relay add weechat ${props.port}`} />
-            <CopyBlock label="nginx" text={nginxWeechatConfig(props.port, props.path)} />
-            <CopyBlock label="Caddy" text={caddyWeechatConfig(props.port, props.path)} />
+            <CopyBlock label={t('setup.nginx')} text={nginxWeechatConfig(props.port, props.path)} />
+            <CopyBlock label={t('setup.caddy')} text={caddyWeechatConfig(props.port, props.path)} />
           </div>
         </Show>
 

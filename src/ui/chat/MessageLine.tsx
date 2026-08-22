@@ -28,6 +28,7 @@ import {
   isMessageSaved,
   sendInput,
   settings,
+  showOnyxChrome,
   sourceFromLine,
   toggleSavedMessage,
 } from '@/state';
@@ -692,7 +693,7 @@ export default function MessageLine(props: MessageLineProps) {
             y={m().y}
             text={plainText()}
             urls={urls()}
-            canReact={!!props.line.msgid}
+            canReact={!!props.line.msgid && showOnyxChrome()}
             onReact={(emoji) => {
               const msgid = props.line.msgid;
               if (msgid) sendReactionTag(props.bufferPtr, msgid, emoji);

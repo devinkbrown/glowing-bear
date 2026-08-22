@@ -21,6 +21,7 @@ import {
   setSessionKind,
   setActiveBuffer,
   uiState,
+  updateBridge,
   upsertBuffer,
 } from '@/state';
 import { requestRoomJoin, requestStartCall } from '@/state/media';
@@ -302,6 +303,44 @@ describe('Header', () => {
     // Content past the cap is truncated before it can be rendered or parsed.
     expect(container.innerHTML).not.toContain(sentinel);
     expect(container.textContent).toContain('…');
+  });
+
+  it('shows a single relay hop on generic WeeChat (kind A)', () => {
+    goOnline();
+    upsertBuffer(CHANNEL);
+    setActiveBuffer('0xc');
+
+    const { getByTestId, queryByTestId } = render(() => <Header />);
+    expect(getByTestId('connectivity-hops')).toBeInTheDocument();
+    expect(getByTestId('hop-relay')).toBeInTheDocument();
+    expect(queryByTestId('hop-extras')).toBeNull();
+    expect(queryByTestId('hop-session')).toBeNull();
+  });
+
+  it('shows relay and extras hops on WeeChat+Onyx (kind B)', () => {
+    goOnline();
+    setSessionKind('weechat-onyx');
+    updateBridge({ enabled: true });
+    markOnyxServer('eshmaki');
+    upsertBuffer(CHANNEL);
+    setActiveBuffer('0xc');
+
+    const { getByTestId, queryByTestId } = render(() => <Header />);
+    expect(getByTestId('hop-relay')).toBeInTheDocument();
+    expect(getByTestId('hop-extras')).toBeInTheDocument();
+    expect(queryByTestId('hop-session')).toBeNull();
+  });
+
+  it('shows a single Onyx session hop on first-party WSS (kind C)', () => {
+    goOnline();
+    setSessionKind('onyx-direct-wss');
+    upsertBuffer(CHANNEL);
+    setActiveBuffer('0xc');
+
+    const { getByTestId, queryByTestId } = render(() => <Header />);
+    expect(getByTestId('hop-session')).toBeInTheDocument();
+    expect(queryByTestId('hop-relay')).toBeNull();
+    expect(queryByTestId('hop-extras')).toBeNull();
   });
 
   it('opens the channel browser from the top bar while connected', () => {

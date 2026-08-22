@@ -1,14 +1,14 @@
 // ConnectShell — first-run identity + one connection choice.
 // Theme picker lives in Settings. Setup essays live in the closed-by-default drawer.
 
-import { For, Index, Show, Suspense, createSignal, lazy, onCleanup, onMount } from 'solid-js';
+import { For, Index, Show, Suspense, createEffect, createSignal, lazy, onCleanup, onMount } from 'solid-js';
+import { diagnoseReveal } from '@/lib/connect/diagnose';
 import {
   ConnectionState,
   connect,
   connectionError,
   connectionErrorCode,
   connectionState,
-  openModal,
   relayDiagnostics,
   saveProfile,
   saveSettings,
@@ -271,8 +271,14 @@ function ConnectScreen(props: { onClose?: () => void }) {
     if (code === 'tls_untrusted') return t('connect.next.tls_untrusted', { host: host(), port: String(port()) });
     return t(`connect.next.${code}`);
   };
-  const showTotp = () => showAdvanced() || errorCode() === 'totp_required';
+  const showTotp = () =>
+    showAdvanced() || diagnoseReveal(errorCode()) === 'totp' || errorCode() === 'totp_required';
   const mixedBlocked = () => mode() === 'weechat' && mixedContentBlocked(tls(), host());
+
+  createEffect(() => {
+    const reveal = diagnoseReveal(errorCode());
+    if (reveal === 'totp' || reveal === 'advanced') setShowAdvanced(true);
+  });
 
   const setLocale = (locale: LocalePreference) => {
     updateSettings({ locale });
@@ -332,28 +338,33 @@ function ConnectScreen(props: { onClose?: () => void }) {
         <div class="w-full sm:max-w-[440px] sm:mx-auto" style={{ animation: 'fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both' }}>
           <div class="px-5 pb-6 sm:px-0 sm:pb-0">
             <div class="login-card-inner">
-              <div class="grid grid-cols-1 gap-2 mb-5" role="radiogroup" aria-label="Server type">
-                <ModeButton
-                  id="weechat"
-                  active={mode() === 'weechat'}
-                  title={t('connect.modeWeechat')}
-                  hint={t('connect.modeWeechatHint')}
-                  onSelect={() => setMode('weechat')}
-                />
-                <ModeButton
-                  id="onyx-wss"
-                  active={mode() === 'onyx-wss'}
-                  title={t('connect.modeOnyxWss')}
-                  hint={t('connect.modeOnyxWssHint')}
-                  onSelect={() => setMode('onyx-wss')}
-                />
-                <ModeButton
-                  id="onyx-tls"
-                  active={mode() === 'onyx-tls'}
-                  title={t('connect.modeOnyxTls')}
-                  hint={t('connect.modeOnyxTlsHint')}
-                  onSelect={() => setMode('onyx-tls')}
-                />
+              <div class="mb-5" role="radiogroup" aria-label={t('connect.serverType')}>
+                <div class="grid grid-cols-2 gap-2">
+                  <ModeButton
+                    id="weechat"
+                    active={mode() === 'weechat'}
+                    title={t('connect.modeWeechat')}
+                    hint={t('connect.modeWeechatHint')}
+                    onSelect={() => setMode('weechat')}
+                  />
+                  <ModeButton
+                    id="onyx-wss"
+                    active={mode() === 'onyx-wss'}
+                    title={t('connect.modeOnyxWss')}
+                    hint={t('connect.modeOnyxWssHint')}
+                    onSelect={() => setMode('onyx-wss')}
+                  />
+                </div>
+                <div class="mt-2">
+                  <ModeButton
+                    id="onyx-tls"
+                    active={mode() === 'onyx-tls'}
+                    title={t('connect.modeOnyxTls')}
+                    hint={t('connect.modeOnyxTlsHint')}
+                    quiet
+                    onSelect={() => setMode('onyx-tls')}
+                  />
+                </div>
               </div>
 
               <Show when={settings.profiles.length > 0}>
@@ -370,10 +381,15 @@ function ConnectScreen(props: { onClose?: () => void }) {
               </Show>
 
               <Show when={errorText()}>
-                <div role="alert" class="flex flex-col gap-1 bg-red-500/8 border border-red-500/15 rounded-xl p-4 text-[13px] text-red-300 mb-5">
+                <div
+                  role="alert"
+                  data-testid="connect-diagnose"
+                  data-error-code={errorCode() ?? ''}
+                  class="flex flex-col gap-1 bg-red-500/8 border border-red-500/15 rounded-xl p-4 text-[13px] text-red-300 mb-5"
+                >
                   <span>{errorText()}</span>
                   <Show when={nextAction()}>
-                    <span class="text-[11px] text-red-200/80">{nextAction()}</span>
+                    <span data-testid="connect-next-action" class="text-[11px] text-red-200/80">{nextAction()}</span>
                   </Show>
                 </div>
               </Show>
@@ -477,7 +493,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   <button type="button" onClick={() => setRememberBridgePassword(!rememberBridgePassword())}
                     aria-pressed={rememberBridgePassword()} class="flex items-center gap-2 text-[11px] text-gray-500">
                     <span class={`login-toggle ${rememberBridgePassword() ? 'login-toggle-on' : ''}`}><span class="login-toggle-dot" /></span>
-                    {t('connect.rememberBridge')}
+                    {t('connect.rememberAccount')}
                   </button>
                   <button type="button" onClick={() => setShowAlsoRelay(!showAlsoRelay())}
                     class="text-left text-[12px] text-gray-500 hover:text-gray-300">
@@ -591,14 +607,6 @@ function ConnectScreen(props: { onClose?: () => void }) {
             <option value="de">{t('locale.german')}</option>
             <option value="ar">{t('locale.arabic')}</option>
           </select>
-          <button
-            type="button"
-            onClick={() => openModal('settings')}
-            class="w-8 h-8 rounded-full border border-white/10"
-            style={{ background: tc().accent }}
-            aria-label={t('palette.openSettings')}
-            title={t('palette.appearance')}
-          />
         </div>
       </div>
 
@@ -671,6 +679,7 @@ function ModeButton(props: {
   title: string;
   hint: string;
   disabled?: boolean;
+  quiet?: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -681,11 +690,11 @@ function ModeButton(props: {
       data-testid={`connect-mode-${props.id}`}
       disabled={props.disabled}
       onClick={() => { if (!props.disabled) props.onSelect(); }}
-      class={`text-left rounded-xl border px-3 py-2.5 min-h-[52px] ${
+      class={`text-left rounded-xl border px-3 ${props.quiet ? 'py-2 min-h-[44px]' : 'py-2.5 min-h-[52px]'} ${
         props.active
           ? 'border-[var(--custom-accent,#818cf8)]/40 bg-[var(--custom-accent,#818cf8)]/[0.08]'
           : 'border-white/[0.06] bg-white/[0.02]'
-      } ${props.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+      } ${props.disabled ? 'opacity-60 cursor-not-allowed' : ''} ${props.quiet ? 'opacity-90' : ''}`}
     >
       <span class="block text-[13px] font-semibold text-gray-200">{props.title}</span>
       <span class="block text-[11px] text-gray-500 leading-snug">{props.hint}</span>
@@ -733,7 +742,7 @@ function WeeChatFields(props: {
       <Field label={t('connect.hostname')} id="c-host">
         <input ref={props.hostRef} id="c-host" type="text" value={props.host}
           onInput={(e) => props.onHost(e.currentTarget.value)}
-          placeholder="relay.example.com" autocomplete="off" spellcheck={false} class="login-input" />
+          placeholder={t('connect.hostnamePlaceholder')} autocomplete="off" spellcheck={false} class="login-input" />
       </Field>
       <div class="flex items-end gap-3">
         <div class="flex-1">
@@ -786,7 +795,7 @@ function WeeChatFields(props: {
             </Field>
             <p class="text-[11px] text-gray-600">{t('connect.originHint')}</p>
           </Show>
-          <span class="text-[13px] text-gray-400">{t('connect.totp')}</span>
+          <span class="text-[13px] text-gray-400">{t('connect.weechatTotp')}</span>
           <div class="flex gap-2 justify-center">
             <Index each={new Array<number>(6).fill(0)}>
               {(_, i) => (

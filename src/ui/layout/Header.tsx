@@ -8,6 +8,7 @@
    the raw IRC text before injecting its own markup. */
 
 import { createEffect, createMemo, createSignal, on, Show } from 'solid-js';
+import { connectivityHops, showTlsPadlock } from '@/lib/connect/connectivityHops';
 import {
   buffersState,
   activityUnreadCount,
@@ -87,9 +88,16 @@ export default function Header() {
     mediaState.callState === 'idle' &&
     isIrc() &&
     (isPrivate() || isChannel());
-  const relayUp = () => connected();
-  const bridgeUp = () => bridgeState.status === 'ready';
-  const showHops = () => relayUp() || settings.bridge.enabled || bridgeState.status !== 'off';
+  const hops = createMemo(() =>
+    connectivityHops(sessionKind(), {
+      connected: connected(),
+      extrasEnabled: settings.bridge.enabled,
+      extrasStatus: bridgeState.status,
+    }),
+  );
+  const extrasUp = () => bridgeState.status === 'ready';
+  const extrasConnecting = () => bridgeState.status === 'connecting';
+  const showTls = () => showTlsPadlock(sessionKind(), settings.relay.tls);
 
   // Collapse the topic + menus whenever the active buffer changes
   createEffect(on(() => buffersState.activeBuffer, () => {
@@ -209,29 +217,40 @@ export default function Header() {
 
       {/* Right side */}
       <div class="mobile-header-actions flex items-center gap-0.5 sm:gap-2 shrink-0">
-        <Show when={showHops()}>
-          <div class="flex items-center gap-1.5 pr-1" data-testid="connectivity-hops" aria-label={t('connectivity.hops')}>
-            <span class="flex items-center gap-1" title={t('connectivity.relay')}>
-              <span
-                class={`h-1.5 w-1.5 rounded-full ${relayUp() ? 'bg-emerald-400' : 'bg-gray-600'}`}
-                aria-hidden="true"
-              />
-              <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.relay')}</span>
-            </span>
-            <Show when={sessionKind() === 'weechat-onyx' || (settings.bridge.enabled && sessionKind() !== 'onyx-direct-wss')}>
-              <span class="flex items-center gap-1" title={t('connectivity.bridge')}>
+        <Show when={hops().show}>
+          <div class="flex items-center gap-1.5 pr-1" data-testid="connectivity-hops" aria-label={t(hops().hopsLabelKey)}>
+            <Show when={hops().chips.includes('relay')}>
+              <span class="flex items-center gap-1" data-testid="hop-relay" title={t('connectivity.relay')}>
                 <span
-                  class={`h-1.5 w-1.5 rounded-full ${bridgeUp() ? 'bg-emerald-400' : bridgeState.status === 'connecting' ? 'bg-amber-400' : 'bg-gray-600'}`}
+                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-emerald-400' : 'bg-gray-600'}`}
+                  aria-hidden="true"
+                />
+                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.relay')}</span>
+              </span>
+            </Show>
+            <Show when={hops().chips.includes('extras')}>
+              <span class="flex items-center gap-1" data-testid="hop-extras" title={t('connectivity.bridge')}>
+                <span
+                  class={`h-1.5 w-1.5 rounded-full ${extrasUp() ? 'bg-emerald-400' : extrasConnecting() ? 'bg-amber-400' : 'bg-gray-600'}`}
                   aria-hidden="true"
                 />
                 <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.bridge')}</span>
+              </span>
+            </Show>
+            <Show when={hops().chips.includes('session')}>
+              <span class="flex items-center gap-1" data-testid="hop-session" title={t('connectivity.session')}>
+                <span
+                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-emerald-400' : 'bg-gray-600'}`}
+                  aria-hidden="true"
+                />
+                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.session')}</span>
               </span>
             </Show>
           </div>
         </Show>
         <Show when={connected()}>
           <div class="flex items-center gap-1.5">
-            <Show when={settings.relay.tls}>
+            <Show when={showTls()}>
               <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-500/70" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H3.75A1.75 1.75 0 0 0 2 7.75v5.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0 0 14 13.25v-5.5A1.75 1.75 0 0 0 12.25 6H11V4.5A3.5 3.5 0 0 0 7.5 1h.5zM6 4.5A2 2 0 0 1 8 2.5a2 2 0 0 1 2 2V6H6V4.5z" />
               </svg>

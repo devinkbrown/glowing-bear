@@ -1,10 +1,9 @@
 /**
  * WeeChat relay WebSocket URL helpers.
  *
- * Glowing Bear accepts host, host:port, host:port/path, and [ipv6]:port/path
- * in the hostname field. DarkBear now does the same, and also reads
- * hash/query autoconnect parameters. The scheme is never taken from the host
- * field — TLS is an explicit setting.
+ * The hostname field accepts host, host:port, host:port/path, and
+ * [ipv6]:port/path. Hash/query autoconnect parameters are also read. The
+ * scheme is never taken from the host field — TLS is an explicit setting.
  */
 
 import type { RelaySettings } from './model';
@@ -47,8 +46,8 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 /**
- * Parse a hostname field the way Glowing Bear does. The scheme must not be
- * included; if the user pastes one it is stripped and ignored.
+ * Parse a hostname field. The scheme must not be included; if the user
+ * pastes one it is stripped and ignored.
  */
 export function parseRelayHostInput(raw: string): ParsedRelayHost | null {
   let value = raw.trim();

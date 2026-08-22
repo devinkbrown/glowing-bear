@@ -654,7 +654,7 @@ export default function InputBar() {
                 'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/15 ring-1 ring-[var(--custom-accent,#818cf8)]/25': showGif(),
                 'text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.1]': !showGif(),
               }}
-              title="GIF"
+              title={t('composer.gif')}
               aria-label={t('composer.gif')}
             >
               <span class="text-[11px] sm:text-[10px] font-bold tracking-tight">GIF</span>

@@ -1,18 +1,54 @@
 // ReactionBar render tests — reaction pills with counts/tooltips, click
 // routing through the onyx-server bridge, and the empty-state gate.
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
-import type { Reaction } from '@/types';
+import type { Reaction, WeeChatBuffer } from '@/types';
 import ReactionBar from './ReactionBar';
 import { sendReactionTag } from '@/state/bridge';
+import {
+  clearBuffers,
+  clearIrcx,
+  markOnyxServer,
+  resetSettings,
+  setActiveBuffer,
+  setSessionKind,
+  upsertBuffer,
+} from '@/state';
 
 vi.mock('@/state/bridge', () => ({
   sendReactionTag: vi.fn(),
 }));
 
 const sendReactionTagMock = vi.mocked(sendReactionTag);
+
+function enableOnyxChrome(): void {
+  setSessionKind('weechat-onyx');
+  markOnyxServer('eshmaki');
+  upsertBuffer({
+    id: '0xc',
+    number: 1,
+    name: 'irc.eshmaki.#alpha',
+    fullName: 'irc.eshmaki.#alpha',
+    shortName: '#alpha',
+    title: '',
+    type: 0,
+    nicksCount: 0,
+    localVars: { type: 'channel', server: 'eshmaki', channel: '#alpha' },
+    notify: 0,
+    hidden: false,
+  } satisfies WeeChatBuffer);
+  setActiveBuffer('0xc');
+}
+
+beforeEach(() => {
+  globalThis.localStorage?.clear();
+  resetSettings();
+  clearBuffers();
+  clearIrcx();
+  enableOnyxChrome();
+});
 
 afterEach(() => {
   cleanup();
@@ -125,6 +161,16 @@ describe('ReactionBar', () => {
     expect(document.activeElement).toBe(pill);
     expect(sendReactionTagMock).toHaveBeenCalledTimes(1);
     expect(sendReactionTagMock).toHaveBeenCalledWith('0xb', 'mid-1', '🚀');
+  });
+
+  it('keeps existing pills display-only on generic WeeChat', () => {
+    setSessionKind('weechat-generic');
+    const { container } = render(() => (
+      <ReactionBar bufferPtr="0xb" msgid="mid-1" reactions={reactions} />
+    ));
+    expect(container.querySelectorAll('button')).toHaveLength(0);
+    fireEvent.click(container.querySelector('span')!);
+    expect(sendReactionTagMock).not.toHaveBeenCalled();
   });
 
   it('renders nothing when there are no reactions', () => {

@@ -604,9 +604,9 @@ export default function SettingsModal(props: Props) {
                 <Toggle label="Compact Mode" desc="Reduce spacing between messages for density" on={settings.compactMode} onChange={(v) => updateSettings({ compactMode: v })} />
                 <Toggle label="Inline Images" desc="Opt in to fetching remote image thumbnails" on={settings.inlineImages} onChange={(v) => updateSettings({ inlineImages: v })} />
                 <Toggle label="Nick Colors" desc="Assign unique colors to each nickname" on={settings.colorNicks} onChange={(v) => updateSettings({ colorNicks: v })} />
-                <Toggle label="Mode Prefixes" desc="Show @/+/% symbols before nicknames" on={settings.showPrefixes} onChange={(v) => updateSettings({ showPrefixes: v })} />
+                <Toggle label={t('settings.modePrefixes')} desc={t('settings.modePrefixesDesc')} on={settings.showPrefixes} onChange={(v) => updateSettings({ showPrefixes: v })} />
                 <Toggle label="Join/Part/Quit" desc="Show when users enter and leave channels" on={settings.joinPartMsgs} onChange={(v) => updateSettings({ joinPartMsgs: v })} />
-                <Toggle label="Read Marker" desc="Draw a line where you last read" on={settings.readMarker} onChange={(v) => updateSettings({ readMarker: v })} />
+                <Toggle label={t('settings.readMarker')} desc={t('settings.readMarkerDesc')} on={settings.readMarker} onChange={(v) => updateSettings({ readMarker: v })} />
               </div>
             </Section>
 
@@ -764,8 +764,7 @@ export default function SettingsModal(props: Props) {
 
             <Section label="Onyx Server Bridge" desc="Direct session to the Onyx Server for realtime extras">
               <p class="text-[10px] text-gray-600 leading-relaxed mb-1">
-                Adds realtime voice/video, typing, reactions and E2EE DMs by opening a direct
-                session to the Onyx Server alongside your relay.
+                {t('settings.bridgeBlurb')}
               </p>
               <Toggle label="Enable Bridge" desc="Open the direct Onyx Server session when connecting" on={bridge().enabled} onChange={(v) => patchBridge({ enabled: v })} />
               <Show when={bridge().enabled}>

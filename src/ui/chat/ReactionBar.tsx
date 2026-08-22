@@ -1,9 +1,11 @@
 // ReactionBar — emoji reaction pills under a message line. Each pill shows
-// the emoji + reactor count with the reactor nicks as a tooltip; clicking a
-// pill sends the same reaction through the onyx-server bridge.
+// the emoji + reactor count with the reactor nicks as a tooltip. Clicking a
+// pill sends the same reaction through the Onyx extras hop — generic WeeChat
+// buffers stay display-only.
 
 import { For, Show } from 'solid-js';
 import type { Reaction } from '@/types';
+import { showOnyxChrome } from '@/state';
 import { sendReactionTag } from '@/state/bridge';
 
 export interface ReactionBarProps {
@@ -13,19 +15,34 @@ export interface ReactionBarProps {
 }
 
 export default function ReactionBar(props: ReactionBarProps) {
+  const interactive = () => showOnyxChrome();
   return (
     <Show when={props.reactions.length > 0}>
       <div class="flex flex-wrap gap-1 mt-0.5 px-3 sm:px-0 sm:ml-[170px]">
         <For each={props.reactions}>
           {(reaction) => (
-            <button
-              onClick={() => sendReactionTag(props.bufferPtr, props.msgid, reaction.emoji)}
-              class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 border border-white/[0.08] hover:bg-white/10 active:scale-95 transition-all text-[12px]"
-              title={reaction.nicks.join(', ')}
+            <Show
+              when={interactive()}
+              fallback={
+                <span
+                  class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 border border-white/[0.08] text-[12px]"
+                  title={reaction.nicks.join(', ')}
+                >
+                  <span>{reaction.emoji}</span>
+                  <span class="text-gray-400 text-[11px] tabular-nums">{reaction.nicks.length}</span>
+                </span>
+              }
             >
-              <span>{reaction.emoji}</span>
-              <span class="text-gray-400 text-[11px] tabular-nums">{reaction.nicks.length}</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => sendReactionTag(props.bufferPtr, props.msgid, reaction.emoji)}
+                class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/5 border border-white/[0.08] hover:bg-white/10 active:scale-95 transition-all text-[12px]"
+                title={reaction.nicks.join(', ')}
+              >
+                <span>{reaction.emoji}</span>
+                <span class="text-gray-400 text-[11px] tabular-nums">{reaction.nicks.length}</span>
+              </button>
+            </Show>
           )}
         </For>
       </div>
