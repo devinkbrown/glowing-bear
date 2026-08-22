@@ -1,5 +1,5 @@
 /**
- * webPush.ts — browser Web Push subscription against Orochi's WEBPUSH command
+ * webPush.ts — browser Web Push subscription against Onyx Server's WEBPUSH command
  * (Roadmap Phase 2.4: reach you with the tab closed).
  *
  * Flow: read the server's VAPID public key from ISUPPORT (`VAPID=`, no

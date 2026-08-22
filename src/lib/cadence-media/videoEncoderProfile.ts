@@ -1,4 +1,4 @@
-import type { KaguraVisEncoder, KaguraVisProfile, OpcodecWasm } from './OpcodecWasm';
+import type { CadenceVisEncoder, CadenceVisProfile, OpcodecWasm } from './OpcodecWasm';
 import type { NetworkQualityTier } from './types';
 
 export interface TierResolution {
@@ -30,7 +30,7 @@ export function tierDimensions(
   };
 }
 
-/** Sizes the shipped KaguraVis encoder is known to accept, largest first. */
+/** Sizes the shipped CadenceVis encoder is known to accept, largest first. */
 const ENCODER_FALLBACK_SIZES: ReadonlyArray<TierResolution> = [
   { width: 1280, height: 720 },
   { width: 1024, height: 576 },
@@ -43,9 +43,9 @@ function tryCreateEncoder(
   width: number,
   height: number,
   quality: number,
-  profile: KaguraVisProfile,
+  profile: CadenceVisProfile,
   fps: number,
-): KaguraVisEncoder | null {
+): CadenceVisEncoder | null {
   try {
     return wasm.videoEncoder(width, height, quality, profile, fps);
   } catch {
@@ -60,9 +60,9 @@ export function buildEncoder(
   profileWidth: number,
   profileHeight: number,
   quality: number,
-  profile: KaguraVisProfile,
+  profile: CadenceVisProfile,
   fps: number,
-): KaguraVisEncoder {
+): CadenceVisEncoder {
   const requested = tierDimensions(tier, profileWidth, profileHeight);
   const direct = tryCreateEncoder(wasm, requested.width, requested.height, quality, profile, fps);
   if (direct) return direct;

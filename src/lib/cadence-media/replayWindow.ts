@@ -10,7 +10,7 @@
  * counters. Memory is O(prefixes) with a hard cap — bounded regardless of call
  * length.
  *
- * Two-phase use (matches TsumugiSession's check-before-decrypt / record-after-
+ * Two-phase use (matches MooringSession's check-before-decrypt / record-after-
  * decrypt discipline so a forged GCM tag can never advance the window):
  *   1. `seen(iv)`   — read-only; true => known replay OR too old to prove fresh.
  *   2. `remember(iv)` — after a *successful* AEAD decrypt; advances the window.

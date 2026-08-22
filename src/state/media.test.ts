@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 //
-// Media store transitions, driven by a fake SuimyakuMediaEngine. The store's
+// Media store transitions, driven by a fake CadenceMediaEngine. The store's
 // public actions must call the right engine methods, and the engine's
 // callbacks (captured from the constructor) must move mediaState correctly.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SuimyakuMediaCallbacks, SuimyakuPeerState } from '@/lib/suimyaku-media/types';
+import type { CadenceMediaCallbacks, CadencePeerState } from '@/lib/cadence-media/types';
 
 // ── fake engine harness ──────────────────────────────────────────────────────
 
 const harness = vi.hoisted(() => ({
-  callbacks: null as SuimyakuMediaCallbacks | null,
+  callbacks: null as CadenceMediaCallbacks | null,
   engine: null as Record<string, ReturnType<typeof vi.fn>> | null,
   codecSelfTest: vi.fn<() => Promise<void>>(),
   archiveMessages: vi.fn<() => Promise<void>>(),
@@ -18,8 +18,8 @@ const harness = vi.hoisted(() => ({
 
 vi.mock('@/lib/archive/client', () => ({ archiveMessages: harness.archiveMessages }));
 
-vi.mock('@/lib/suimyaku-media/MediaEngine', () => {
-  class SuimyakuMediaEngine {
+vi.mock('@/lib/cadence-media/MediaEngine', () => {
+  class CadenceMediaEngine {
     joinVoice = vi.fn();
     joinVideo = vi.fn();
     leaveRoom = vi.fn();
@@ -41,16 +41,16 @@ vi.mock('@/lib/suimyaku-media/MediaEngine', () => {
     getLocalStream = vi.fn(() => null);
     getScreenStream = vi.fn(() => null);
     getPeers = vi.fn(() => new Map());
-    constructor(cbs: SuimyakuMediaCallbacks) {
+    constructor(cbs: CadenceMediaCallbacks) {
       harness.callbacks = cbs;
       harness.engine = this as unknown as Record<string, ReturnType<typeof vi.fn>>;
     }
   }
   return {
-    SuimyakuMediaEngine,
-    runSuimyakuCodecSelfTest: harness.codecSelfTest,
-    setMountedSuimyakuMediaEngine: vi.fn(),
-    getMountedSuimyakuMediaEngine: vi.fn(() => null),
+    CadenceMediaEngine,
+    runCadenceCodecSelfTest: harness.codecSelfTest,
+    setMountedCadenceMediaEngine: vi.fn(),
+    getMountedCadenceMediaEngine: vi.fn(() => null),
   };
 });
 
@@ -69,7 +69,7 @@ import { resetSettings, updateSettings } from './settings';
 // optional-in-interface fields are callable without `?.` noise in each test.
 const cb = () => {
   if (!harness.callbacks) throw new Error('engine not constructed yet');
-  return harness.callbacks as Required<SuimyakuMediaCallbacks>;
+  return harness.callbacks as Required<CadenceMediaCallbacks>;
 };
 const eng = () => {
   if (!harness.engine) throw new Error('engine not constructed yet');
@@ -290,7 +290,7 @@ describe('1:1 calls', () => {
   it('records a confirmed peer media key and clears it when the call ends', () => {
     media.startCall('trev', false);
     cb().onCallState('in_call', 'trev', null);
-    cb().onTsumugiState('Trev', 3, 'PeerKey12345');
+    cb().onMooringState('Trev', 3, 'PeerKey12345');
     expect(media.mediaState.observedAudioKeys['trev']).toEqual({
       epoch: 3,
       fingerprint: 'PeerKey12345',
@@ -302,9 +302,9 @@ describe('1:1 calls', () => {
 });
 
 describe('peers', () => {
-  const peer = (over: Partial<SuimyakuPeerState> = {}): SuimyakuPeerState => ({
+  const peer = (over: Partial<CadencePeerState> = {}): CadencePeerState => ({
     nick: 'bob', hasVideo: false, speaking: false, muted: false, ...over,
-  } as SuimyakuPeerState);
+  } as CadencePeerState);
 
   beforeEach(() => {
     media.joinRoom('#room', true); // construct engine + callbacks

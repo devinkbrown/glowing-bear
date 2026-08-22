@@ -11,7 +11,7 @@
 //   Ctrl+L             clear current buffer lines (outside text inputs)
 //   Ctrl+B             toggle sidebar (outside text inputs)
 //   Ctrl+U             toggle user list (outside text inputs)
-//   Ctrl+I             IRCX channel info — orochi servers only (outside text inputs)
+//   Ctrl+I             IRCX channel info — Onyx Server nodes only (outside text inputs)
 //   Ctrl+Shift+O       toggle oper console (opers only)
 //   M / D / V / S / C / H  in-call: mute / deafen / camera / share / transcript / hang up
 //   Escape             hang up a ringing call, else close modal, else minimize call
@@ -21,7 +21,7 @@ import {
   clearLines,
   closeModal,
   getSorted,
-  isActiveOrochi,
+  isActiveOnyxServer,
   isOper,
   openActivityPanel,
   openChannelInfo,
@@ -139,10 +139,10 @@ function handleCtrlShortcuts(e: KeyboardEvent): boolean {
     toggleUserList();
     return true;
   }
-  // Ctrl+I: channel info (IRCX PROP + ACCESS) — orochi servers only
+  // Ctrl+I: channel info (IRCX PROP + ACCESS) — Onyx Server nodes only
   if (e.key === 'i' || e.key === 'I') {
     if (inTextInput(e)) return true;
-    if (!isActiveOrochi()) return true;
+    if (!isActiveOnyxServer()) return true;
     e.preventDefault();
     const ptr = buffersState.activeBuffer;
     const entry = ptr ? buffersState.buffers[ptr] : undefined;

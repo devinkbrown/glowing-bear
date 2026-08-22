@@ -231,11 +231,11 @@ describe('MessageLine', () => {
     expect(container.textContent).toContain('tail');
   });
 
-  it('renders wrapped Orochi EVENT server-buffer errors as structured Event Spine rows', () => {
+  it('renders wrapped Onyx Server EVENT server-buffer errors as structured Event Spine rows', () => {
     const line = makeLine({
       nick: '',
       prefix: 'irc',
-      message: 'irc: command "EVENT" not found: "@orochi.io/category=CONNECT;orochi.io/severity=notice :eshmaki.me EVENT kain USER CONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5"',
+      message: 'irc: command "EVENT" not found: "@onyx_server.io/category=CONNECT;onyx_server.io/severity=notice :eshmaki.me EVENT kain USER CONNECT C!webchat@2600:382:991d:6db8:2842:c3da:f220:c6b5"',
     });
     const { container, getByText } = renderLine(line);
 
@@ -246,20 +246,20 @@ describe('MessageLine', () => {
     expect(container.textContent).not.toContain('command "EVENT" not found');
   });
 
-  it('renders bare-tag Orochi EVENT lines as structured Event Spine rows', () => {
+  it('renders bare-tag Onyx Server EVENT lines as structured Event Spine rows', () => {
     const line = makeLine({
       nick: '',
       prefix: 'irc',
-      message: 'orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT kain MEDIA PROFILE #root C codecs=kaguravox,kaguravis fec=rs_block',
+      message: 'onyx_server.io/category=SERVICE;onyx_server.io/severity=notice :eshmaki.me EVENT kain MEDIA PROFILE #root C codecs=cadencevox,cadencevis fec=rs_block',
     });
     const { container, getByText } = renderLine(line);
 
     expect(getByText('MEDIA')).toBeInTheDocument();
     expect(getByText('PROFILE')).toBeInTheDocument();
     expect(container.textContent).toContain('#root C');
-    expect(container.textContent).toContain('codecs=kaguravox,kaguravis');
+    expect(container.textContent).toContain('codecs=cadencevox,cadencevis');
     expect(container.textContent).toContain('fec=rs_block');
-    expect(container.textContent).not.toContain('orochi.io/category');
+    expect(container.textContent).not.toContain('onyx_server.io/category');
   });
 
   it('escapes HTML in message bodies — an <img> payload renders as text', () => {

@@ -3,7 +3,7 @@ import type { WeeChatBuffer, WeeChatLine } from '@/lib/weechat/model';
 import { archiveRecordFromCaption, archiveRecordFromLine, normalizeArchiveText } from './record';
 
 const buffer = {
-  id: '0x1', name: 'irc.orochi.#darkbear', fullName: 'irc.orochi.#darkbear', shortName: '#darkbear',
+  id: '0x1', name: 'irc.onyx.#darkbear', fullName: 'irc.onyx.#darkbear', shortName: '#darkbear',
   title: '', number: 1, type: 0, nicksCount: 0, localVars: {}, notify: 1, hidden: false,
 } satisfies WeeChatBuffer;
 
@@ -20,7 +20,7 @@ describe('archive record adapter', () => {
     const record = archiveRecordFromLine(buffer, line({ highlight: true }), true);
 
     expect(record).toMatchObject({
-      key: 'irc.orochi.#darkbear\0line-1',
+      key: 'irc.onyx.#darkbear\0line-1',
       bufferName: '#darkbear',
       sender: 'Alice',
       msgid: 'm1',

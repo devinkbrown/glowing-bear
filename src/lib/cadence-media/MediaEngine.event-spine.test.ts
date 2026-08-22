@@ -2,9 +2,9 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { parseIRCMessage } from '@/lib/irc/parser';
-import { SuimyakuMediaEngine } from './MediaEngine';
+import { CadenceMediaEngine } from './MediaEngine';
 import type { IRCMessage } from '@/lib/irc/types';
-import type { SuimyakuMediaCallbacks, SuimyakuTranscriptEntry } from './types';
+import type { CadenceMediaCallbacks, CadenceTranscriptEntry } from './types';
 
 type FakeClient = {
   currentNick: string;
@@ -14,7 +14,7 @@ type FakeClient = {
   sendBinary: ReturnType<typeof vi.fn>;
 };
 
-function callbacks(overrides: Partial<SuimyakuMediaCallbacks> = {}): SuimyakuMediaCallbacks {
+function callbacks(overrides: Partial<CadenceMediaCallbacks> = {}): CadenceMediaCallbacks {
   return {
     onCallState: vi.fn(),
     onPeerLeft: vi.fn(),
@@ -24,8 +24,8 @@ function callbacks(overrides: Partial<SuimyakuMediaCallbacks> = {}): SuimyakuMed
   };
 }
 
-function attachEngine(cbs: SuimyakuMediaCallbacks) {
-  const engine = new SuimyakuMediaEngine(cbs);
+function attachEngine(cbs: CadenceMediaCallbacks) {
+  const engine = new CadenceMediaEngine(cbs);
   const client: FakeClient = {
     currentNick: 'me',
     binaryHandlers: new Set(),
@@ -43,9 +43,9 @@ function deliver(client: FakeClient, line: string): void {
   for (const handler of client.extraMessageHandlers) handler(msg);
 }
 
-describe('SuimyakuMediaEngine EVENT MEDIA parser', () => {
+describe('CadenceMediaEngine EVENT MEDIA parser', () => {
   it('emits live captions and transcript replays from Event Spine media lines', () => {
-    const seen: Array<{ entry: SuimyakuTranscriptEntry; live: boolean }> = [];
+    const seen: Array<{ entry: CadenceTranscriptEntry; live: boolean }> = [];
     const cbs = callbacks({
       onCaption: (entry, live) => seen.push({ entry, live }),
     });

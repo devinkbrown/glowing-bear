@@ -13,7 +13,7 @@ import {
   activityUnreadCount,
   ConnectionState,
   connectionState,
-  isActiveOrochi,
+  isActiveOnyxServer,
   lag,
   openChannelInfo,
   openModal,
@@ -65,7 +65,7 @@ export default function Header() {
     const e = entry();
     return e && isChannel() ? Object.keys(e.nicks).length : 0;
   };
-  const orochi = () => isActiveOrochi();
+  const onOnyxServer = () => isActiveOnyxServer();
   const connected = () => connectionState() === ConnectionState.CONNECTED;
 
   // Live badge — scoped to the buffer the active call belongs to: a room call
@@ -113,12 +113,12 @@ export default function Header() {
               {t('header.users', { count: formatNumber(nickCount()) })}
             </span>
           </Show>
-          <Show when={orochi()}>
+          <Show when={onOnyxServer()}>
             <span class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-[var(--custom-accent,#818cf8)]/[0.08] text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/15 shrink-0">
-              Orochi
+              Onyx Server
             </span>
           </Show>
-          <Show when={isChannel() && orochi()}>
+          <Show when={isChannel() && onOnyxServer()}>
             <button
               type="button"
               onClick={() => openChannelInfo(chanName())}
@@ -273,7 +273,7 @@ export default function Header() {
           </button>
           <Show when={ircxOpen()}>
             <div class="absolute top-full right-0 mt-1 z-30 bg-gray-900 border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden min-w-[170px] animate-slide-down">
-              <Show when={orochi()}>
+              <Show when={onOnyxServer()}>
                 <button
                   onClick={() => {
                     openServicesPanel('nick');

@@ -59,8 +59,8 @@ test('keeps a Services secret until the relay socket accepts dispatch', async ({
   await expect(page.getByText('#darkbear', { exact: true }).first()).toBeVisible();
 
   relay.sendServerIncoming(
-    'tester orochi.test orochi-0.1.0 iowx bklmnt',
-    'orochi.test',
+    'tester onyx.test onyx-0.1.0 iowx bklmnt',
+    'onyx.test',
     ['irc_004'],
   );
   const composer = page.locator('textarea.composer-textarea');

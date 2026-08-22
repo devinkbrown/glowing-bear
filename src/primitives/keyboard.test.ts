@@ -12,7 +12,7 @@ const harness = vi.hoisted(() => ({
   clearLines: vi.fn(),
   closeModal: vi.fn(),
   getSorted: vi.fn(() => [] as Array<{ buffer: { id: string } }>),
-  isActiveOrochi: vi.fn(() => false),
+  isActiveOnyxServer: vi.fn(() => false),
   isOper: vi.fn(() => false),
   nextHighlighted: vi.fn(() => null as string | null),
   openActivityPanel: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock('@/state', () => ({
   clearLines: harness.clearLines,
   closeModal: harness.closeModal,
   getSorted: harness.getSorted,
-  isActiveOrochi: harness.isActiveOrochi,
+  isActiveOnyxServer: harness.isActiveOnyxServer,
   isOper: harness.isOper,
   nextHighlighted: harness.nextHighlighted,
   openActivityPanel: harness.openActivityPanel,
@@ -86,7 +86,7 @@ describe('setupKeyboardShortcuts', () => {
     harness.mediaState.callState = 'idle';
     harness.mediaState.transcriptOpen = false;
     harness.getSorted.mockReturnValue([]);
-    harness.isActiveOrochi.mockReturnValue(false);
+    harness.isActiveOnyxServer.mockReturnValue(false);
     harness.isOper.mockReturnValue(false);
     harness.nextHighlighted.mockReturnValue(null);
     cleanup = setupKeyboardShortcuts();

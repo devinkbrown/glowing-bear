@@ -1,16 +1,16 @@
 import type { IRCClient } from '@/lib/irc/client';
 import {
-  OpcodecWasm, KaguraVoxEncoder, KaguraVisEncoder,
+  OpcodecWasm, CadenceVoxEncoder, CadenceVisEncoder,
   rgbaToYuv420,
-  KAGURAVOX_FRAME_48K,
-  type KaguraVoxQuality,
+  CADENCEVOX_FRAME_48K,
+  type CadenceVoxQuality,
 } from './OpcodecWasm';
-import { TsumugiSession } from './TsumugiSession';
-import { TsumugiGroup } from './TsumugiGroup';
-import { TsumugiIdentity } from './TsumugiIdentity';
+import { MooringSession } from './MooringSession';
+import { MooringGroup } from './MooringGroup';
+import { MooringIdentity } from './MooringIdentity';
 import { ChunkAssembler } from './ChunkAssembler';
 import { PeerRegistry } from './PeerRegistry';
-import { KaguraCodec, type KaguraCodecTag, type KaguraFrame, decodeKaguraFrame, encodeKaguraFrame, KAGURA_MIN_FRAME_BYTES } from './kaguraFrame';
+import { CadenceCodec, type CadenceCodecTag, type CadenceFrame, decodeCadenceFrame, encodeCadenceFrame, CADENCE_MIN_FRAME_BYTES } from './cadenceFrame';
 import { appendMediaMac, importMediaMacKey, mediaMacTag, mediaMacEqual, MEDIA_MAC_TAG_BYTES } from './mediaMac';
 import { MediaStreamRouter, mediaStreamId, type MediaStreamSource } from './mediaStream';
 import { bumpDrop } from './mediaDropCounter';
@@ -19,15 +19,15 @@ import { AdaptiveQualityController, PacketLossTracker } from './callHealth';
 import type { IRCMessage } from '@/lib/irc/types';
 import type {
   CallState, VoiceCallState, MediaKind,
-  SuimyakuPeerState, SuimyakuRoomStats, NetworkQualityTier,
-  SuimyakuMediaCallbacks, SuimyakuChannelInfo, SuimyakuCallHealth,
+  CadencePeerState, CadenceRoomStats, NetworkQualityTier,
+  CadenceMediaCallbacks, CadenceChannelInfo, CadenceCallHealth,
 } from './types';
 
 // WS media-plane Kagura band ids: media bands are >= 64. band_id discriminates
 // how a relayed datagram's payload is handled (the codec tag is informational).
-const WS_BAND_AUDIO = 64;          // kaguravox audio, plaintext
-const WS_BAND_VIDEO = 65;          // kaguravis video
-const WS_BAND_TSUMUGI_AUDIO = 66;  // kaguravox audio, TSUMUGI group-encrypted ciphertext
+const WS_BAND_AUDIO = 64;          // cadencevox audio, plaintext
+const WS_BAND_VIDEO = 65;          // cadencevis video
+const WS_BAND_TSUMUGI_AUDIO = 66;  // cadencevox audio, TSUMUGI group-encrypted ciphertext
 
 /**
  * Production audio E2EE is intentionally disabled until its signalling, KDF,
@@ -53,7 +53,7 @@ function base64ToBytes(b64: string): Uint8Array {
  * Verify a relayed media datagram's trailing per-stream MAC tag, constant-time.
  *
  * `datagram` is the on-wire `frame || tag16`; `frameByteLen` is the exact length
- * of the kagura frame prefix (KAGURA_MIN_FRAME_BYTES + payload length, taken from
+ * of the cadence frame prefix (CADENCE_MIN_FRAME_BYTES + payload length, taken from
  * the decoded frame). A key-known stream MUST carry a full 16-byte tag — a
  * datagram that is exactly the frame with no tag, or any other length, fails
  * closed (returns false). The tag is recomputed over the exact frame bytes and
@@ -72,21 +72,21 @@ export async function verifyMediaDatagramMac(
   return mediaMacEqual(tag, expected);
 }
 
-export type { CallState, VoiceCallState, MediaKind, SuimyakuPeerState, SuimyakuRoomStats, NetworkQualityTier, SuimyakuMediaCallbacks, SuimyakuChannelInfo, SuimyakuCallHealth };
+export type { CallState, VoiceCallState, MediaKind, CadencePeerState, CadenceRoomStats, NetworkQualityTier, CadenceMediaCallbacks, CadenceChannelInfo, CadenceCallHealth };
 
 // The mounted engine is a cross-module singleton. It MUST live on globalThis,
-// not a module-local `let`: the store (getMounted…) and the useSuimyakuMedia hook
+// not a module-local `let`: the store (getMounted…) and the useCadenceMedia hook
 // (setMounted…) can be bundled into separate chunks with separate module
 // instances, in which case a module-local leaves the store reading null forever
 // — so joinVoiceChannel no-ops and voice/video never starts.
-const MOUNTED_ENGINE_KEY = '__darkbearMountedSuimyakuEngine';
+const MOUNTED_ENGINE_KEY = '__darkbearMountedCadenceEngine';
 
-export function setMountedSuimyakuMediaEngine(engine: SuimyakuMediaEngine | null): void {
+export function setMountedCadenceMediaEngine(engine: CadenceMediaEngine | null): void {
   (globalThis as Record<string, unknown>)[MOUNTED_ENGINE_KEY] = engine;
 }
 
-export function getMountedSuimyakuMediaEngine(): SuimyakuMediaEngine | null {
-  return ((globalThis as Record<string, unknown>)[MOUNTED_ENGINE_KEY] as SuimyakuMediaEngine | null) ?? null;
+export function getMountedCadenceMediaEngine(): CadenceMediaEngine | null {
+  return ((globalThis as Record<string, unknown>)[MOUNTED_ENGINE_KEY] as CadenceMediaEngine | null) ?? null;
 }
 
 // -------------------------------------------------------------------
@@ -95,7 +95,7 @@ export function getMountedSuimyakuMediaEngine(): SuimyakuMediaEngine | null {
 
 const SAMPLE_RATE    = 48000;
 const AUDIO_CHANNELS = 2;
-const AUDIO_QUALITY: KaguraVoxQuality = 2;
+const AUDIO_QUALITY: CadenceVoxQuality = 2;
 const VIDEO_QUALITY  = 70;
 const VIDEO_FPS      = 60;
 const VIDEO_WIDTH    = 1920;
@@ -108,7 +108,7 @@ const SPEAKING_POLL_MS = 120;
 
 // Outbound MCHUNK split constants (chunk size / small-payload threshold / frame
 // cap) used to live here, but the IRC media-frame send path (sendFrame) is a
-// deliberate no-op now that Orochi carries media on a native transport rather
+// deliberate no-op now that Onyx Server carries media on a native transport rather
 // than as IRC commands. The matching inbound bounds — 120-byte chunks, a 65535
 // chunk ceiling, and the reassembled-frame size cap — are enforced directly in
 // ChunkAssembler (MAX_CHUNKS / MAX_CHUNK_BYTES / MAX_FRAME_BYTES), so the
@@ -120,20 +120,20 @@ const SPEAKING_POLL_MS = 120;
 // message (workers cannot read import.meta.env) — OpcodecWasm derives the
 // sibling `.wasm` fetch URL from this JS URL in both paths.
 const WASM_URL   = `${import.meta.env.BASE_URL}opcodec_wasm.js`;
-const AUDIO_WORKLET_URL = `${import.meta.env.BASE_URL}kaguravox-capture-worklet.js`;
+const AUDIO_WORKLET_URL = `${import.meta.env.BASE_URL}cadencevox-capture-worklet.js`;
 
 /**
  * Load the shipped codec bundle and instantiate both call-path encoders.
  * Preflight uses this before capture is committed so a missing/broken WASM
  * artifact is discovered before the user appears to enter a room.
  */
-export async function runSuimyakuCodecSelfTest(): Promise<void> {
+export async function runCadenceCodecSelfTest(): Promise<void> {
   const wasm = await OpcodecWasm.load(WASM_URL);
   const audio = wasm.audioEncoder(SAMPLE_RATE, AUDIO_QUALITY, false);
-  let video: KaguraVisEncoder | null = null;
+  let video: CadenceVisEncoder | null = null;
   try {
     // Probe the same shared fallback constructor used by live video at the
-    // call-path profile accepted by the shipped KaguraVis binary. Smaller
+    // call-path profile accepted by the shipped CadenceVis binary. Smaller
     // profiles are not consistently supported by that binary across engines.
     video = buildEncoder(wasm, 0, 1280, 720, VIDEO_QUALITY, 'camera', VIDEO_FPS);
   } finally {
@@ -240,9 +240,9 @@ function parseVideoJoinPayload(payload: string): VideoCaptureProfile {
 // Main engine
 // -------------------------------------------------------------------
 
-export class SuimyakuMediaEngine {
+export class CadenceMediaEngine {
   private client: IRCClient | null = null;
-  private readonly cb: SuimyakuMediaCallbacks;
+  private readonly cb: CadenceMediaCallbacks;
   private readonly defaultKind: MediaKind;
 
   // --- WS media plane (browser media over binary WebSocket frames) ----------
@@ -254,7 +254,7 @@ export class SuimyakuMediaEngine {
    *  When a stream's key is present, `handleMediaDatagram` verifies the trailing
    *  MAC tag constant-time and DROPS the datagram on mismatch (fail-closed) — an
    *  unauthenticated frame is never processed when a key exists. When a stream
-   *  has no key here, authenticity is delegated to the Orochi SFU, which binds
+   *  has no key here, authenticity is delegated to the Onyx Server SFU, which binds
    *  `streamId` to the authenticated sender (documented trust boundary). Today
    *  the server issues only THIS participant's key (via MACKEY), so only the
    *  local stream is client-verifiable; per-peer verification needs the server
@@ -280,8 +280,8 @@ export class SuimyakuMediaEngine {
   private callState:   CallState          = 'idle';
   private callWith     = '';
 
-  private audEnc: KaguraVoxEncoder | null = null;
-  private vidEnc: KaguraVisEncoder | null = null;
+  private audEnc: CadenceVoxEncoder | null = null;
+  private vidEnc: CadenceVisEncoder | null = null;
   private localVideoProfile: VideoCaptureProfile | null = null;
 
   private audioCtx:     AudioContext | null = null;
@@ -323,11 +323,11 @@ export class SuimyakuMediaEngine {
   private presenceList      = new Set<string>();
   private negotiatedBitrate = new Map<string, number>();
   private audioLevelTimer: ReturnType<typeof setInterval> | null = null;
-  private tsumugiSessions = new Map<string, TsumugiSession>();
-  private tsumugiGroupKey: TsumugiGroup | null = null;
-  private tsumugiGroupKeyPromise: Promise<TsumugiGroup> | null = null;
-  private tsumugiIdentity: TsumugiIdentity | null = null;
-  private tsumugiIdentityPromise: Promise<TsumugiIdentity> | null = null;
+  private mooringSessions = new Map<string, MooringSession>();
+  private mooringGroupKey: MooringGroup | null = null;
+  private mooringGroupKeyPromise: Promise<MooringGroup> | null = null;
+  private tsumugiIdentity: MooringIdentity | null = null;
+  private tsumugiIdentityPromise: Promise<MooringIdentity> | null = null;
   private audioEncryptionFailureReported = false;
   private incomingKind: MediaKind;
 
@@ -346,21 +346,21 @@ export class SuimyakuMediaEngine {
   private networkTier: NetworkQualityTier = 0;
   private prevNetworkTier: NetworkQualityTier = 0;
   private videoSkipCount   = 0;
-  private audioQuality: KaguraVoxQuality = AUDIO_QUALITY;
+  private audioQuality: CadenceVoxQuality = AUDIO_QUALITY;
   private readonly packetLoss = new PacketLossTracker();
   private readonly qualityController = new AdaptiveQualityController();
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private lastLossRate = 0;
   private roundTripMs = 0;
   private encodePressure = 0;
-  private roomStats: SuimyakuRoomStats | null = null;
+  private roomStats: CadenceRoomStats | null = null;
   private mediaBytesSinceSample = 0;
   private measuredBps = 0;
   private throughputSampleAt = Date.now();
   private lastAbrReportAt = 0;
   private forceNextVideoKeyframe = false;
 
-  constructor(callbacks: SuimyakuMediaCallbacks, options: { kind: MediaKind } = { kind: 'video' }) {
+  constructor(callbacks: CadenceMediaCallbacks, options: { kind: MediaKind } = { kind: 'video' }) {
     this.cb          = callbacks;
     this.defaultKind = options.kind;
     this.incomingKind = options.kind;
@@ -452,8 +452,8 @@ export class SuimyakuMediaEngine {
   getLocalKind()    { return this.localKind; }
   getCallState()    { return { callState: this.callState, callWith: this.callWith, callChannel: this.activeRoom }; }
 
-  getPeers(): Map<string, SuimyakuPeerState> {
-    const out = new Map<string, SuimyakuPeerState>();
+  getPeers(): Map<string, CadencePeerState> {
+    const out = new Map<string, CadencePeerState>();
     for (const pm of this.registry.all()) out.set(pm.state.nick, pm.state);
     return out;
   }
@@ -470,17 +470,17 @@ export class SuimyakuMediaEngine {
   }
 
   async getLocalTsumugiFingerprint(): Promise<string> {
-    const id = await this.ensureTsumugiIdentity();
+    const id = await this.ensureMooringIdentity();
     return id.getFingerprint();
   }
 
-  private ensureTsumugiIdentity(): Promise<TsumugiIdentity> {
+  private ensureMooringIdentity(): Promise<MooringIdentity> {
     if (this.tsumugiIdentity) return Promise.resolve(this.tsumugiIdentity);
     // Memoize the in-flight load so concurrent callers share one identity,
     // and reset on failure so a later call can retry instead of spinning
-    // forever (TsumugiIdentity.load() can reject in insecure contexts).
+    // forever (MooringIdentity.load() can reject in insecure contexts).
     if (!this.tsumugiIdentityPromise) {
-      this.tsumugiIdentityPromise = TsumugiIdentity.load()
+      this.tsumugiIdentityPromise = MooringIdentity.load()
         .then(id => { this.tsumugiIdentity = id; return id; })
         .catch(err => { this.tsumugiIdentityPromise = null; throw err; });
     }
@@ -601,7 +601,7 @@ export class SuimyakuMediaEngine {
     const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
     this.audioCtx = ctx;
     const src = ctx.createMediaStreamSource(stream);
-    const FRAME = KAGURAVOX_FRAME_48K * AUDIO_CHANNELS;
+    const FRAME = CADENCEVOX_FRAME_48K * AUDIO_CHANNELS;
     let useWorklet = false;
     try {
       // A same-origin static module satisfies the app CSP. Data-URL worklets
@@ -611,7 +611,7 @@ export class SuimyakuMediaEngine {
     } catch { /* fallback */ }
 
     if (useWorklet) {
-      const node = new AudioWorkletNode(ctx, 'kaguravox-capture', {
+      const node = new AudioWorkletNode(ctx, 'cadencevox-capture', {
         processorOptions: { frameSize: FRAME },
       });
       node.port.onmessage = (e: MessageEvent) => this.onAudioFrame(e.data as Int16Array);
@@ -630,15 +630,15 @@ export class SuimyakuMediaEngine {
         merged.set(acc, 0); merged.set(ch0, acc.length);
         acc = merged;
         let off = 0;
-        while (acc.length - off >= KAGURAVOX_FRAME_48K) {
+        while (acc.length - off >= CADENCEVOX_FRAME_48K) {
           const i16 = new Int16Array(FRAME);
-          for (let s = 0; s < KAGURAVOX_FRAME_48K; s++) {
+          for (let s = 0; s < CADENCEVOX_FRAME_48K; s++) {
             const v = Math.max(-1, Math.min(1, acc[off + s]!));
             i16[s * 2]     = v * 32767;
             i16[s * 2 + 1] = v * 32767;
           }
           this.onAudioFrame(i16);
-          off += KAGURAVOX_FRAME_48K;
+          off += CADENCEVOX_FRAME_48K;
         }
         acc = acc.slice(off);
       };
@@ -671,8 +671,8 @@ export class SuimyakuMediaEngine {
   /** Feature-internal implementation covered independently of the release gate. */
   private sendEncryptedAudioFrame(encoded: Uint8Array, room: string): void {
     /* Use TSUMUGI group encryption if a group key is established (multi-party room) */
-    if (this.tsumugiGroupKey) {
-      const groupKey = this.tsumugiGroupKey;
+    if (this.mooringGroupKey) {
+      const groupKey = this.mooringGroupKey;
       void Promise.resolve()
         .then(() => groupKey.encrypt(encoded))
         .then(ct => {
@@ -682,7 +682,7 @@ export class SuimyakuMediaEngine {
       return;
     }
     /* Use per-peer TSUMUGI for 1:1 (no active room participants besides 1 peer) */
-    const establishedSessions = [...this.tsumugiSessions.values()].filter(session => session.established);
+    const establishedSessions = [...this.mooringSessions.values()].filter(session => session.established);
     const singleVs = establishedSessions.length === 1 ? establishedSessions[0]! : null;
     const isChannel = room.startsWith('#') || room.startsWith('&');
     if (singleVs && !isChannel) {
@@ -761,7 +761,7 @@ export class SuimyakuMediaEngine {
     this.stopVideoCapture();
     this.localVideoProfile = profile;
 
-    if (SuimyakuMediaEngine.supportsWorkerCapture()) {
+    if (CadenceMediaEngine.supportsWorkerCapture()) {
       await this.startVideoCaptureWorker(stream, profile);
     } else {
       await this.startVideoCaptureFallback(stream, profile);
@@ -808,7 +808,7 @@ export class SuimyakuMediaEngine {
         return;
       }
       if (msg.type === 'error') {
-        console.warn('[suimyaku/worker]', msg.msg);
+        console.warn('[cadence/worker]', msg.msg);
         return;
       }
       if (msg.type === 'encoded' && msg.data && msg.ftype && this.activeRoom) {
@@ -822,7 +822,7 @@ export class SuimyakuMediaEngine {
     };
 
     worker.onerror = (ev) => {
-      console.error('[suimyaku/worker] uncaught:', ev.message);
+      console.error('[cadence/worker] uncaught:', ev.message);
     };
 
     /* Clone the video track so the worker can consume it independently via
@@ -844,7 +844,7 @@ export class SuimyakuMediaEngine {
      * create the MediaStreamTrackProcessor here and transfer its `.readable`
      * (a ReadableStream IS transferable). If neither works, fall back to the
      * main-thread capture path so the join never crashes. */
-    if (SuimyakuMediaEngine.supportsTransferableMediaStreamTrack()) {
+    if (CadenceMediaEngine.supportsTransferableMediaStreamTrack()) {
       try {
         worker.postMessage(
           { ...initBase, track: clonedTrack },
@@ -1032,7 +1032,7 @@ export class SuimyakuMediaEngine {
   }
 
   // ----------------------------------------------------------------
-  // Frame send (Orochi media transport)
+  // Frame send (Onyx Server media transport)
   // ----------------------------------------------------------------
 
   private static toB64(data: Uint8Array): string {
@@ -1057,21 +1057,21 @@ export class SuimyakuMediaEngine {
     if (!data.length) return;
 
     let bandId: number;
-    let codec: KaguraCodecTag;
+    let codec: CadenceCodecTag;
     let keyframe = false;
     let kind: 'audio' | 'video';
     switch (ftype) {
-      case 'AUDIO':        bandId = WS_BAND_AUDIO;         codec = KaguraCodec.kaguravoxAudio; kind = 'audio'; break;
-      case 'TSUMUGI_DATA': bandId = WS_BAND_TSUMUGI_AUDIO; codec = KaguraCodec.kaguravoxAudio; kind = 'audio'; break;
-      case 'KEYFRAME':     bandId = WS_BAND_VIDEO;         codec = KaguraCodec.kaguravisVideo; keyframe = true; kind = 'video'; break;
-      case 'FRAME':        bandId = WS_BAND_VIDEO;         codec = KaguraCodec.kaguravisVideo; kind = 'video'; break;
+      case 'AUDIO':        bandId = WS_BAND_AUDIO;         codec = CadenceCodec.cadencevoxAudio; kind = 'audio'; break;
+      case 'TSUMUGI_DATA': bandId = WS_BAND_TSUMUGI_AUDIO; codec = CadenceCodec.cadencevoxAudio; kind = 'audio'; break;
+      case 'KEYFRAME':     bandId = WS_BAND_VIDEO;         codec = CadenceCodec.cadencevisVideo; keyframe = true; kind = 'video'; break;
+      case 'FRAME':        bandId = WS_BAND_VIDEO;         codec = CadenceCodec.cadencevisVideo; kind = 'video'; break;
       default: return;
     }
 
     // Sequence is assigned synchronously (before the async MAC) so per-stream
     // ordering is stable even if two sends race.
     const sequence = (kind === 'audio' ? this.wsAudSeq++ : this.wsVidSeq++) >>> 0;
-    const frame = encodeKaguraFrame({
+    const frame = encodeCadenceFrame({
       bandId,
       streamId: mediaStreamId(channel, this.wsMyNick, kind),
       sequence,
@@ -1093,7 +1093,7 @@ export class SuimyakuMediaEngine {
   }
 
   /** Observe Event Spine MEDIA control events to drive the WS media plane.
-   * Orochi emits `EVENT <target> MEDIA <verb> <#chan> ...` for caller-only
+   * Onyx Server emits `EVENT <target> MEDIA <verb> <#chan> ...` for caller-only
    * replies (MACKEY, ROSTER) and live state (JOIN, LEAVE, MUTE, SPEAKING,
    * CAPTION, TRANSCRIPT). */
   private handleMediaServerMessage(msg: IRCMessage) {
@@ -1177,7 +1177,7 @@ export class SuimyakuMediaEngine {
   private handleMediaDatagram(data: Uint8Array) {
     const room = this.activeRoom;
     if (!room) return;
-    const frame = decodeKaguraFrame(data);
+    const frame = decodeCadenceFrame(data);
     if (!frame) return;
     const src = this.streamRouter.resolve(frame.streamId);
     if (!src) return; // unknown stream (not a current roster participant)
@@ -1187,11 +1187,11 @@ export class SuimyakuMediaEngine {
     // Authenticity: when we hold the MAC key for this stream, verify the trailing
     // tag and DROP the datagram on mismatch — never process an unauthenticated
     // frame when a key exists. When no key is known, authenticity is delegated to
-    // the Orochi SFU, which binds `streamId` to the authenticated sender (see the
+    // the Onyx Server SFU, which binds `streamId` to the authenticated sender (see the
     // `wsStreamMacKeys` doc — the documented client-edge trust boundary).
     const macKey = this.wsStreamMacKeys.get(frame.streamId);
     if (macKey) {
-      const frameByteLen = KAGURA_MIN_FRAME_BYTES + frame.payload.length;
+      const frameByteLen = CADENCE_MIN_FRAME_BYTES + frame.payload.length;
       verifyMediaDatagramMac(macKey, data, frameByteLen)
         .then((ok) => { if (ok && this.activeRoom === room) this.dispatchDecodedFrame(frame, src, room); })
         .catch(() => { bumpDrop('mac-verify'); /* verification error drops one frame; fail-closed */ });
@@ -1201,7 +1201,7 @@ export class SuimyakuMediaEngine {
   }
 
   /** Route a verified/SFU-trusted decoded frame to the sending peer's decoder. */
-  private dispatchDecodedFrame(frame: KaguraFrame, src: MediaStreamSource, room: string) {
+  private dispatchDecodedFrame(frame: CadenceFrame, src: MediaStreamSource, room: string) {
     if (frame.bandId === WS_BAND_TSUMUGI_AUDIO) {
       if (!TSUMUGI_AUDIO_E2EE_ENABLED) {
         bumpDrop('tsumugi-disabled-data');
@@ -1233,8 +1233,8 @@ export class SuimyakuMediaEngine {
 
   /** Feature-internal downgrade policy for the future enabled path. */
   private allowInboundPlaintextAudioWithProtection(): boolean {
-    const protectionEstablished = this.tsumugiGroupKey !== null ||
-      [...this.tsumugiSessions.values()].some(session => session.established);
+    const protectionEstablished = this.mooringGroupKey !== null ||
+      [...this.mooringSessions.values()].some(session => session.established);
     if (!protectionEstablished) return true;
     bumpDrop('tsumugi-plaintext-audio-downgrade');
     return false;
@@ -1258,8 +1258,8 @@ export class SuimyakuMediaEngine {
   private decryptEncryptedAudio(nick: string, channel: string, ciphertext: Uint8Array): void {
     const isChannel = channel.startsWith('#') || channel.startsWith('&');
     const decryptor = isChannel
-      ? this.tsumugiGroupKey
-      : this.tsumugiSessions.get(nick.toLowerCase());
+      ? this.mooringGroupKey
+      : this.mooringSessions.get(nick.toLowerCase());
     if (!decryptor || (!isChannel && !('established' in decryptor && decryptor.established))) {
       bumpDrop(isChannel ? 'tsumugi-group-key-missing' : 'tsumugi-peer-key-missing');
       return;
@@ -1278,11 +1278,11 @@ export class SuimyakuMediaEngine {
     switch (subtype) {
       case 'VOICE_JOIN':
         this.client.sendRaw('MEDIA', 'JOIN', channel, 'voice');
-        this.client.sendRaw('MEDIA', 'OFFER', channel, 'kaguravox,kaguravis', 'transport=webrtc');
+        this.client.sendRaw('MEDIA', 'OFFER', channel, 'cadencevox,cadencevis', 'transport=webrtc');
         break;
       case 'VIDEO_JOIN':
         this.client.sendRaw('MEDIA', 'JOIN', channel, payload.includes('screen') ? 'screen' : 'video');
-        this.client.sendRaw('MEDIA', 'OFFER', channel, 'kaguravox,kaguravis', 'transport=webrtc');
+        this.client.sendRaw('MEDIA', 'OFFER', channel, 'cadencevox,cadencevis', 'transport=webrtc');
         break;
       case 'VOICE_LEAVE':
       case 'VIDEO_LEAVE':
@@ -1314,7 +1314,7 @@ export class SuimyakuMediaEngine {
       this.setActiveRoom(channel);
       this.mediaframeCmd(channel, 'VOICE_JOIN', `${SAMPLE_RATE} ${AUDIO_CHANNELS}`);
       this.mediaframeCmd(channel, 'ROSTER');
-      this.sendTsumugiHandshake(channel).catch(() => { bumpDrop('tsumugi-handshake-send'); });
+      this.sendMooringHandshake(channel).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       await this.startAudioCapture(stream);
       this.startSpeakingMeter(stream);
       this.startGc();
@@ -1333,7 +1333,7 @@ export class SuimyakuMediaEngine {
       this.mediaframeCmd(channel, 'VIDEO_JOIN',
         `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}`);
       this.mediaframeCmd(channel, 'ROSTER');
-      this.sendTsumugiHandshake(channel).catch(() => { bumpDrop('tsumugi-handshake-send'); });
+      this.sendMooringHandshake(channel).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       await this.startAudioCapture(stream);
       await this.startVideoCapture(stream, profile);
       this.startSpeakingMeter(stream);
@@ -1440,7 +1440,7 @@ export class SuimyakuMediaEngine {
       this.mediaframeCmd(target, 'VIDEO_JOIN',
         `${profile.width} ${profile.height} ${profile.quality} ${profile.fps} screen`);
       this.mediaframeCmd(target, 'ROSTER');
-      this.sendTsumugiHandshake(target).catch(() => { bumpDrop('tsumugi-handshake-send'); });
+      this.sendMooringHandshake(target).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       if (this.localStream) await this.startVideoCapture(this.localStream, profile);
     } catch (err) {
       this.cb.onError(`Screen share failed: ${err}`);
@@ -1462,7 +1462,7 @@ export class SuimyakuMediaEngine {
       this.mediaframeCmd(channel, 'VIDEO_JOIN',
         `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}${profile.screenShare ? ' screen' : ''}`);
       this.mediaframeCmd(channel, 'ROSTER');
-      this.sendTsumugiHandshake(channel).catch(() => { bumpDrop('tsumugi-handshake-send'); });
+      this.sendMooringHandshake(channel).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       await this.startVideoCapture(stream, profile);
       this.startGc();
     } catch (err) {
@@ -1491,7 +1491,7 @@ export class SuimyakuMediaEngine {
       this.setCallState('ringing_out', nick, null);
       this.startRingTimer(nick);
       void nick; void kind;
-      this.sendTsumugiHandshake(nick).catch(() => { bumpDrop('tsumugi-handshake-send'); });
+      this.sendMooringHandshake(nick).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       if (kind === 'voice' || kind === 'video') { await this.startAudioCapture(stream); this.startSpeakingMeter(stream); }
       if (kind === 'video') await this.startVideoCapture(stream);
     } catch (err) { this.cb.onError(`Call start failed: ${err}`); }
@@ -1526,7 +1526,7 @@ export class SuimyakuMediaEngine {
         const profile = videoProfileFor('video');
         this.mediaframeCmd(this.callWith, 'VIDEO_JOIN', `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}`);
       }
-      this.sendTsumugiHandshake(this.callWith).catch(() => { bumpDrop('tsumugi-handshake-send'); });
+      this.sendMooringHandshake(this.callWith).catch(() => { bumpDrop('tsumugi-handshake-send'); });
       if (kind === 'voice' || kind === 'video') {
         await this.startAudioCapture(stream); this.startSpeakingMeter(stream);
       }
@@ -1659,7 +1659,7 @@ export class SuimyakuMediaEngine {
       }
       case 'STATS': {
         try {
-          this.roomStats = JSON.parse(payload) as SuimyakuRoomStats;
+          this.roomStats = JSON.parse(payload) as CadenceRoomStats;
           this.cb.onRoomStats?.(channel, this.roomStats);
           this.emitCallHealth();
         } catch { /* */ }
@@ -1795,31 +1795,31 @@ export class SuimyakuMediaEngine {
         break;
       case 'TSUMUGI_HANDSHAKE': {
         const peerKeyBytes = Uint8Array.from(atob(payload), c => c.charCodeAt(0));
-        const existing = this.tsumugiSessions.get(fromNick.toLowerCase());
+        const existing = this.mooringSessions.get(fromNick.toLowerCase());
         const shouldReply = !existing?.established;
-        (existing ? Promise.resolve(existing) : this.createTsumugiSession()).then(async vs => {
+        (existing ? Promise.resolve(existing) : this.createMooringSession()).then(async vs => {
           await vs.ingestPeerKey(peerKeyBytes);
-          this.tsumugiSessions.set(fromNick.toLowerCase(), vs);
+          this.mooringSessions.set(fromNick.toLowerCase(), vs);
           if (shouldReply) {
-            const ourPub = await this.exportTsumugiPublicKey(vs);
+            const ourPub = await this.exportMooringPublicKey(vs);
             void ourPub;
           }
-          if (this.cb.onTsumugiState) {
+          if (this.cb.onMooringState) {
             const fp = await vs.getPeerFingerprint();
-            if (fp) this.cb.onTsumugiState(fromNick, vs.epoch, fp);
+            if (fp) this.cb.onMooringState(fromNick, vs.epoch, fp);
           }
           /* When all known peers have TSUMUGI sessions and we're in a room,
            * create/refresh the group key and distribute it. */
-          if (this.activeRoom) this.maybeDistributeTsumugiGroup().catch(() => { bumpDrop('tsumugi-group-distribute'); });
+          if (this.activeRoom) this.maybeDistributeMooringGroup().catch(() => { bumpDrop('tsumugi-group-distribute'); });
         }).catch(() => { bumpDrop('tsumugi-handshake-recv'); });
         break;
       }
       case 'TSUMUGI_RATCHET': {
-        const vs = this.tsumugiSessions.get(fromNick.toLowerCase());
+        const vs = this.mooringSessions.get(fromNick.toLowerCase());
         if (vs) vs.ratchet().then(async () => {
-          if (this.cb.onTsumugiState) {
+          if (this.cb.onMooringState) {
             const fp = await vs.getPeerFingerprint();
-            if (fp) this.cb.onTsumugiState(fromNick, vs.epoch, fp);
+            if (fp) this.cb.onMooringState(fromNick, vs.epoch, fp);
           }
         }).catch(() => { bumpDrop('tsumugi-ratchet'); });
         break;
@@ -1837,10 +1837,10 @@ export class SuimyakuMediaEngine {
         const myNick = this.getLocalNick().toLowerCase();
         if (targetNick && myNick && targetNick.toLowerCase() !== myNick) break;
         const wrapped = Uint8Array.from(atob(wrappedB64), c => c.charCodeAt(0));
-        const vs = this.tsumugiSessions.get(fromNick.toLowerCase());
+        const vs = this.mooringSessions.get(fromNick.toLowerCase());
         if (vs?.established) {
-          TsumugiGroup.importKey(wrapped, vs).then(group => {
-            this.tsumugiGroupKey = group;
+          MooringGroup.importKey(wrapped, vs).then(group => {
+            this.mooringGroupKey = group;
           }).catch(() => { bumpDrop('tsumugi-group-import'); });
         }
         break;
@@ -1896,7 +1896,7 @@ export class SuimyakuMediaEngine {
           const profile = this.localVideoProfile ?? videoProfileFor('video');
           this.mediaframeCmd(fromNick, 'VIDEO_JOIN', `${profile.width} ${profile.height} ${profile.quality} ${profile.fps}`);
         }
-        this.sendTsumugiHandshake(fromNick).catch(() => { bumpDrop('tsumugi-handshake-send'); });
+        this.sendMooringHandshake(fromNick).catch(() => { bumpDrop('tsumugi-handshake-send'); });
         break;
       case 'REJECT':
       case 'HANGUP':
@@ -1971,28 +1971,28 @@ export class SuimyakuMediaEngine {
     return this.cb.getLocalNick?.() ?? '';
   }
 
-  private async createTsumugiSession(): Promise<TsumugiSession> {
+  private async createMooringSession(): Promise<MooringSession> {
     try {
-      const id = await this.ensureTsumugiIdentity();
-      return TsumugiSession.fromKeyPair(id.keyPair);
+      const id = await this.ensureMooringIdentity();
+      return MooringSession.fromKeyPair(id.keyPair);
     } catch {
-      return TsumugiSession.create();
+      return MooringSession.create();
     }
   }
 
-  private async exportTsumugiPublicKey(session: TsumugiSession): Promise<Uint8Array> {
+  private async exportMooringPublicKey(session: MooringSession): Promise<Uint8Array> {
     try {
-      const id = await this.ensureTsumugiIdentity();
+      const id = await this.ensureMooringIdentity();
       return id.exportPublicKey();
     } catch {
       return session.exportPublicKey();
     }
   }
 
-  private async sendTsumugiHandshake(target: string): Promise<void> {
+  private async sendMooringHandshake(target: string): Promise<void> {
     if (!TSUMUGI_AUDIO_E2EE_ENABLED) return;
     if (!this.client || !target) return;
-    const id = await this.ensureTsumugiIdentity();
+    const id = await this.ensureMooringIdentity();
     const pub = await id.exportPublicKey();
     void target; void pub;
   }
@@ -2016,9 +2016,9 @@ export class SuimyakuMediaEngine {
     if (this.audioLevelTimer) { clearInterval(this.audioLevelTimer); this.audioLevelTimer = null; }
     this.registry.peerLevels.clear();
     this.registry.decodeErrors.clear();
-    this.tsumugiSessions.clear();
-    this.tsumugiGroupKey = null;
-    this.tsumugiGroupKeyPromise = null;
+    this.mooringSessions.clear();
+    this.mooringGroupKey = null;
+    this.mooringGroupKeyPromise = null;
     this.audioEncryptionFailureReported = false;
     // WS media plane teardown.
     this.wsMediaKey = null;
@@ -2053,7 +2053,7 @@ export class SuimyakuMediaEngine {
       if (this.callState === 'ringing_out' || this.callState === 'ringing_in') {
         this.hangup(target); this.cb.onError('Media request timed out');
       }
-    }, SuimyakuMediaEngine.RING_TIMEOUT_MS);
+    }, CadenceMediaEngine.RING_TIMEOUT_MS);
   }
 
   private clearRingTimer() {
@@ -2120,7 +2120,7 @@ export class SuimyakuMediaEngine {
     this.emitCallHealth();
   }
 
-  /** Report receiver health through Orochi's supported MEDIA ABR control path. */
+  /** Report receiver health through Onyx Server's supported MEDIA ABR control path. */
   private reportAbr(force: boolean): void {
     const now = Date.now();
     if (!this.client || !this.transportConnected || !this.activeRoom) return;
@@ -2138,7 +2138,7 @@ export class SuimyakuMediaEngine {
 
   private emitCallHealth(): void {
     const active = this.callState === 'in_call' && this.activeRoom !== null;
-    const status: SuimyakuCallHealth['status'] = !active
+    const status: CadenceCallHealth['status'] = !active
       ? 'idle'
       : !this.transportConnected
         ? 'reconnecting'
@@ -2191,7 +2191,7 @@ export class SuimyakuMediaEngine {
         videoTrack.applyConstraints(constraints).catch(() => { bumpDrop('screen-constraints'); });
       }
     }
-    const targetQuality: KaguraVoxQuality = tier <= 1 ? 2 : tier === 2 ? 1 : 0;
+    const targetQuality: CadenceVoxQuality = tier <= 1 ? 2 : tier === 2 ? 1 : 0;
     if (targetQuality !== this.audioQuality && this.audEnc && this.wasm) {
       this.audioQuality = targetQuality;
       this.audEnc.destroy();
@@ -2200,28 +2200,28 @@ export class SuimyakuMediaEngine {
     this.emitCallHealth();
   }
 
-  private async maybeDistributeTsumugiGroup() {
+  private async maybeDistributeMooringGroup() {
     if (!TSUMUGI_AUDIO_E2EE_ENABLED) return;
     if (!this.activeRoom || !this.client) return;
-    const established = [...this.tsumugiSessions.entries()].filter(([, vs]) => vs.established);
+    const established = [...this.mooringSessions.entries()].filter(([, vs]) => vs.established);
     if (established.length === 0) return;
     /* Create or reuse group key. Memoize the in-flight creation so two
      * concurrent handshakes resolving in the same tick can't each build a
      * separate group key (the second would clobber the first, making the
      * first peer's traffic undecryptable). */
-    let group = this.tsumugiGroupKey;
+    let group = this.mooringGroupKey;
     if (!group) {
-      if (!this.tsumugiGroupKeyPromise) {
-        this.tsumugiGroupKeyPromise = TsumugiGroup.create()
-          .then(g => { this.tsumugiGroupKey = g; return g; })
-          .catch(err => { this.tsumugiGroupKeyPromise = null; throw err; });
+      if (!this.mooringGroupKeyPromise) {
+        this.mooringGroupKeyPromise = MooringGroup.create()
+          .then(g => { this.mooringGroupKey = g; return g; })
+          .catch(err => { this.mooringGroupKeyPromise = null; throw err; });
       }
-      group = await this.tsumugiGroupKeyPromise;
+      group = await this.mooringGroupKeyPromise;
     }
     const myNick = this.getLocalNick();
     for (const [nick, vs] of established) {
       const wrapped = await group.exportKeyFor(vs);
-      const b64 = SuimyakuMediaEngine.toB64(wrapped);
+      const b64 = CadenceMediaEngine.toB64(wrapped);
       /* TSUMUGI_GROUP_KEY payload: the wrapped key; the server relay identifies target by msgpack */
       void myNick; void nick; void b64;
     }
@@ -2250,10 +2250,10 @@ export class SuimyakuMediaEngine {
 // Convenience subclasses
 // ----------------------------------------------------------------
 
-export class VideoEngine extends SuimyakuMediaEngine {
-  constructor(callbacks: SuimyakuMediaCallbacks) { super(callbacks, { kind: 'video' }); }
+export class VideoEngine extends CadenceMediaEngine {
+  constructor(callbacks: CadenceMediaCallbacks) { super(callbacks, { kind: 'video' }); }
 }
 
-export class VoiceEngine extends SuimyakuMediaEngine {
-  constructor(callbacks: SuimyakuMediaCallbacks) { super(callbacks, { kind: 'voice' }); }
+export class VoiceEngine extends CadenceMediaEngine {
+  constructor(callbacks: CadenceMediaCallbacks) { super(callbacks, { kind: 'voice' }); }
 }

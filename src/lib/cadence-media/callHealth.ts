@@ -142,7 +142,7 @@ function hasRecoveryHeadroom(
 }
 
 export interface AdaptiveQualitySample {
-  /** Null until Orochi or the local throughput meter has a useful estimate. */
+  /** Null until Onyx Server or the local throughput meter has a useful estimate. */
   suggestedBps: number | null;
   lossRate: number;
   /** Encode duration divided by the frame budget. */

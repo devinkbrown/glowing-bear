@@ -41,7 +41,7 @@ const [preferenceSyncState, setPreferenceSyncState] = createStore<PreferenceSync
   available: false,
   status: 'local-only',
   lastSyncedAt: null,
-  detail: 'Connect an Orochi account to sync non-secret preferences.',
+  detail: 'Connect an Onyx Server account to sync non-secret preferences.',
 });
 
 export { preferenceSyncState };
@@ -261,7 +261,7 @@ export function _preferenceTransportReady(supported: boolean): void {
     setPreferenceSyncState({
       available: false,
       status: 'local-only',
-      detail: 'This connection does not offer Orochi account preference metadata.',
+      detail: 'This connection does not offer Onyx Server account preference metadata.',
     });
     return;
   }
@@ -280,7 +280,7 @@ export function _preferenceTransportUnavailable(): void {
   setPreferenceSyncState({
     available: false,
     status: 'local-only',
-    detail: 'Connect an Orochi account to sync non-secret preferences.',
+    detail: 'Connect an Onyx Server account to sync non-secret preferences.',
   });
 }
 
@@ -290,7 +290,7 @@ export function syncPreferencesNow(): boolean {
     setPreferenceSyncState({
       available: false,
       status: 'local-only',
-      detail: 'Orochi account preference sync is unavailable on this connection.',
+      detail: 'Onyx Server account preference sync is unavailable on this connection.',
     });
     return false;
   }
@@ -393,6 +393,6 @@ export function _resetPreferenceSyncForTests(): void {
     available: false,
     status: 'local-only',
     lastSyncedAt: null,
-    detail: 'Connect an Orochi account to sync non-secret preferences.',
+    detail: 'Connect an Onyx Server account to sync non-secret preferences.',
   });
 }

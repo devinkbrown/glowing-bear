@@ -1,9 +1,9 @@
 import { parseIRCMessage, parseStandardReply } from './parser';
 
-export type OrochiServiceFeedbackKind = 'success' | 'error' | 'warning' | 'info';
+export type OnyxServerServiceFeedbackKind = 'success' | 'error' | 'warning' | 'info';
 
-export interface OrochiServiceFeedback {
-  kind: OrochiServiceFeedbackKind;
+export interface OnyxServerServiceFeedback {
+  kind: OnyxServerServiceFeedbackKind;
   command: string;
   code: string;
   message: string;
@@ -33,13 +33,13 @@ const SERVICE_COMMANDS = new Set([
   'VHOST',
 ]);
 
-function feedbackKind(kind: 'FAIL' | 'WARN' | 'NOTE', code: string): OrochiServiceFeedbackKind {
+function feedbackKind(kind: 'FAIL' | 'WARN' | 'NOTE', code: string): OnyxServerServiceFeedbackKind {
   if (kind === 'FAIL') return 'error';
   if (kind === 'WARN') return 'warning';
   return /^(?:COMPLETE|OK|STORED|SUCCESS|UPDATED|VERIFIED)$/i.test(code) ? 'success' : 'info';
 }
 
-function parseStandardReplyText(text: string, tags: string[]): OrochiServiceFeedback | null {
+function parseStandardReplyText(text: string, tags: string[]): OnyxServerServiceFeedback | null {
   const taggedKind = tags.includes('irc_fail')
     ? 'FAIL'
     : tags.includes('irc_warn')
@@ -51,7 +51,7 @@ function parseStandardReplyText(text: string, tags: string[]): OrochiServiceFeed
   if (!hasKind && !taggedKind) return null;
   const source = hasKind ? text : `${taggedKind} ${text}`;
 
-  // Without the standard-replies capability Orochi falls back to a NOTICE in
+  // Without the standard-replies capability Onyx Server falls back to a NOTICE in
   // the form `FAIL REGISTER ACCOUNT_EXISTS: Registration failed`. Normalise
   // that colon before handing the line to the ordinary IRC parser.
   const fallback = /^(FAIL|WARN|NOTE)\s+(\S+)\s+([A-Z\d_-]+):\s*(.*)$/i.exec(source);
@@ -79,7 +79,7 @@ function parseStandardReplyText(text: string, tags: string[]): OrochiServiceFeed
   };
 }
 
-function noticeKind(text: string): OrochiServiceFeedbackKind {
+function noticeKind(text: string): OnyxServerServiceFeedbackKind {
   if (/\b(?:could not|denied|failed|invalid|no such|not available|not enabled|unknown)\b|^Usage:/i.test(text)) {
     return 'warning';
   }
@@ -89,7 +89,7 @@ function noticeKind(text: string): OrochiServiceFeedbackKind {
   return 'info';
 }
 
-function parseServiceNotice(text: string, tags: string[]): OrochiServiceFeedback | null {
+function parseServiceNotice(text: string, tags: string[]): OnyxServerServiceFeedback | null {
   if (!tags.includes('irc_notice')) return null;
 
   let command = '';
@@ -120,14 +120,14 @@ function parseServiceNotice(text: string, tags: string[]): OrochiServiceFeedback
  * feedback. Recognition is intentionally narrow: unrelated server notices and
  * `SESSIONTOKEN` credentials never enter the feedback store.
  */
-export function parseOrochiServiceFeedback(message: string, tags: string[]): OrochiServiceFeedback | null {
+export function parseOnyxServiceFeedback(message: string, tags: string[]): OnyxServerServiceFeedback | null {
   const text = message.trim();
   if (!text) return null;
 
   const standard = parseStandardReplyText(text, tags);
   if (standard) return standard;
 
-  // REGISTER success is a command-shaped Orochi reply rather than NOTE.
+  // REGISTER success is a command-shaped Onyx Server reply rather than NOTE.
   const registerSource = tags.includes('irc_register') && !/^REGISTER\s/i.test(text)
     ? `REGISTER ${text}`
     : text;

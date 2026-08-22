@@ -36,7 +36,7 @@ import type {
 } from '@/lib/operatorIncident';
 import { formatDate } from '@/lib/i18n';
 
-/** Event Spine categories — docs/OROCHI_PROTOCOL.md §11. */
+/** Event Spine categories — docs/ONYX_SERVER_PROTOCOL.md §11. */
 const EVENT_CATEGORIES = [
   'CONNECT', 'DISCONNECT', 'SERVER_LINK', 'FLOOD', 'ERROR', 'ANNOUNCE',
   'OPER_ACTION', 'KILL', 'SPAM', 'DEBUG', 'POLICY', 'SERVICE', 'SECURITY',

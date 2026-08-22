@@ -31,7 +31,7 @@ async function assertServicesAccessible(page: Page, testInfo: TestInfo, tab: str
     .include('[role="dialog"]')
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
-  await testInfo.attach(`orochi-services-${tab}-axe-results`, {
+  await testInfo.attach(`onyx-services-${tab}-axe-results`, {
     body: JSON.stringify(axe, null, 2),
     contentType: 'application/json',
   });
@@ -184,23 +184,23 @@ test.describe('connected relay chat', () => {
     expect(browserErrors).toEqual([]);
   });
 
-  test('maps Orochi service replies into the server-scoped services log', async ({ page }, testInfo) => {
+  test('maps Onyx Server service replies into the server-scoped services log', async ({ page }, testInfo) => {
     const relay = new MockWeeChatRelay({ includeServer: true });
     const browserErrors = await connect(page, relay);
 
     relay.sendServerIncoming(
-      'tester orochi.test orochi-0.1.0 iowx bklmnt',
-      'orochi.test',
+      'tester onyx.test onyx-0.1.0 iowx bklmnt',
+      'onyx.test',
       ['irc_004'],
     );
     relay.sendServerIncoming(
       'FAIL REGISTER ACCOUNT_EXISTS :Account already exists',
-      'orochi.test',
+      'onyx.test',
       ['irc_fail'],
     );
     relay.sendServerIncoming(
       'SESSIONTOKEN tester sst_0123456789abcdef0123456789abcdef expires=1784217600',
-      'orochi.test',
+      'onyx.test',
       ['irc_notice'],
     );
 
@@ -263,7 +263,7 @@ test.describe('connected relay chat', () => {
 
     relay.sendServerIncoming(
       'TOTP: two-factor authentication is disabled',
-      'orochi.test',
+      'onyx.test',
       ['irc_notice'],
     );
     await expect(log.getByText('TOTP', { exact: true })).toBeVisible();

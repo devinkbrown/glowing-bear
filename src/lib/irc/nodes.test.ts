@@ -1,47 +1,47 @@
 import { describe, expect, it } from 'vitest';
 
-import { nodeFromWssGateway, wssUrlForOrochiHost } from './nodes';
+import { nodeFromWssGateway, wssUrlForOnyxHost } from './nodes';
 
-describe('Orochi WSS gateway discovery', () => {
-  it('derives the default browser gateway from an Orochi 004 host', () => {
-    expect(wssUrlForOrochiHost('eshmaki.me')).toBe('wss://eshmaki.me:8080');
-    expect(wssUrlForOrochiHost('ircx.us')).toBe('wss://ircx.us:8080');
+describe('Onyx Server WSS gateway discovery', () => {
+  it('derives the default browser gateway from an Onyx Server 004 host', () => {
+    expect(wssUrlForOnyxHost('eshmaki.me')).toBe('wss://eshmaki.me:8080');
+    expect(wssUrlForOnyxHost('ircx.us')).toBe('wss://ircx.us:8080');
   });
 
   it('normalizes whitespace and bracketed host tokens from relay 004', () => {
-    expect(wssUrlForOrochiHost('  ircx.us  ')).toBe('wss://ircx.us:8080');
-    expect(wssUrlForOrochiHost('[eshmaki.me]')).toBe('wss://eshmaki.me:8080');
+    expect(wssUrlForOnyxHost('  ircx.us  ')).toBe('wss://ircx.us:8080');
+    expect(wssUrlForOnyxHost('[eshmaki.me]')).toBe('wss://eshmaki.me:8080');
   });
 
   it('preserves explicit secure WebSocket ports and paths', () => {
-    expect(wssUrlForOrochiHost('wss://node.example:9443/irc')).toBe('wss://node.example:9443/irc');
+    expect(wssUrlForOnyxHost('wss://node.example:9443/irc')).toBe('wss://node.example:9443/irc');
   });
 
   it('coerces explicit URLs to WSS and strips query, hash, and trailing slashes', () => {
-    expect(wssUrlForOrochiHost('https://node.example/irc///?token=secret#frag')).toBe(
+    expect(wssUrlForOnyxHost('https://node.example/irc///?token=secret#frag')).toBe(
       'wss://node.example:8080/irc',
     );
   });
 
   it('adds the browser gateway fallback port to explicit WSS URLs without one', () => {
-    expect(wssUrlForOrochiHost('wss://node.example/relay')).toBe('wss://node.example:8080/relay');
-    expect(wssUrlForOrochiHost('https://Example.COM')).toBe('wss://example.com:8080');
+    expect(wssUrlForOnyxHost('wss://node.example/relay')).toBe('wss://node.example:8080/relay');
+    expect(wssUrlForOnyxHost('https://Example.COM')).toBe('wss://example.com:8080');
   });
 
   it('preserves IPv6 literals and explicit ports while normalizing path suffixes', () => {
-    expect(wssUrlForOrochiHost('wss://[2001:db8::1]:9443/irc/')).toBe(
+    expect(wssUrlForOnyxHost('wss://[2001:db8::1]:9443/irc/')).toBe(
       'wss://[2001:db8::1]:9443/irc',
     );
   });
 
   it('rejects malformed host tokens', () => {
-    expect(wssUrlForOrochiHost('')).toBeNull();
-    expect(wssUrlForOrochiHost('   ')).toBeNull();
-    expect(wssUrlForOrochiHost('bad host')).toBeNull();
-    expect(wssUrlForOrochiHost('example.com:6697')).toBeNull();
-    expect(wssUrlForOrochiHost('example.com/path')).toBeNull();
-    expect(wssUrlForOrochiHost(String.raw`example.com\path`)).toBeNull();
-    expect(wssUrlForOrochiHost('wss://')).toBeNull();
+    expect(wssUrlForOnyxHost('')).toBeNull();
+    expect(wssUrlForOnyxHost('   ')).toBeNull();
+    expect(wssUrlForOnyxHost('bad host')).toBeNull();
+    expect(wssUrlForOnyxHost('example.com:6697')).toBeNull();
+    expect(wssUrlForOnyxHost('example.com/path')).toBeNull();
+    expect(wssUrlForOnyxHost(String.raw`example.com\path`)).toBeNull();
+    expect(wssUrlForOnyxHost('wss://')).toBeNull();
   });
 
   it('turns a discovered gateway into a node candidate', () => {

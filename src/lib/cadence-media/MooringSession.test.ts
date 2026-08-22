@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { TsumugiSession } from './TsumugiSession';
+import { MooringSession } from './MooringSession';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 /** Create two sessions and complete the ECDH handshake between them. */
-async function pair(): Promise<[TsumugiSession, TsumugiSession]> {
-  const a = await TsumugiSession.create();
-  const b = await TsumugiSession.create();
+async function pair(): Promise<[MooringSession, MooringSession]> {
+  const a = await MooringSession.create();
+  const b = await MooringSession.create();
   const aPub = await a.exportPublicKey();
   const bPub = await b.exportPublicKey();
   await a.ingestPeerKey(bPub);
@@ -15,17 +15,17 @@ async function pair(): Promise<[TsumugiSession, TsumugiSession]> {
   return [a, b];
 }
 
-describe('TsumugiSession', () => {
+describe('MooringSession', () => {
   it('reports the established peer fingerprint rather than the local identity', async () => {
-    const a = await TsumugiSession.create();
-    const b = await TsumugiSession.create();
+    const a = await MooringSession.create();
+    const b = await MooringSession.create();
     await a.ingestPeerKey(await b.exportPublicKey());
     expect(await a.getPeerFingerprint()).toBe(await b.getFingerprint());
     expect(await a.getPeerFingerprint()).not.toBe(await a.getFingerprint());
   });
 
   it('exports a 65-byte uncompressed P-256 public key', async () => {
-    const s = await TsumugiSession.create();
+    const s = await MooringSession.create();
     const pub = await s.exportPublicKey();
     expect(pub.length).toBe(65);
     expect(pub[0]).toBe(0x04);
@@ -58,13 +58,13 @@ describe('TsumugiSession', () => {
   });
 
   it('refuses ingesting its own public key', async () => {
-    const s = await TsumugiSession.create();
+    const s = await MooringSession.create();
     const pub = await s.exportPublicKey();
     await expect(s.ingestPeerKey(pub)).rejects.toThrow(/self public key/);
   });
 
   it('rejects an invalid peer public key', async () => {
-    const s = await TsumugiSession.create();
+    const s = await MooringSession.create();
     await expect(s.ingestPeerKey(new Uint8Array(65))).rejects.toThrow(/invalid P-256/);
   });
 
@@ -118,7 +118,7 @@ describe('TsumugiSession', () => {
   });
 
   it('refuses ratchet before establishment', async () => {
-    const s = await TsumugiSession.create();
+    const s = await MooringSession.create();
     await expect(s.ratchet()).rejects.toThrow(/not yet established/);
   });
 
@@ -137,7 +137,7 @@ describe('TsumugiSession', () => {
   });
 
   it('exposes a stable 12-char fingerprint for the local key', async () => {
-    const s = await TsumugiSession.create();
+    const s = await MooringSession.create();
     const fp1 = await s.getFingerprint();
     const fp2 = await s.getFingerprint();
     expect(fp1).toHaveLength(12);

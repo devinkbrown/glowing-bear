@@ -146,7 +146,7 @@ describe('notify() — wiring feeds the body through the fail-closed guard', () 
 			'kain: ping',
 			undefined,
 			'0xcafe',
-			'irc.orochi.#darkbear',
+			'irc.onyx.#darkbear',
 			'a'.repeat(48),
 		);
 
@@ -161,7 +161,7 @@ describe('notify() — wiring feeds the body through the fail-closed guard', () 
 		expect(options.data).toMatchObject({
 			url: '/darkbear/',
 			bufferId: '0xcafe',
-			target: 'irc.orochi.#darkbear',
+			target: 'irc.onyx.#darkbear',
 			connectionScope: 'a'.repeat(48),
 			clientScope: expect.stringMatching(/^[a-f0-9]{48}$/),
 		});

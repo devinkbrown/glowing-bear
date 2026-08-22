@@ -64,7 +64,7 @@ describe('notification actions', () => {
     upsertBuffer(privateBuffer());
   });
 
-  it('opens by pointer or a case-insensitive Orochi target alias', () => {
+  it('opens by pointer or a case-insensitive Onyx Server target alias', () => {
     expect(applyNotificationAction(action('open'))).toBe(true);
     expect(buffersState.activeBuffer).toBe(BUFFER);
     clearBuffers();

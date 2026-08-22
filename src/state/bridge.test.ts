@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 describe('typing / reactions / read markers', () => {
-  it('sendTyping maps the buffer to its orochi target', () => {
+  it('sendTyping maps the buffer to its Onyx Server target', () => {
     const be = makeBackend();
     _setBridgeBackend(be);
     sendTyping('0xchan', 'active');

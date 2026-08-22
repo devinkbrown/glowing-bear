@@ -154,7 +154,7 @@ export function recordLineActivity(entry: BufferEntry, line: WeeChatLine, operat
 export function recordCallActivity(label: string, peer: string, timestamp = Date.now()): void {
   recordActivity('call', {
     bufferKey: '', bufferName: 'Calls', msgid: '', lineId: `${timestamp}-${label}-${peer}`,
-    timestamp, sender: peer || 'Orochi media', preview: sanitizePreview(label),
+    timestamp, sender: peer || 'Onyx Server media', preview: sanitizePreview(label),
   });
 }
 

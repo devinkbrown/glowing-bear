@@ -4,7 +4,7 @@ import type { ThemeId } from '@/types';
 /**
  * Versioned, account-scoped preference metadata.
  *
- * Orochi bounds each METADATA value to 512 bytes. Small preference families
+ * Onyx Server bounds each METADATA value to 512 bytes. Small preference families
  * live in the manifest; the two name-keyed collections are split into bounded,
  * generation-tagged parts so a partially observed publish is never applied.
  */
@@ -276,11 +276,11 @@ function partition<T>(kind: 'b' | 'r', generationId: string, items: T[]): Prefer
       current = candidate;
       continue;
     }
-    if (current.length === 0) throw new Error('preference entry exceeds Orochi metadata limit');
+    if (current.length === 0) throw new Error('preference entry exceeds Onyx Server metadata limit');
     parts.push(current);
     current = [item];
     if (byteLength(JSON.stringify({ g: generationId, d: current })) > MAX_METADATA_VALUE_BYTES) {
-      throw new Error('preference entry exceeds Orochi metadata limit');
+      throw new Error('preference entry exceeds Onyx Server metadata limit');
     }
   }
   if (current.length > 0) parts.push(current);
@@ -322,7 +322,7 @@ export function encodePreferenceMetadata(document: PreferenceDocument): Preferen
   };
   const manifestValue = JSON.stringify(manifest);
   if (byteLength(manifestValue) > MAX_METADATA_VALUE_BYTES) {
-    throw new Error('preference manifest exceeds Orochi metadata limit');
+    throw new Error('preference manifest exceeds Onyx Server metadata limit');
   }
   return [...bufferParts, ...readParts, { key: PREFERENCE_MANIFEST_KEY, value: manifestValue }];
 }

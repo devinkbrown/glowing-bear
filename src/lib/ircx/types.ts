@@ -7,7 +7,7 @@ export interface PropEntry {
 export type AccessLevel = 'OWNER' | 'HOST' | 'DENY' | 'GRANT' | 'VOICE';
 
 /**
- * One ACCESS list entry, per orochi's RPL_ACCESSENTRY (804):
+ * One ACCESS list entry, per Onyx Server's RPL_ACCESSENTRY (804):
  *   `<channel> <level> <mask> <set_by> <duration>`
  * duration is seconds (0 = permanent). ADD/DELETE acks (801/802) carry only
  * `<channel> <level> <mask> :<text>` — setter/duration default empty there.
@@ -22,7 +22,7 @@ export interface AccessEntry {
   reason: string;
 }
 
-/** Orochi Event Spine categories (event_spine.zig) + IRCX channel planes. */
+/** Onyx Server Event Spine categories (event_spine.zig) + IRCX channel planes. */
 export type EventType =
   | 'CHANNEL' | 'MEMBER' | 'USER' | 'MEDIA'
   | 'CONNECT' | 'DISCONNECT' | 'SERVER_LINK' | 'FLOOD' | 'ERROR' | 'ANNOUNCE'
@@ -117,8 +117,8 @@ export const PROP_KEY_INFO: Record<string, { label: string; icon: string }> = {
   CLIENT: { label: 'Client', icon: 'terminal' },
 };
 
-// Numerics as the orochi daemon actually emits them (live-verified 2026-07-03
-// against eshmaki.me — see tests/fixtures/orochi-live-capture.txt).
+// Numerics as the Onyx Server daemon actually emits them (live-verified 2026-07-03
+// against eshmaki.me — see tests/fixtures/onyx-live-capture.txt).
 // EVENT replies follow draft-pfenning-04: 806 ADD, 807 DEL, 808 START,
 // 809 LIST, 810 END (the 808-ADD/824-DEL mapping in older IRCX tables is
 // documentation-only and never hits the wire).

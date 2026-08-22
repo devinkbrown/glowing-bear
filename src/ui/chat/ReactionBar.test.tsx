@@ -1,5 +1,5 @@
 // ReactionBar render tests — reaction pills with counts/tooltips, click
-// routing through the orochi bridge, and the empty-state gate.
+// routing through the onyx-server bridge, and the empty-state gate.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { verifyMediaDatagramMac } from './MediaEngine';
-import { encodeKaguraFrame, KaguraCodec, KAGURA_MIN_FRAME_BYTES } from './kaguraFrame';
+import { encodeCadenceFrame, CadenceCodec, CADENCE_MIN_FRAME_BYTES } from './cadenceFrame';
 import { appendMediaMac, importMediaMacKey, MEDIA_MAC_TAG_BYTES } from './mediaMac';
 
 // Inbound media-MAC verification (the client-edge authenticity check). When a
@@ -12,13 +12,13 @@ import { appendMediaMac, importMediaMacKey, MEDIA_MAC_TAG_BYTES } from './mediaM
 const WS_BAND_AUDIO = 64;
 
 function sampleFrame(payload: Uint8Array): Uint8Array {
-  return encodeKaguraFrame({
+  return encodeCadenceFrame({
     bandId: WS_BAND_AUDIO,
     streamId: 0x1234abcd,
     sequence: 7,
     timestamp: 1_700_000_000,
     keyframe: false,
-    codec: KaguraCodec.kaguravoxAudio,
+    codec: CadenceCodec.cadencevoxAudio,
     payload,
   });
 }
@@ -83,7 +83,7 @@ describe('verifyMediaDatagramMac — inbound per-stream MAC verification', () =>
 
   it('rejects a negative frame length without touching crypto', async () => {
     const key = await freshKey();
-    const bytes = new Uint8Array(KAGURA_MIN_FRAME_BYTES + MEDIA_MAC_TAG_BYTES);
+    const bytes = new Uint8Array(CADENCE_MIN_FRAME_BYTES + MEDIA_MAC_TAG_BYTES);
     expect(await verifyMediaDatagramMac(key, bytes, -1)).toBe(false);
   });
 });

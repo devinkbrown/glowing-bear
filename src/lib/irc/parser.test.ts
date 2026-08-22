@@ -19,13 +19,13 @@ import {
   parseMonitorNumeric,
 } from './parser';
 
-// Ground truth: a real two-client transcript captured live from orochi.
+// Ground truth: a real two-client transcript captured live from Onyx Server.
 // NOTE: the path is resolved via fileURLToPath instead of the plain
 // `new URL('...', import.meta.url)` idiom because Vite statically rewrites
 // that exact pattern into an http://localhost asset URL under vitest.
 const FIXTURE_PATH = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../tests/fixtures/orochi-live-capture.txt',
+  '../../../tests/fixtures/onyx-live-capture.txt',
 );
 const capture = readFileSync(FIXTURE_PATH, 'utf8');
 const serverLines = capture
@@ -298,7 +298,7 @@ describe('parseNamesPrefix', () => {
 });
 
 describe('selectSaslMechanism', () => {
-  // The exact mechanism list orochi advertises in the capture's sasl cap.
+  // The exact mechanism list Onyx Server advertises in the capture's sasl cap.
   const offered = 'PLAIN,EXTERNAL,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,SESSION-TOKEN'.split(',');
 
   it('prefers SCRAM-SHA-256 over PLAIN when a password is available', () => {
@@ -337,7 +337,7 @@ describe('selectSaslMechanism', () => {
 describe('parseSaslSessionTokenNotice', () => {
   it('parses the TLS-only token automatically issued after SASL success', () => {
     const msg = parseIRCMessage(
-      ':orochi.test NOTICE darkbear :SESSIONTOKEN alice sst_0123456789abcdef0123456789abcdef expires=1784217600',
+      ':onyx.test NOTICE darkbear :SESSIONTOKEN alice sst_0123456789abcdef0123456789abcdef expires=1784217600',
     );
     expect(parseSaslSessionTokenNotice(msg)).toEqual({
       account: 'alice',
@@ -348,13 +348,13 @@ describe('parseSaslSessionTokenNotice', () => {
 
   it('rejects malformed, non-NOTICE, and unbounded credentials', () => {
     expect(parseSaslSessionTokenNotice(parseIRCMessage(
-      ':orochi.test NOTICE darkbear :SESSIONTOKEN alice not-a-token expires=1784217600',
+      ':onyx.test NOTICE darkbear :SESSIONTOKEN alice not-a-token expires=1784217600',
     ))).toBeNull();
     expect(parseSaslSessionTokenNotice(parseIRCMessage(
-      ':orochi.test NOTICE darkbear :SESSIONTOKEN alice sst_0123456789abcdef0123456789abcdef',
+      ':onyx.test NOTICE darkbear :SESSIONTOKEN alice sst_0123456789abcdef0123456789abcdef',
     ))).toBeNull();
     expect(parseSaslSessionTokenNotice(parseIRCMessage(
-      ':orochi.test PRIVMSG darkbear :SESSIONTOKEN alice sst_0123456789abcdef0123456789abcdef expires=1784217600',
+      ':onyx.test PRIVMSG darkbear :SESSIONTOKEN alice sst_0123456789abcdef0123456789abcdef expires=1784217600',
     ))).toBeNull();
   });
 });
@@ -479,12 +479,12 @@ describe('live capture sweep', () => {
     expect(msg.params.slice(1)).toEqual(['#dbtest19036', 'VOICE', '*!*@capture.example', 'dbtA3950', '0']);
   });
 
-  it('parses the EVENT MEDIA line with orochi.io/ vendor tags', () => {
-    const line = mustFind((l) => l.startsWith('@orochi.io/') && l.includes('MEDIA JOIN'), 'EVENT MEDIA JOIN');
+  it('parses the EVENT MEDIA line with onyx_server.io/ vendor tags', () => {
+    const line = mustFind((l) => l.startsWith('@onyx_server.io/') && l.includes('MEDIA JOIN'), 'EVENT MEDIA JOIN');
     const msg = parseIRCMessage(line);
 
-    expect(msg.tags['orochi.io/category']).toBe('SERVICE');
-    expect(msg.tags['orochi.io/severity']).toBe('notice');
+    expect(msg.tags['onyx_server.io/category']).toBe('SERVICE');
+    expect(msg.tags['onyx_server.io/severity']).toBe('notice');
     expect(msg.command).toBe('EVENT');
     expect(msg.host).toBe('eshmaki.me');
     expect(msg.params).toEqual(['dbtA3950', 'MEDIA', 'JOIN', '#dbtest19036', 'dbtA3950', 'voice']);

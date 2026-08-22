@@ -1,6 +1,6 @@
 import type { WeeChatBuffer, WeeChatLine } from '@/lib/weechat/model';
 import type { ArchiveRecord } from './types';
-import type { SuimyakuTranscriptEntry } from '@/lib/suimyaku-media/types';
+import type { CadenceTranscriptEntry } from '@/lib/cadence-media/types';
 
 const LINK_RE = /https?:\/\/[^\s<>()]+/i;
 const FILE_RE = /(?:https?:\/\/[^\s<>()]+|\b[^\s<>()]+)\.(?:7z|avi|csv|docx?|gif|gz|jpe?g|mkv|mov|mp3|mp4|pdf|png|rar|tar|txt|webm|webp|xlsx?|zip)(?:[?#][^\s<>()]*)?\b/i;
@@ -43,7 +43,7 @@ export function archiveRecordFromLine(
 
 /** Convert an Event Spine caption into the same opt-in local archive schema. */
 export function archiveRecordFromCaption(
-  entry: SuimyakuTranscriptEntry,
+  entry: CadenceTranscriptEntry,
   sequence: number,
 ): ArchiveRecord {
   const scope = entry.channel.toLowerCase();

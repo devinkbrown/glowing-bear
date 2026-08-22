@@ -111,7 +111,7 @@ export default function ChannelListModal(props: Props) {
                 onClick={() => search(true)}
                 class="h-10 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 text-[12px] font-semibold text-gray-300 transition-colors hover:bg-white/[0.08] hover:text-gray-100 disabled:opacity-60"
                 disabled={loading()}
-                title="Use Orochi LISTX"
+                title="Use Onyx Server LISTX"
               >
                 LISTX
               </button>

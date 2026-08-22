@@ -6,7 +6,7 @@
 // Unlike the old roster-only placeholder, tiles render REAL media: peer
 // video via canvas-captured MediaStreams (peerStream), local camera/screen
 // preview (selfPreviewStream), live speaking rings, audio-level bars and
-// working controls against the Suimyaku media engine.
+// working controls against the Cadence media engine.
 //
 // Keyboard shortcuts (M/V/S/H) are handled globally elsewhere — the footer
 // only displays the hints.
@@ -30,7 +30,7 @@ import {
 } from '@/state/media';
 import { bridgeState, type BridgeStatus } from '@/state/bridge';
 import { nickColor } from '@/lib/nickcolor';
-import type { CallHealthStatus, NetworkQualityTier } from '@/lib/suimyaku-media/types';
+import type { CallHealthStatus, NetworkQualityTier } from '@/lib/cadence-media/types';
 import TranscriptPanel from './TranscriptPanel';
 import { settings } from '@/state/settings';
 import { formatNumber } from '@/lib/i18n';
@@ -339,7 +339,7 @@ function FullOverlay(props: PillProps) {
           >
             <span class={`inline-block mr-2 h-2 w-2 rounded-full ${health().dot}`} aria-hidden="true" />
             {mediaState.health.status === 'reconnecting'
-              ? `Orochi bridge interrupted. Keeping media active while reconnecting (attempt ${mediaState.health.reconnectAttempt}).`
+              ? `Onyx Server bridge interrupted. Keeping media active while reconnecting (attempt ${mediaState.health.reconnectAttempt}).`
               : mediaState.health.tier === 0
                 ? 'Packet loss or encoder pressure detected. Monitoring before reducing quality.'
                 : `Call quality reduced to ${QUALITY_LABEL[mediaState.health.tier].toLowerCase()} while conditions recover.`}
@@ -560,7 +560,7 @@ function CallHealthView() {
           <HealthMetric label="Packet loss" value={loss()} warn={mediaState.health.lossRate >= 0.03} />
           <HealthMetric label="Jitter" value={`${Math.round(mediaState.health.jitterMs)} ms`} warn={mediaState.health.jitterMs >= 40} />
           <HealthMetric label="Encode load" value={pressure()} warn={mediaState.health.encodePressure >= 1} />
-          <HealthMetric label="Orochi rate" value={formatBitrate(mediaState.health.suggestedBps)} warn={mediaState.health.tier >= 2} />
+          <HealthMetric label="Onyx Server rate" value={formatBitrate(mediaState.health.suggestedBps)} warn={mediaState.health.tier >= 2} />
         </div>
 
         <div class="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.07] pt-3 text-[10px] text-gray-400">

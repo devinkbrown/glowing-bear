@@ -1,25 +1,25 @@
-// Media store — Solid store + actions wrapping the Suimyaku media engine
+// Media store — Solid store + actions wrapping the Cadence media engine
 // (voice/video rooms, 1:1 calls, screen share) for the voice UI components.
 //
 // The engine itself (encode/decode, WS media plane, TSUMUGI crypto) lives in
-// src/lib/suimyaku-media/MediaEngine.ts; it is mounted here once and attached
+// src/lib/cadence-media/MediaEngine.ts; it is mounted here once and attached
 // to the bridge's IRCClient by src/core/bridge.ts via _attachBridgeClient.
 // All engine callbacks funnel into `mediaState` below.
 
 import { createStore, produce } from 'solid-js/store';
 import type { IRCClient } from '@/lib/irc/client';
 import {
-  SuimyakuMediaEngine,
-  runSuimyakuCodecSelfTest,
-  setMountedSuimyakuMediaEngine,
-} from '@/lib/suimyaku-media/MediaEngine';
+  CadenceMediaEngine,
+  runCadenceCodecSelfTest,
+  setMountedCadenceMediaEngine,
+} from '@/lib/cadence-media/MediaEngine';
 import type {
   CallState as EngineCallState,
-  SuimyakuMediaCallbacks,
-  SuimyakuCallHealth,
-  SuimyakuPeerState,
-  SuimyakuTranscriptEntry,
-} from '@/lib/suimyaku-media/types';
+  CadenceMediaCallbacks,
+  CadenceCallHealth,
+  CadencePeerState,
+  CadenceTranscriptEntry,
+} from '@/lib/cadence-media/types';
 import { startIncomingRing, startOutgoingRing, stopRing } from '@/lib/ringtone';
 import { bridgeRun, bridgeState } from './bridge';
 import { recordDiagnosticEvent } from '@/lib/diagnosticsEvents';
@@ -47,7 +47,7 @@ export interface MediaAudioKeyObservation {
   fingerprint: string;
 }
 
-export type MediaTranscriptEntry = SuimyakuTranscriptEntry;
+export type MediaTranscriptEntry = CadenceTranscriptEntry;
 
 export type MediaPermissionStatus = PermissionState | 'unsupported';
 export type MediaPreflightStatus = 'idle' | 'checking' | 'ready' | 'error';
@@ -145,8 +145,8 @@ interface MediaStateShape {
   error: string | null;
   /** True once the bridge session confirms MEDIA is usable. */
   mediaAvailable: boolean;
-  /** Bounded live telemetry from the active Orochi media pipeline. */
-  health: SuimyakuCallHealth;
+  /** Bounded live telemetry from the active Onyx Server media pipeline. */
+  health: CadenceCallHealth;
   /** Observed peer audio keys only; never evidence that Audio E2EE is usable. */
   observedAudioKeys: Record<string, MediaAudioKeyObservation>;
   /** Device/permission/codec gate shown before capture is committed to a call. */
@@ -233,7 +233,7 @@ export function _setMediaAvailable(available: boolean): void {
 // Engine mount + callbacks
 // ---------------------------------------------------------------------------
 
-let engine: SuimyakuMediaEngine | null = null;
+let engine: CadenceMediaEngine | null = null;
 let lastActivityCallState: EngineCallState = 'idle';
 let captionArchiveSequence = 0;
 
@@ -286,7 +286,7 @@ function handleCallState(state: EngineCallState, nick: string, channel: string |
   }));
 }
 
-function upsertPeer(peer: SuimyakuPeerState): void {
+function upsertPeer(peer: CadencePeerState): void {
   setMediaState(produce((s) => {
     const existing = s.peers[peer.nick];
     s.peers[peer.nick] = {
@@ -300,7 +300,7 @@ function upsertPeer(peer: SuimyakuPeerState): void {
   }));
 }
 
-const mediaCallbacks: SuimyakuMediaCallbacks = {
+const mediaCallbacks: CadenceMediaCallbacks = {
   onCallState: handleCallState,
 
   onPeerState: upsertPeer,
@@ -354,7 +354,7 @@ const mediaCallbacks: SuimyakuMediaCallbacks = {
     setMediaState('health', health);
   },
 
-  onTsumugiState(nick, epoch, fingerprint) {
+  onMooringState(nick, epoch, fingerprint) {
     setMediaState('observedAudioKeys', nick.toLowerCase(), { epoch, fingerprint });
   },
 
@@ -412,11 +412,11 @@ const mediaCallbacks: SuimyakuMediaCallbacks = {
 };
 
 /** Internal: create + globally mount the engine on first use. */
-export function _ensureMediaEngine(): SuimyakuMediaEngine {
+export function _ensureMediaEngine(): CadenceMediaEngine {
   if (!engine) {
-    engine = new SuimyakuMediaEngine(mediaCallbacks, { kind: 'video' });
+    engine = new CadenceMediaEngine(mediaCallbacks, { kind: 'video' });
     engine.setOutput(selectedOutputDeviceId, 100);
-    setMountedSuimyakuMediaEngine(engine);
+    setMountedCadenceMediaEngine(engine);
   }
   return engine;
 }
@@ -665,7 +665,7 @@ export async function runMediaPreflight(): Promise<void> {
   setMediaState('preflight', 'microphonePermission', microphonePermission);
   setMediaState('preflight', 'cameraPermission', cameraPermission);
 
-  const codecResult = runSuimyakuCodecSelfTest()
+  const codecResult = runCadenceCodecSelfTest()
     .then(() => ({ ok: true as const }))
     .catch((error: unknown) => ({ ok: false as const, error }));
   const captureResult = captureForPreflight(intent.video)

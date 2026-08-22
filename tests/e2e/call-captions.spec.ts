@@ -2,20 +2,20 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { waitForAssetVersionReady } from './fixtures/appReady';
 import { installCallMedia } from './fixtures/callMedia';
-import { MockOrochiAccount } from './fixtures/orochiAccount';
+import { MockOnyxAccount } from './fixtures/onyxAccount';
 import { MockWeeChatRelay } from './fixtures/weechatRelay';
 
 test('navigates, styles, archives, exports, and keyboard-controls live captions', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const relay = new MockWeeChatRelay();
-  const account = new MockOrochiAccount();
+  const account = new MockOnyxAccount();
   await Promise.all([relay.install(page), account.install(page), installCallMedia(page)]);
   await page.addInitScript(() => {
     localStorage.setItem('darkbear_settings_v2', JSON.stringify({
       archiveRetention: '7d',
       bridge: {
         enabled: true,
-        wsUrl: 'wss://orochi.test/irc',
+        wsUrl: 'wss://onyx.test/irc',
         account: 'caption-account',
         password: 'caption-secret',
         autoJoinMedia: false,

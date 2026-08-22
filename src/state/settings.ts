@@ -618,7 +618,7 @@ export function sanitizePortableUploadUrl(value: string): string {
 }
 
 /**
- * Keep a pinned Orochi endpoint portable without copying bearer-like URL
+ * Keep a pinned Onyx Server endpoint portable without copying bearer-like URL
  * material. Remote bridges require WSS; plain WS is accepted only for the
  * credential-free loopback development exception used by the live transport.
  */

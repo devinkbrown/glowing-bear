@@ -1,8 +1,8 @@
-// ServicesPanel — orochi services modal (Account / Channel / Memo tabs).
+// ServicesPanel — Onyx Server services modal (Account / Channel / Memo tabs).
 //
-// Orochi has no pseudo-clients: services are real server commands sent raw
+// Onyx Server has no pseudo-clients: services are real server commands sent raw
 // (via /quote) to the active server buffer. The command surface here follows
-// docs/OROCHI_PROTOCOL.md §7:
+// docs/ONYX_SERVER_PROTOCOL.md §7:
 //   REGISTER <account> <email|*> <password> · VERIFY <token>
 //   IDENTIFY [account] <password> · LOGOUT · ACCOUNTINFO [account]
 //   ACCOUNTSET <account> <password> <email|flags|secure|enforce> <value>

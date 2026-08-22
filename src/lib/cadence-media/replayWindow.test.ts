@@ -18,7 +18,7 @@ function iv(prefix: number, counter: number): Uint8Array {
   return b;
 }
 
-/** Accept helper mirroring TsumugiSession's two-phase check→remember. */
+/** Accept helper mirroring MooringSession's two-phase check→remember. */
 function accept(w: ReplayWindow, frame: Uint8Array): boolean {
   if (w.seen(frame)) return false;
   return w.remember(frame);

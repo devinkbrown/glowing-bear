@@ -23,7 +23,7 @@ function toHex(b: Uint8Array): string {
 
 const v = vectors.vector;
 
-describe('mediaMac — cross-repo KAT (shared with Orochi kagura_frame.zig)', () => {
+describe('mediaMac — cross-repo KAT (shared with Onyx Server cadence_frame.zig)', () => {
   it('derives K32 byte-for-byte from the server root + (channel, participant)', async () => {
     const k32 = await deriveMediaMacKey(hex(v.root_hex), v.channel, v.participant);
     expect(k32.length).toBe(MEDIA_MAC_KEY_BYTES);

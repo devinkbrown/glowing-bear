@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
         // auto-splits its on-demand chunk — do NOT force it into a manualChunk,
         // which co-hosts shared runtime and re-creates a static, eager entry edge.
         manualChunks(id) {
-          if (id.includes('/src/lib/suimyaku-media/') || id.includes('/src/lib/ringtone')) {
+          if (id.includes('/src/lib/cadence-media/') || id.includes('/src/lib/ringtone')) {
             return 'media-engine';
           }
           if (id.includes('/src/ui/bits/ThemeBg')) return 'theme-scenes';

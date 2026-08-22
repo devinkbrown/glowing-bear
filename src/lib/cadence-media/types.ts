@@ -1,12 +1,12 @@
 // -------------------------------------------------------------------
-// Public types — exported from suimyaku-media
+// Public types — exported from cadence-media
 // -------------------------------------------------------------------
 
 export type CallState     = 'idle' | 'ringing_out' | 'ringing_in' | 'in_call';
 export type VoiceCallState = CallState;
 export type MediaKind     = 'voice' | 'video' | 'screen';
 
-export interface SuimyakuPeerState {
+export interface CadencePeerState {
   nick:     string;
   channel:  string | null;
   kind:     MediaKind;
@@ -16,14 +16,14 @@ export interface SuimyakuPeerState {
   canvas:   HTMLCanvasElement | null;
 }
 
-export interface SuimyakuRoomStats {
+export interface CadenceRoomStats {
   active_senders: number;
   total_viewers:  number;
   video_fps:      number;
   audio_kbps:     number;
 }
 
-export interface SuimyakuTranscriptEntry {
+export interface CadenceTranscriptEntry {
   channel: string;
   nick:    string;
   text:    string;
@@ -35,7 +35,7 @@ export type NetworkQualityTier = 0 | 1 | 2 | 3;
 
 export type CallHealthStatus = 'idle' | 'healthy' | 'degraded' | 'reconnecting';
 
-export interface SuimyakuCallHealth {
+export interface CadenceCallHealth {
   status: CallHealthStatus;
   transportConnected: boolean;
   tier: NetworkQualityTier;
@@ -45,12 +45,12 @@ export interface SuimyakuCallHealth {
   roundTripMs: number;
   /** Encode duration divided by the video frame budget; 1 means fully saturated. */
   encodePressure: number;
-  roomStats: SuimyakuRoomStats | null;
+  roomStats: CadenceRoomStats | null;
   reconnectAttempt: number;
   updatedAt: number;
 }
 
-export interface SuimyakuChannelInfo {
+export interface CadenceChannelInfo {
   voiceCount: number;
   voiceMax:   number;
   videoCount: number;
@@ -58,27 +58,27 @@ export interface SuimyakuChannelInfo {
   flags:      number;
 }
 
-export interface SuimyakuMediaCallbacks {
+export interface CadenceMediaCallbacks {
   onCallState:       (state: CallState, nick: string, channel: string | null) => void;
-  onPeerState?:      (peer: SuimyakuPeerState) => void;
+  onPeerState?:      (peer: CadencePeerState) => void;
   onPeerLeft:        (nick: string) => void;
   onPeerSpeaking?:   (nick: string, speaking: boolean) => void;
   onLocalStream:     (stream: MediaStream | null) => void;
-  onRoomStats?:      (channel: string, stats: SuimyakuRoomStats) => void;
+  onRoomStats?:      (channel: string, stats: CadenceRoomStats) => void;
   onError:           (msg: string) => void;
   onDecodeError?:    (peer: string, type: MediaKind, err: unknown) => void;
   onAudioLevel?:     (nick: string, level: number) => void;
   onPresence?:       (nick: string, available: boolean) => void;
   onNetworkQuality?: (tier: NetworkQualityTier, suggestedBps: number) => void;
-  onCallHealth?:     (health: SuimyakuCallHealth) => void;
+  onCallHealth?:     (health: CadenceCallHealth) => void;
   onReaction?:       (nick: string, emoji: string) => void;
   onHand?:           (nick: string, raised: boolean) => void;
-  onCaption?:        (entry: SuimyakuTranscriptEntry, live: boolean) => void;
+  onCaption?:        (entry: CadenceTranscriptEntry, live: boolean) => void;
   onRecordingAlert?: (nick: string, started: boolean) => void;
   onRoomNearFull?:   () => void;
   onRecordConsent?:  (nick: string) => void;
-  onChannelInfo?:    (channel: string, info: SuimyakuChannelInfo) => void;
-  onTsumugiState?:      (nick: string, epoch: number, fingerprint: string) => void;
+  onChannelInfo?:    (channel: string, info: CadenceChannelInfo) => void;
+  onMooringState?:      (nick: string, epoch: number, fingerprint: string) => void;
   enableVideoCalls?: () => boolean;
   enableVoiceCalls?: () => boolean;
   getMediaQuality?:  () => { audioQuality: 0 | 1 | 2; videoQuality: number; noiseSuppress: boolean };

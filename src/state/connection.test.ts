@@ -1,4 +1,4 @@
-// Tests for the connection store — the lineAdded pipeline, oper/orochi
+// Tests for the connection store — the lineAdded pipeline, oper/Onyx Server
 // detection, slash-command routing and bridge seams, driven WITHOUT a socket.
 //
 // WeeRelayClient is mocked with an EventTarget-based fake so connect() wires
@@ -109,7 +109,7 @@ import {
   clearTemporaryMute,
 } from './buffers';
 import { resetSettings, updateRelay, updateSettings } from './settings';
-import { ircxState, isOrochiServer, markOrochi } from './ircx';
+import { ircxState, isOnyxServer, markOnyxServer } from './ircx';
 import { activityState, resetActivity } from './activity';
 import type { BufferEntry } from '@/types';
 
@@ -359,7 +359,7 @@ function entry(pointer: string): BufferEntry {
 
     it('disconnect tears everything down', () => {
       const c = connectWithBuffers();
-      markOrochi('esh');
+      markOnyxServer('esh');
       emit(c, 'lineAdded', { line: makeLine({ buffer: SRV, tags: ['irc_381'], message: 'You are now an IRC operator — staff' }) });
       expect(isOper()).toBe(true);
 
@@ -368,28 +368,28 @@ function entry(pointer: string): BufferEntry {
       expect(c.disconnect).toHaveBeenCalledWith(true);
       expect(connectionState()).toBe(ConnectionState.DISCONNECTED);
       expect(buffersState.buffers).toEqual({});
-      expect(ircxState.orochiServers).toEqual({});
+      expect(ircxState.onyxServers).toEqual({});
       expect(isOper()).toBe(false);
     });
   });
 
-  describe('orochi detection', () => {
-    it('marks the server when a live 004 names orochi', () => {
+  describe('Onyx Server detection', () => {
+    it('marks the server when a live 004 names onyx', () => {
       const c = connectWithBuffers();
 
       emit(c, 'lineAdded', { line: makeLine({
         buffer: SRV,
         tags: ['irc_004'],
-        message: 'kain eshmaki.me orochi-0.1.0 iowx bklmnt',
+        message: 'kain eshmaki.me onyx-0.1.0 iowx bklmnt',
       }) });
 
-      expect(isOrochiServer('esh')).toBe(true);
+      expect(isOnyxServer('esh')).toBe(true);
     });
 
-    it('marks known Orochi hosts even when the 004 version does not name orochi', () => {
+    it('marks known Onyx Server hosts even when the 004 version does not name onyx', () => {
       const c = connectWithBuffers();
-      const onOrochiDetected = vi.fn();
-      setRelayObserver({ onOrochiDetected });
+      const onOnyxServerDetected = vi.fn();
+      setRelayObserver({ onOnyxServerDetected });
 
       emit(c, 'lineAdded', { line: makeLine({
         buffer: SRV,
@@ -397,17 +397,17 @@ function entry(pointer: string): BufferEntry {
         message: 'kain ircx.us ircd-compat-2026 iowx bklmnt',
       }) });
 
-      expect(isOrochiServer('esh')).toBe(true);
-      expect(onOrochiDetected).toHaveBeenCalledWith('esh', 'wss://ircx.us:8080');
+      expect(isOnyxServer('esh')).toBe(true);
+      expect(onOnyxServerDetected).toHaveBeenCalledWith('esh', 'wss://ircx.us:8080');
     });
 
-    it('does not treat non-Orochi server names as current Orochi detection', () => {
+    it('does not treat non-Onyx Server host names as current Onyx Server detection', () => {
       const c = connectWithBuffers();
 
       emit(c, 'lineAdded', { line: makeLine({
         buffer: SRV, tags: ['irc_004'], message: 'kain host legacyd 1.0 abc',
       }) });
-      expect(isOrochiServer('esh')).toBe(false);
+      expect(isOnyxServer('esh')).toBe(false);
     });
 
     it('does not mark on unrelated 004s or embedded substrings', () => {
@@ -416,28 +416,28 @@ function entry(pointer: string): BufferEntry {
       emit(c, 'lineAdded', { line: makeLine({
         buffer: SRV, tags: ['irc_004'], message: 'kain host ircd-hybrid-8.2 iow',
       }) });
-      expect(isOrochiServer('esh')).toBe(false);
+      expect(isOnyxServer('esh')).toBe(false);
 
       emit(c, 'lineAdded', { line: makeLine({
-        buffer: SRV, tags: ['irc_004'], message: 'kain host orochimarud-1.0 iow',
+        buffer: SRV, tags: ['irc_004'], message: 'kain host onyxserver-1.0 iow',
       }) });
-      expect(isOrochiServer('esh')).toBe(false);
+      expect(isOnyxServer('esh')).toBe(false);
     });
 
     it('notifies the RelayObserver and replays pre-existing channel buffers', () => {
       const c = connectWithBuffers();
-      const onOrochiDetected = vi.fn();
+      const onOnyxServerDetected = vi.fn();
       const onChannelBufferOpened = vi.fn();
-      setRelayObserver({ onOrochiDetected, onChannelBufferOpened });
+      setRelayObserver({ onOnyxServerDetected, onChannelBufferOpened });
 
       emit(c, 'lineAdded', { line: makeLine({
-        buffer: SRV, tags: ['irc_004'], message: 'kain host orochi-0.1.0 iow',
+        buffer: SRV, tags: ['irc_004'], message: 'kain host onyx-0.1.0 iow',
       }) });
 
-      expect(onOrochiDetected).toHaveBeenCalledWith('esh', 'wss://host:8080');
+      expect(onOnyxServerDetected).toHaveBeenCalledWith('esh', 'wss://host:8080');
       expect(onChannelBufferOpened).toHaveBeenCalledWith('esh', '#general');
 
-      // New channel buffers on a known-orochi server also notify
+      // New channel buffers on a known Onyx Server server also notify
       emit(c, 'bufferOpened', { buffer: makeBuffer('ptr-chan2', {
         number: 3,
         name: 'irc.esh.#random',
@@ -447,27 +447,27 @@ function entry(pointer: string): BufferEntry {
       expect(onChannelBufferOpened).toHaveBeenCalledWith('esh', '#random');
     });
 
-    it('detects orochi from a server-buffer history replay', () => {
+    it('detects Onyx Server from a server-buffer history replay', () => {
       const c = connectWithBuffers();
 
       emit(c, 'historyLoaded', { lines: [
-        makeLine({ buffer: SRV, tags: ['irc_004'], message: 'kain host orochi-0.1.0 iow' }),
+        makeLine({ buffer: SRV, tags: ['irc_004'], message: 'kain host onyx-0.1.0 iow' }),
         makeLine({ buffer: SRV, message: 'welcome back' }),
       ] });
 
-      expect(isOrochiServer('esh')).toBe(true);
+      expect(isOnyxServer('esh')).toBe(true);
       expect(entry(SRV).lines).toHaveLength(2);
     });
 
-    it('maps recognised service replies from the Orochi server buffer', () => {
+    it('maps recognised service replies from the Onyx Server buffer', () => {
       const c = connectWithBuffers();
-      markOrochi('esh');
+      markOnyxServer('esh');
       const at = new Date('2026-07-16T12:00:00.000Z');
 
       emit(c, 'lineAdded', { line: makeLine({
         buffer: SRV,
         date: at,
-        nick: 'orochi.test',
+        nick: 'onyx.test',
         tags: ['irc_fail'],
         message: 'FAIL CHANNEL ACCESS_DENIED :Founder access required',
       }) });
@@ -484,12 +484,12 @@ function entry(pointer: string): BufferEntry {
 
     it('records stable service feedback only once across different relay pointers', () => {
       const c = connectWithBuffers();
-      markOrochi('esh');
+      markOnyxServer('esh');
       const at = new Date('2026-07-16T12:00:00.000Z');
       const feedback: Partial<WeeChatLine> & { buffer: string } = {
         buffer: SRV,
         date: at,
-        nick: 'orochi.test',
+        nick: 'onyx.test',
         tags: ['irc_fail'],
         msgid: 'service-feedback-1',
         message: 'FAIL CHANNEL ACCESS_DENIED :Founder access required',
@@ -505,7 +505,7 @@ function entry(pointer: string): BufferEntry {
 
     it('does not mirror unrelated notices or session-token credentials', () => {
       const c = connectWithBuffers();
-      markOrochi('esh');
+      markOnyxServer('esh');
 
       emit(c, 'lineAdded', { line: makeLine({
         buffer: SRV,
@@ -523,7 +523,7 @@ function entry(pointer: string): BufferEntry {
 
     it('rejects service-shaped feedback authored by a user in the server buffer', () => {
       const c = connectWithBuffers();
-      markOrochi('esh');
+      markOnyxServer('esh');
 
       emit(c, 'lineAdded', { line: makeLine({
         buffer: SRV,
@@ -537,7 +537,7 @@ function entry(pointer: string): BufferEntry {
 
     it('does not mistake a user matching the local relay alias for the server', () => {
       const c = connectWithBuffers();
-      markOrochi('esh');
+      markOnyxServer('esh');
 
       emit(c, 'lineAdded', { line: makeLine({
         buffer: SRV,
@@ -826,7 +826,7 @@ function entry(pointer: string): BufferEntry {
       sendInput('/call alice');
 
       const last = entry(CHAN).lines[entry(CHAN).lines.length - 1];
-      expect(last?.message).toContain('requires the orochi bridge');
+      expect(last?.message).toContain('requires the onyx-server bridge');
       expect(last?.tags).toContain('darkbear_system');
       expect(c.sendInput).not.toHaveBeenCalled();
     });
@@ -857,7 +857,7 @@ function entry(pointer: string): BufferEntry {
       expect(c.sendInput).toHaveBeenCalledWith(SRV, '/quote MONITOR - Alice');
     });
 
-    it('/prop passes through to the relay on non-orochi servers', () => {
+    it('/prop passes through to the relay on non-Onyx Server nodes', () => {
       const c = connectWithBuffers();
       setActiveBuffer(CHAN);
 
@@ -867,10 +867,10 @@ function entry(pointer: string): BufferEntry {
       expect(c.sendInput).toHaveBeenCalledWith(CHAN, '/prop #general');
     });
 
-    it('/prop is intercepted on orochi servers and quoted as PROP', () => {
+    it('/prop is intercepted on Onyx Server nodes and quoted as PROP', () => {
       const c = connectWithBuffers();
       setActiveBuffer(CHAN);
-      markOrochi('esh');
+      markOnyxServer('esh');
 
       sendInput('/prop #general');
 
@@ -879,20 +879,20 @@ function entry(pointer: string): BufferEntry {
       expect(c.sendInput).not.toHaveBeenCalledWith(CHAN, '/prop #general');
     });
 
-    it('/whisper on an orochi channel quotes WHISPER with the message', () => {
+    it('/whisper on an Onyx Server channel quotes WHISPER with the message', () => {
       const c = connectWithBuffers();
       setActiveBuffer(CHAN);
-      markOrochi('esh');
+      markOnyxServer('esh');
 
       expect(sendInput('/w alice psst secret plans')).toBe(true);
 
       expect(c.sendInput).toHaveBeenCalledWith(SRV, '/quote WHISPER #general alice :psst secret plans');
     });
 
-    it('propagates rejected Orochi extension command dispatch', () => {
+    it('propagates rejected Onyx Server extension command dispatch', () => {
       const c = connectWithBuffers();
       setActiveBuffer(CHAN);
-      markOrochi('esh');
+      markOnyxServer('esh');
       c.sendInput.mockReturnValue(false);
 
       expect(sendInput('/w alice keep this')).toBe(false);

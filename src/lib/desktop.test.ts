@@ -3,8 +3,8 @@ import { parseDesktopDeepLink } from './desktop';
 
 describe('parseDesktopDeepLink', () => {
   it('accepts only a controlled buffer-navigation target', () => {
-    expect(parseDesktopDeepLink('darkbear://open/buffer?target=irc.orochi.%23darkbear'))
-      .toBe('irc.orochi.#darkbear');
+    expect(parseDesktopDeepLink('darkbear://open/buffer?target=irc.onyx.%23darkbear'))
+      .toBe('irc.onyx.#darkbear');
     expect(parseDesktopDeepLink('darkbear://open/buffer?target=0x1234')).toBe('0x1234');
   });
 

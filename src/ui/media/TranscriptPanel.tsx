@@ -1,12 +1,12 @@
 import { createEffect, createSignal, For, onMount, Show } from 'solid-js';
-import type { SuimyakuTranscriptEntry } from '@/lib/suimyaku-media/types';
+import type { CadenceTranscriptEntry } from '@/lib/cadence-media/types';
 import { downloadCallTranscript } from '@/lib/callTranscript';
 import { settings, updateSettings } from '@/state/settings';
 import { formatDate } from '@/lib/i18n';
 
 interface Props {
   scope: string;
-  entries: readonly SuimyakuTranscriptEntry[];
+  entries: readonly CadenceTranscriptEntry[];
   onClose: () => void;
 }
 

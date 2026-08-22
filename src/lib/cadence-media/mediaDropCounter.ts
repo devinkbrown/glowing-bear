@@ -52,7 +52,7 @@ export function bumpDrop(reason: string): number {
     const last = warnedAt.get(reason) ?? 0;
     if (next > last) {
       warnedAt.set(reason, next);
-      console.warn(`[suimyaku-media] ${next} swallowed rejections at "${reason}"`);
+      console.warn(`[cadence-media] ${next} swallowed rejections at "${reason}"`);
     }
   }
   return next;

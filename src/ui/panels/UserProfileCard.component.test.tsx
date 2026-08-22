@@ -17,7 +17,7 @@ const state = vi.hoisted(() => ({
           localVars: {
             type: 'channel',
             channel: '#darkbear',
-            server: 'orochi.test',
+            server: 'onyx.test',
             nick: 'tester',
           },
         },

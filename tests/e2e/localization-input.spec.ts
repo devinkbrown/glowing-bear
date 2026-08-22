@@ -81,7 +81,7 @@ test.describe('localization and input composition', () => {
     await expect(totpDigit).toBeFocused();
     await finishComposition(totpDigit);
 
-    const bridgeToggle = page.getByRole('button', { name: 'تفعيل جسر Orochi' });
+    const bridgeToggle = page.getByRole('button', { name: 'تفعيل جسر Onyx Server' });
     await bridgeToggle.click();
     const bridgeAccount = page.getByLabel('حساب الجسر');
     const bridgePassword = page.getByLabel('كلمة مرور الجسر');
@@ -105,8 +105,8 @@ test.describe('localization and input composition', () => {
     await connect.click();
     await expect(page.getByText('#darkbear', { exact: true }).first()).toBeVisible();
     relay.sendServerIncoming(
-      'tester orochi.test orochi-0.1.0 iowx bklmnt',
-      'orochi.test',
+      'tester onyx.test onyx-0.1.0 iowx bklmnt',
+      'onyx.test',
       ['irc_004'],
     );
 
@@ -175,7 +175,7 @@ test.describe('localization and input composition', () => {
       .include('[role="dialog"]')
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
       .analyze();
-    await testInfo.attach('arabic-orochi-services-axe-results', {
+    await testInfo.attach('arabic-onyx-services-axe-results', {
       body: JSON.stringify(servicesAxe, null, 2),
       contentType: 'application/json',
     });

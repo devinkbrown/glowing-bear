@@ -33,8 +33,8 @@ export default tseslint.config(
     // Browser/Emscripten globals have no complete upstream declaration. Keep
     // unsafety isolated to these adapter files; application code stays strict.
     files: [
-      'src/lib/suimyaku-media/OpcodecWasm.ts',
-      'src/lib/suimyaku-media/videoEncodeWorker.ts',
+      'src/lib/cadence-media/OpcodecWasm.ts',
+      'src/lib/cadence-media/videoEncodeWorker.ts',
     ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',

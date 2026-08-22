@@ -1,7 +1,7 @@
 import { bridgeState } from '@/state/bridge';
 import { connectionError, connectionState, lag, relayDiagnostics } from '@/state/connection';
 import { mediaState } from '@/state/media';
-import { snapshotDrops } from '@/lib/suimyaku-media/mediaDropCounter';
+import { snapshotDrops } from '@/lib/cadence-media/mediaDropCounter';
 import { snapshotDiagnosticEvents } from '@/lib/diagnosticsEvents';
 
 export interface SupportBundle {

@@ -96,7 +96,7 @@ describe('preference sync document', () => {
   });
 });
 
-describe('Orochi metadata codec', () => {
+describe('Onyx Server metadata codec', () => {
   it('round-trips chunked collections and emits the manifest last', () => {
     const buffers = Object.fromEntries(Array.from({ length: 72 }, (_, index) => [
       `irc.example.channel-${index.toString().padStart(3, '0')}`,

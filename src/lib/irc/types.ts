@@ -75,7 +75,7 @@ export interface ChatMessage {
 }
 
 /**
- * Channel member status mode letters, per Orochi's
+ * Channel member status mode letters, per Onyx Server's
  * `ISUPPORT PREFIX=(YQqov)*!.@+`:
  *   Y → '*' network-operator (server-derived, render-only; never set via MODE)
  *   Q → '!' founder   (channel creator; ops/owners cannot strip)
@@ -128,7 +128,7 @@ export interface ISupport {
   TOPICLEN: number;
   IRCX: boolean;
   /**
-   * Deprecated compatibility field — Orochi advertises NO media ISUPPORT token.
+   * Deprecated compatibility field — Onyx Server advertises NO media ISUPPORT token.
    * Voice/video availability is gated by the store's `mediaAvailable` selector
    * (set on bridge welcome / Event Spine MEDIA), not a 005 token. Retained only because a
    * non-media feature badge in HomeView still reads it; never set from 005.

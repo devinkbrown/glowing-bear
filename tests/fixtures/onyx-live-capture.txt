@@ -1,16 +1,16 @@
 >>>A CAP LS 302
 >>>A NICK dbtA3950
 >>>A USER webchat 0 * :darkbear capture
-<<<A :eshmaki.me CAP * LS * :server-time message-tags echo-message sasl=PLAIN,EXTERNAL,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,SESSION-TOKEN multi-prefix userhost-in-names away-notify setname extended-join invite-notify account-tag orochi/session-sync orochi/bouncer chghost no-implicit-names draft/no-implicit-names draft/chathistory draft/search draft/message-redaction draft/message-editing draft/read-marker
+<<<A :eshmaki.me CAP * LS * :server-time message-tags echo-message sasl=PLAIN,EXTERNAL,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,SESSION-TOKEN multi-prefix userhost-in-names away-notify setname extended-join invite-notify account-tag onyx/session-sync onyx/bouncer chghost no-implicit-names draft/no-implicit-names draft/chathistory draft/search draft/message-redaction draft/message-editing draft/read-marker
 >>>A CAP REQ :server-time message-tags echo-message multi-prefix away-notify account-tag batch draft/chathistory draft/typing draft/react draft/reply draft/metadata-2 draft/read-marker extended-join
 <<<A :eshmaki.me CAP * LS :draft/event-playback draft/typing draft/react draft/reply batch bot draft/channel-rename extended-monitor account-notify draft/account-registration=custom-account-name draft/metadata-2 standard-replies cap-notify labeled-response draft/pre-away draft/channel-context draft/multiline=max-bytes=4096,max-lines=24 sts=duration=2592000,port=6697 account-extban=a utf8-only draft/netsplit draft/netjoin
 <<<A :eshmaki.me CAP dbtA3950 ACK :server-time message-tags echo-message multi-prefix away-notify account-tag batch draft/chathistory draft/typing draft/react draft/reply draft/metadata-2 draft/read-marker extended-join
 >>>A CAP END
 <<<A :eshmaki.me 001 dbtA3950 :Welcome to the IRCXNet network, dbtA3950 - you are dbtA3950!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet
 >>>A IRCX
-<<<A :eshmaki.me 002 dbtA3950 :Your host is eshmaki.me (node 1), running orochi-0.1.0+96b3126
+<<<A :eshmaki.me 002 dbtA3950 :Your host is eshmaki.me (node 1), running onyx-0.1.0+96b3126
 <<<A :eshmaki.me 003 dbtA3950 :This node has been weaving the mesh since 03 Jul 2026 14:53 UTC
-<<<A :eshmaki.me 004 dbtA3950 eshmaki.me orochi-0.1.0+96b3126 BCDHMPQRagijoprxz ACIMNOSTWbegiklmnst Ibekl
+<<<A :eshmaki.me 004 dbtA3950 eshmaki.me onyx-0.1.0+96b3126 BCDHMPQRagijoprxz ACIMNOSTWbegiklmnst Ibekl
 <<<A :eshmaki.me 005 dbtA3950 IRCX NETWORK=IRCXNet CHANTYPES=#& NICKLEN=64 TOPICLEN=390 AWAYLEN=256 KICKLEN=307 CHANNELLEN=64 MAXLIST=beIZ:100 CHANLIMIT=#&:50 MAXTARGETS=4 MONITOR=128 SILENCE=32 CASEMAPPING=ascii CHANMODES=beIZ,k,lfj,imnstCTNMSgWOAVUFD BOT=B EXTBAN=$,acgmrz WHOX UTF8ONLY PREFIX=(YQqov)*!.@+ STATUSMSG=!.@+ MODES=1 VAPID=BNWGYVizYSlVkgMSfR2FoJzqIMfC6oU7SK1ZSH8JE_MLIbjyusafAzw7d2mRh_qho-PG7fLYIRFuovRfTqXhIZ0 :are supported by this server
 <<<A :eshmaki.me NOTICE dbtA3950 :secured (TLS1.3 AES-128-GCM) | you are f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet | not logged in
 <<<A :eshmaki.me NOTICE dbtA3950 :mesh: 2 nodes linked | /HELP to get started
@@ -32,16 +32,16 @@
 >>>B CAP LS 302
 >>>B NICK dbtB351
 >>>B USER webchat 0 * :darkbear capture
-<<<B :eshmaki.me CAP * LS * :server-time message-tags echo-message sasl=PLAIN,EXTERNAL,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,SESSION-TOKEN multi-prefix userhost-in-names away-notify setname extended-join invite-notify account-tag orochi/session-sync orochi/bouncer chghost no-implicit-names draft/no-implicit-names draft/chathistory draft/search draft/message-redaction draft/message-editing draft/read-marker
+<<<B :eshmaki.me CAP * LS * :server-time message-tags echo-message sasl=PLAIN,EXTERNAL,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,SESSION-TOKEN multi-prefix userhost-in-names away-notify setname extended-join invite-notify account-tag onyx/session-sync onyx/bouncer chghost no-implicit-names draft/no-implicit-names draft/chathistory draft/search draft/message-redaction draft/message-editing draft/read-marker
 >>>B CAP REQ :server-time message-tags echo-message multi-prefix away-notify account-tag batch draft/chathistory draft/typing draft/react draft/reply draft/metadata-2 draft/read-marker extended-join
 <<<B :eshmaki.me CAP * LS :draft/event-playback draft/typing draft/react draft/reply batch bot draft/channel-rename extended-monitor account-notify draft/account-registration=custom-account-name draft/metadata-2 standard-replies cap-notify labeled-response draft/pre-away draft/channel-context draft/multiline=max-bytes=4096,max-lines=24 sts=duration=2592000,port=6697 account-extban=a utf8-only draft/netsplit draft/netjoin
 <<<B :eshmaki.me CAP dbtB351 ACK :server-time message-tags echo-message multi-prefix away-notify account-tag batch draft/chathistory draft/typing draft/react draft/reply draft/metadata-2 draft/read-marker extended-join
 >>>B CAP END
 <<<B :eshmaki.me 001 dbtB351 :Welcome to the IRCXNet network, dbtB351 - you are dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet
 >>>B IRCX
-<<<B :eshmaki.me 002 dbtB351 :Your host is eshmaki.me (node 1), running orochi-0.1.0+96b3126
+<<<B :eshmaki.me 002 dbtB351 :Your host is eshmaki.me (node 1), running onyx-0.1.0+96b3126
 <<<B :eshmaki.me 003 dbtB351 :This node has been weaving the mesh since 03 Jul 2026 14:53 UTC
-<<<B :eshmaki.me 004 dbtB351 eshmaki.me orochi-0.1.0+96b3126 BCDHMPQRagijoprxz ACIMNOSTWbegiklmnst Ibekl
+<<<B :eshmaki.me 004 dbtB351 eshmaki.me onyx-0.1.0+96b3126 BCDHMPQRagijoprxz ACIMNOSTWbegiklmnst Ibekl
 <<<B :eshmaki.me 005 dbtB351 IRCX NETWORK=IRCXNet CHANTYPES=#& NICKLEN=64 TOPICLEN=390 AWAYLEN=256 KICKLEN=307 CHANNELLEN=64 MAXLIST=beIZ:100 CHANLIMIT=#&:50 MAXTARGETS=4 MONITOR=128 SILENCE=32 CASEMAPPING=ascii CHANMODES=beIZ,k,lfj,imnstCTNMSgWOAVUFD BOT=B EXTBAN=$,acgmrz WHOX UTF8ONLY PREFIX=(YQqov)*!.@+ STATUSMSG=!.@+ MODES=1 VAPID=BNWGYVizYSlVkgMSfR2FoJzqIMfC6oU7SK1ZSH8JE_MLIbjyusafAzw7d2mRh_qho-PG7fLYIRFuovRfTqXhIZ0 :are supported by this server
 <<<B :eshmaki.me NOTICE dbtB351 :secured (TLS1.3 AES-128-GCM) | you are f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet | not logged in
 <<<B :eshmaki.me NOTICE dbtB351 :mesh: 2 nodes linked | /HELP to get started
@@ -126,13 +126,13 @@
 <<<B :eshmaki.me 762 dbtB351 :end of metadata
 <<<A :eshmaki.me 730 dbtA3950 :dbtB351!webchat@f76dcb8e1062d4e6.81f4a613.6b14eabb.340fe6e7.c2aba145.a0.xx.ip6.ircxnet
 >>>A MEDIA JOIN #dbtest19036 voice
-<<<A @orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA JOIN #dbtest19036 dbtA3950 voice
+<<<A @onyx_server.io/category=SERVICE;onyx_server.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA JOIN #dbtest19036 dbtA3950 voice
 <<<A :eshmaki.me EVENT dbtA3950 MEDIA MACKEY #dbtest19036 CkJLQ8My54lDA9r5kcDReJH1pUxkDi2rL0DLhJeBmzc=
 >>>A MEDIA ROSTER #dbtest19036
 <<<A :eshmaki.me EVENT dbtA3950 MEDIA ROSTER #dbtest19036 dbtA3950 voice main 0 0 -
 >>>A MEDIA LEAVE #dbtest19036
 <<<A :eshmaki.me EVENT dbtA3950 MEDIA ROSTER-END #dbtest19036 count=1
-<<<A @orochi.io/category=SERVICE;orochi.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA LEAVE #dbtest19036 dbtA3950
+<<<A @onyx_server.io/category=SERVICE;onyx_server.io/severity=notice :eshmaki.me EVENT dbtA3950 MEDIA LEAVE #dbtest19036 dbtA3950
 >>>A LISTX
 <<<A :eshmaki.me 811 dbtA3950 Channel Members CreatedMs TopicMs :Topic
 <<<A :eshmaki.me 812 dbtA3950 #test 1 0 0 :

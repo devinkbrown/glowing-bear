@@ -59,7 +59,7 @@ const control = command("tar", ["xOzf", "-", "control"], controlArchive).toStrin
 for (const field of [
   "Package: dark-bear",
   "Version: 3.0.0",
-  "Description: DarkBear chat client for Orochi",
+  "Description: DarkBear chat client for Onyx Server",
 ]) {
   if (!control.includes(field)) fail(`control metadata is missing ${field}`);
 }

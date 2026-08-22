@@ -119,7 +119,7 @@ function buffersFrame(includeQuery: boolean, includeServer: boolean): Buffer {
   if (includeServer) {
     body
       .short(SERVER_PTR).u32(3).str('irc.fixture.server.fixture').str('fixture')
-      .str('Orochi operator server').u32(0).u32(0)
+      .str('Onyx Server operator server').u32(0).u32(0)
       .stringTable({ plugin: 'irc', type: 'server', server: 'fixture', network: 'fixture', nick: SELF_NICK })
       .u32(3).u8(0);
   }
@@ -288,7 +288,7 @@ export class MockWeeChatRelay {
     }));
   }
 
-  sendServerIncoming(message: string, nick = 'orochi.test', tags: string[] = []): void {
+  sendServerIncoming(message: string, nick = 'onyx.test', tags: string[] = []): void {
     const socket = this.sockets.at(-1);
     if (!socket) throw new Error('No relay connection is active');
     this.nextLine += 1;

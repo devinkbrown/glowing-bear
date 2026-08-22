@@ -98,7 +98,7 @@ their resolutions. Secrets and credential values are never recorded.
 ### R0.3 session-only secret storage
 
 - Audited active settings, saved relay profiles, settings export/import, direct
-  Orochi credentials, and the bridge connection lifecycle. Passwords could be
+  Onyx Server credentials, and the bridge connection lifecycle. Passwords could be
   persisted through all four paths.
 - Added explicit relay, bridge, and per-profile remember flags with a default of
   false.
@@ -243,7 +243,7 @@ their resolutions. Secrets and credential values are never recorded.
 - Added private local message bookmarks with sanitized notes, stable source
   identity, archive-opt-in gating, and archive retention/delete/wipe coupling.
 - Added a bounded, deduplicated activity store for mentions, linked replies,
-  DMs, explicit operator alerts, and Orochi call transitions. Inbox unread state
+  DMs, explicit operator alerts, and Onyx Server call transitions. Inbox unread state
   is independent from buffer clearing.
 - Added a code-split responsive Activity/Saved panel, desktop and mobile badges,
   source jumps or explicit expired/unavailable explanations, and the `Alt+A`
@@ -255,7 +255,7 @@ their resolutions. Secrets and credential values are never recorded.
 
 ### R1.4 cross-device preferences
 
-- Audited the existing direct Orochi session, `draft/metadata-2` negotiation,
+- Audited the existing direct Onyx Server session, `draft/metadata-2` negotiation,
   stable buffer-name stores, thread read markers, settings persistence, and the
   server's real 512-byte metadata-value ceiling before selecting the wire shape.
 - Added a versioned preference document with independently stamped appearance,
@@ -266,7 +266,7 @@ their resolutions. Secrets and credential values are never recorded.
   accessibility, global alerts, notification tiers, pins, mutes, and read
   positions can enter the document. Passwords, endpoints, custom CSS, archives,
   message text, E2EE material, and media devices have no wire representation.
-- Enforced Orochi's metadata limits with generation-tagged buffer/read parts,
+- Enforced Onyx Server's metadata limits with generation-tagged buffer/read parts,
   a maximum part/entry budget, a manifest published last, stale-part cleanup,
   and fail-closed rejection of incomplete or mixed generations.
 - Added a WebCrypto-generated non-secret device ID, a local typed sync cache,
@@ -303,11 +303,11 @@ their resolutions. Secrets and credential values are never recorded.
   audio-only fallback, signal/codec cards, responsive device controls, exact
   recovery guidance, keyboard focus trapping, and confirmation disabled until
   the pre-join gate succeeds.
-- Added a real KaguraVox/KaguraVis construction probe. The first Chromium
+- Added a real CadenceVox/CadenceVis construction probe. The first Chromium
   journey exposed an invalid 320x180 probe, then the cross-engine run proved
-  smaller KaguraVis profiles are not accepted consistently by the shipped
+  smaller CadenceVis profiles are not accepted consistently by the shipped
   binary. The final probe uses its verified 1280x720 call profile.
-- Moved the KaguraVis resolution/fallback constructor into a pure shared module
+- Moved the CadenceVis resolution/fallback constructor into a pure shared module
   and reused it in Worker and main-thread video capture. This fixed the previous
   Safari/Firefox fallback path, which constructed the requested 1920x1080
   encoder directly even when the binary rejected that size.
@@ -322,7 +322,7 @@ their resolutions. Secrets and credential values are never recorded.
   warmed single-worker WebKit matrix. Eight otherwise healthy journeys timed
   out late in visible interactions. Raised only the journey-level ceiling to
   90 seconds while retaining narrow assertion timeouts; the rerun also exposed
-  that the deterministic Orochi fixture did not answer keepalive `PING`, so it
+  that the deterministic Onyx Server fixture did not answer keepalive `PING`, so it
   now replies with `PONG` instead of filtering the resulting timeout errors.
 - Final local gate passed strict ESLint, TypeScript, 98 test files with 1,599
   tests, production build, dependency/shell/Node syntax checks, whitespace and
@@ -333,13 +333,13 @@ their resolutions. Secrets and credential values are never recorded.
 ### R2.2 call health and adaptive recovery
 
 - Audited the native Kagura datagram path, peer registry, Worker and
-  main-thread encoders, Orochi `MEDIA STATS`/`ABR` controls, bridge reconnect
+  main-thread encoders, Onyx Server `MEDIA STATS`/`ABR` controls, bridge reconnect
   ownership, and the mounted call UI before changing state.
 - Added a reorder-aware packet loss estimator with a fixed 128-packet bit
   window per stream and a 128-stream hard cap. Late packets repair observed
   gaps, duplicates do not inflate samples, u32 wraparound is handled, departed
   streams are removed, and teardown clears all lanes.
-- Added one adaptive quality controller driven by Orochi bitrate guidance,
+- Added one adaptive quality controller driven by Onyx Server bitrate guidance,
   loss, and encoder pressure. It requires consecutive bad samples, steps down
   one tier at a time, and uses a longer headroom hold plus recovery margins to
   step back up without oscillation.
@@ -351,7 +351,7 @@ their resolutions. Secrets and credential values are never recorded.
 - Corrected jitter accounting to retain an arrival clock per peer rather than
   mixing interleaved participants into one timestamp. Aggregate jitter and all
   call-health metrics reset on teardown.
-- Routed high-loss reports through Orochi's implemented `MEDIA ABR` command,
+- Routed high-loss reports through Onyx Server's implemented `MEDIA ABR` command,
   consumed targeted ABR bitrate/keyframe guidance, and forced outbound recovery
   keyframes after loss and quality recovery.
 - Split transient bridge state from intentional client detach. A short socket
@@ -360,16 +360,16 @@ their resolutions. Secrets and credential values are never recorded.
   A 20-second grace expiry or explicit bridge teardown still stops every track
   and clears every timer, key, router, and peer.
 - Added typed call-health state, diagnostic bundle fields, a compact responsive
-  inspector for loss/jitter/encode load/Orochi rate/tier, and explicit degraded
+  inspector for loss/jitter/encode load/Onyx Server rate/tier, and explicit degraded
   and reconnecting announcements. The minimized call pill also retains a
   non-color-only health indicator.
 - Added pure loss/reorder/bounds/hysteresis coverage, engine ABR and reconnect
   lifecycle tests, bridge transport tests, state/component tests, and a real
   five-project browser journey that injects Kagura sequence 100/102/101,
-  checks loss repair, runs scoped axe, restarts Orochi, and proves one Alice
+  checks loss repair, runs scoped axe, restarts Onyx Server, and proves one Alice
   peer tile and one media rejoin.
 - The browser journey exposed CSP rejection of the inline data-URL AudioWorklet
-  in Firefox and WebKit. Moved the live KaguraVox capture processor to a
+  in Firefox and WebKit. Moved the live CadenceVox capture processor to a
   base-aware same-origin asset and added that asset to atomic release preflight
   and public verification.
 - R2.2 is complete locally and not deployed.
@@ -382,7 +382,7 @@ their resolutions. Secrets and credential values are never recorded.
   fell back to relay plaintext after a failed encryption attempt, peer metadata
   overwrote keys without rotation state, and media fingerprints reported the
   local identity rather than the peer.
-- Added a small typed IndexedDB trust repository keyed by Orochi endpoint,
+- Added a small typed IndexedDB trust repository keyed by Onyx Server endpoint,
   authenticated account, and lowercase peer. It persists the pinned public key,
   a full grouped SHA-256 fingerprint, and local verification time; pins remain
   device-local and survive bridge sessions without crossing accounts or nodes.
@@ -403,7 +403,7 @@ their resolutions. Secrets and credential values are never recorded.
   clear the observed-session state.
 - Added typed repository, rotation, re-trust, fail-closed composer, settings,
   media-state, call-UI, and peer-fingerprint tests. The real browser journey
-  fetches a valid P-256 key through Orochi metadata, runs scoped axe, verifies
+  fetches a valid P-256 key through Onyx Server metadata, runs scoped axe, verifies
   and sends ciphertext, rotates the key, proves plaintext remains unsent, then
   re-trusts and resumes encrypted delivery across Chromium, Firefox, WebKit,
   Pixel 7, and iPhone 15.
@@ -444,7 +444,7 @@ their resolutions. Secrets and credential values are never recorded.
   opt-in state coverage, settings normalization/UI coverage, transcript
   navigation/export tests, live-caption presentation tests, and call shortcut
   tests.
-- The real browser journey enters an Orochi voice room, injects two Event Spine
+- The real browser journey enters an Onyx Server voice room, injects two Event Spine
   captions, verifies live-region and keyboard navigation, changes presentation,
   runs scoped axe, downloads and inspects the transcript, confirms two records
   in the Worker-owned IndexedDB archive, and exercises C/Escape/D/H across
@@ -459,7 +459,7 @@ their resolutions. Secrets and credential values are never recorded.
 ### R3.1 quiet hours and actionable notifications
 
 - Audited the pure all/mentions/mute decision table, foreground Notification
-  constructor path, Orochi Web Push registration, production cache-killer
+  constructor path, Onyx Server Web Push registration, production cache-killer
   service worker, app click routing, settings persistence, and stable-name
   buffer preference stores. The existing tier model was sound, but alert
   delivery had no clock/DND layer and the service worker could only open the
@@ -486,7 +486,7 @@ their resolutions. Secrets and credential values are never recorded.
   URL.
 - Persisted the notification policy in a dedicated service-worker IndexedDB
   record so disabled alerts, scheduled DND, global pauses, and permanent/
-  temporary target mutes also suppress closed-tab Orochi push. The worker
+  temporary target mutes also suppress closed-tab Onyx Server push. The worker
   validates every policy update, fails closed for encrypted DM bodies, rejects
   cross-origin action URLs, and applies a one-hour target mute before opening
   the app. Inline reply metadata falls back to an ordinary open action where
@@ -551,7 +551,7 @@ their resolutions. Secrets and credential values are never recorded.
   severity-tag retention, no saved views/correlation/export/audit, immediate
   WARD and JUPE sends, and an unrestricted destructive raw-command path.
 - Extended Event Spine parsing without collapsing protocol concepts: the wire
-  domain and verb remain structured while Orochi's `orochi.io/category`
+  domain and verb remain structured while Onyx Server's `onyx_server.io/category`
   subscription category and severity tags are retained separately. MEMBER
   events now identify channel and subject independently, enabling one nick to
   correlate across USER and MEMBER domains.
@@ -712,7 +712,7 @@ their resolutions. Secrets and credential values are never recorded.
   It accepts only `settings-v1` and `credentials-v1`, caps records at 64 KiB,
   moves blocking secret-store calls off the async IPC thread, and returns
   redacted errors. Desktop localStorage keeps connection metadata but never
-  remembered relay/profile/Orochi passwords; non-remembered passwords and all
+  remembered relay/profile/Onyx Server passwords; non-remembered passwords and all
   bearer tokens remain session-only.
 - Routed installed-shell notifications through the native notification plugin
   while retaining the encrypted-body fail-closed rule. Added restored window
@@ -744,7 +744,7 @@ their resolutions. Secrets and credential values are never recorded.
   against `navigator.languages`, with a safe English fallback.
 - Application startup applies the resolved root `lang` and `dir` together, and
   the settings UI switches locale live. Extracted core copy covers the relay and
-  Orochi credential flow, app/mobile navigation, sidebar and user list, chat
+  Onyx Server credential flow, app/mobile navigation, sidebar and user list, chat
   header/search/composer, threads, command palette actions, and preferences
   shell while retaining typed catalog completeness for every shipped locale.
 - Centralized user-facing date, time, relative-time, and numeric formatting on
@@ -757,7 +757,7 @@ their resolutions. Secrets and credential values are never recorded.
   bidi isolation so LTR nicks, commands, links, and mixed-script text retain
   their intended order inside RTL chrome.
 - Added one shared IME predicate covering `isComposing`, legacy key code 229,
-  and `Process`. Global shortcuts, relay/Orochi/TOTP credentials, main and thread
+  and `Process`. Global shortcuts, relay/Onyx Server/TOTP credentials, main and thread
   composers, message/user/sidebar search, command palette, modal focus handling,
   and mobile sheet keys now ignore composition-owned keyboard events.
 - Added settings normalization/persistence, locale formatting, RTL source
@@ -781,7 +781,7 @@ their resolutions. Secrets and credential values are never recorded.
 - OS- and user-selected reduced motion now prevent scene construction instead
   of merely hiding some SMIL nodes. `ThemeBg` also marks direct renders with an
   explicit motion state that disables CSS animation. This fixed a real Chromium
-  renderer crash found by the preference-sync journey when Orochi metadata
+  renderer crash found by the preference-sync journey when Onyx Server metadata
   changed Retro to Nord while also requesting reduced motion.
 - Replaced the credential screen's full theme-scene construction with a bounded
   three-layer CSS field and static illustrated mascot. Main-workspace scenes
@@ -809,13 +809,13 @@ their resolutions. Secrets and credential values are never recorded.
   eight intentional project-scoped skips in 21.9 minutes. No deploy or
   publication was performed.
 
-### R5.1 Orochi authentication and session continuity
+### R5.1 Onyx Server authentication and session continuity
 
-- Audited DarkBear's unchecked Orochi integration checklist against the current
-  DarkBear client and Orochi daemon/docs. The audit found that the local/mesh
+- Audited DarkBear's unchecked Onyx Server integration checklist against the current
+  DarkBear client and Onyx Server daemon/docs. The audit found that the local/mesh
   `SESSION TOKEN` reclaim credentials were implemented, but the distinct
   account-bound SASL `SESSION-TOKEN` credential was being dropped.
-- Added a strict parser for Orochi's TLS-only
+- Added a strict parser for Onyx Server's TLS-only
   `NOTICE ... :SESSIONTOKEN <account> <sst_...> expires=<unix>` response. The
   token, canonical account, and server deadline stay in session storage and are
   independently aged out without affecting the password or logical-session
@@ -825,19 +825,19 @@ their resolutions. Secrets and credential values are never recorded.
   token for the next reconnect, and falls back once to password/SCRAM after an
   explicit rejection. Rejection clears only the invalid SASL credential.
 - Both welcome-time and late buffer mirroring now suppress client JOINs when
-  `orochi/session-sync` is negotiated, leaving membership/history restoration to
-  Orochi and avoiding duplicate JOIN/NAMES/replay work.
+  `onyx/session-sync` is negotiated, leaving membership/history restoration to
+  Onyx Server and avoiding duplicate JOIN/NAMES/replay work.
 - Parser, credential, IRC-client, and bridge-controller tests cover storage,
   expiry, account identity, token-first authentication, fallback, and
   session-sync. The connected call-health journey proves PLAIN first login then
   SESSION-TOKEN reconnect in Chromium, Firefox, WebKit, Pixel 7, and iPhone 15.
-- Corrected `docs/OROCHI_PROTOCOL.md`, which had previously conflated SASL
+- Corrected `docs/ONYX_SERVER_PROTOCOL.md`, which had previously conflated SASL
   `sst_...` credentials with `SESSION RESUME` tokens, and marked the audited
   source-backed integration contracts complete.
 
-### R5.2 Orochi service reply feedback
+### R5.2 Onyx Server service reply feedback
 
-- Added a pure, typed parser for Orochi service `FAIL`, `WARN`, and `NOTE`
+- Added a pure, typed parser for Onyx Server service `FAIL`, `WARN`, and `NOTE`
   standard replies, including the NOTICE fallback used when the client lacks
   `standard-replies`, plus command-shaped `REGISTER SUCCESS` responses and the
   daemon's known account, channel, certificate, VHOST, TOTP, and TEGAMI notices.
@@ -867,7 +867,7 @@ their resolutions. Secrets and credential values are never recorded.
   service-worker/offline manifest, entry assets, lazy Services chunk, and live
   Playwright boot checks all pass.
 
-### R5.3 Orochi service command hygiene
+### R5.3 Onyx Server service command hygiene
 
 - Centralized every Services-panel `/quote` dispatch behind a 2,048-character
   bound and an ASCII control-byte guard. Client-side rejection records only a
@@ -881,7 +881,7 @@ their resolutions. Secrets and credential values are never recorded.
   Password fields use `new-password` or
   `current-password`; verification/TOTP fields use `one-time-code`, with a
   numeric TOTP input mode.
-- Updated Help copy to name Orochi's real account/channel/memo services rather
+- Updated Help copy to name Onyx Server's real account/channel/memo services rather
   than pseudo-client brands.
 - Six component tests cover safe memo normalization, oversize rejection without
   reflection, successful credential clearing, no-route retention, and browser
@@ -916,7 +916,7 @@ their resolutions. Secrets and credential values are never recorded.
   147.72 KiB initial JS, 25.43 KiB CSS, 173.14 KiB combined, and 33.96 KiB lazy
   scenes. R5.4 is complete locally and is not in the active release.
 
-### R5.5 Orochi services accessibility
+### R5.5 Onyx Server services accessibility
 
 - Added explicit accessible names to the shared Services input primitive, the
   memo textarea, and all three native selects. Shared action buttons now declare
@@ -935,7 +935,7 @@ their resolutions. Secrets and credential values are never recorded.
   tests and strict TypeScript/ESLint pass. R5.5 is complete locally and is not
   in the active release.
 
-### R5.6 Localized Orochi services
+### R5.6 Localized Onyx Server services
 
 - Added the complete services vocabulary to DarkBear's existing typed English,
   German, and Arabic catalogs. Account, channel, memo, confirmation, helper,
@@ -943,11 +943,11 @@ their resolutions. Secrets and credential values are never recorded.
   protocol verbs and wire bytes remain unchanged.
 - Added component proof for German account controls and Arabic memo controls,
   including translated dialog/field names and the inherited RTL document root.
-- Extended the connected Arabic localization/IME journey to establish Orochi
+- Extended the connected Arabic localization/IME journey to establish Onyx Server
   detection, open the localized services panel, audit its Memo tab with axe,
   and retain the full-page axe check. All five desktop/mobile browser profiles
   pass.
-- The newly reachable Orochi header state exposed a 20 px channel-info button
+- The newly reachable Onyx Server header state exposed a 20 px channel-info button
   and a sub-24 px topic expander to the WCAG 2.2 target-size gate. Both now use
   explicit non-submit buttons and at least 24 px target dimensions.
 - Full local gates pass strict TypeScript/ESLint, 127 Vitest files with 1,793
@@ -961,7 +961,7 @@ their resolutions. Secrets and credential values are never recorded.
   server-origin trust, service-worker reply routing, remote image privacy,
   upload response bounds, settings portability, mobile Services reachability,
   relay send acknowledgement, and non-modal side-panel focus behavior.
-- Made the direct Orochi bridge fail closed for every non-WSS production
+- Made the direct Onyx Server bridge fail closed for every non-WSS production
   endpoint and every credential-bearing connection. Plain `ws://` remains
   available only to unauthenticated `localhost`, IPv4 loopback, or IPv6 loopback
   development endpoints with no URL userinfo. Removed generic `ws:` permission
@@ -1009,7 +1009,7 @@ their resolutions. Secrets and credential values are never recorded.
   coverage reaches the account danger controls and resets scroll position when
   a tab is selected.
 - Propagated actual frame-acceptance booleans through the WeeChat relay and
-  direct Orochi clients. Relay input additionally requires the authenticated
+  direct Onyx Server clients. Relay input additionally requires the authenticated
   `CONNECTED` state, so the open handshake socket cannot falsely acknowledge a
   user command. A missing, closing, or synchronously failing socket now leaves
   the action retryable instead of being treated as sent.
@@ -1203,5 +1203,5 @@ their resolutions. Secrets and credential values are never recorded.
   exact public schema-v3 Worker verification.
 - Stopping point: R6.2 is deployed and verified. The next session can address
   cross-tab archive cancellation and indexed candidate-visit budgets.
-  Full per-call media E2EE remains disabled until its Orochi signalling, replay,
+  Full per-call media E2EE remains disabled until its Onyx Server signalling, replay,
   ratchet, membership, and key-confirmation lifecycle is complete.

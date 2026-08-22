@@ -2,7 +2,7 @@
   "id": "/darkbear/",
   "name": "DarkBear",
   "short_name": "DarkBear",
-  "description": "DarkBear IRC client with Orochi media controls",
+  "description": "DarkBear IRC client with Onyx Server media controls",
   "lang": "en",
   "dir": "ltr",
   "start_url": "/darkbear/",

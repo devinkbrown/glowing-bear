@@ -1,13 +1,13 @@
-// BridgeController — the persistent direct orochi WebSocket session.
+// BridgeController — the persistent direct Onyx Server WebSocket session.
 //
 // Chat rides the WeeChat relay; this bridge is a SECOND, direct IRC-over-WS
-// session to the orochi server that carries what the relay cannot:
-//   • voice/video media (the Suimyaku engine mounts on this client)
+// session to the Onyx Server that carries what the relay cannot:
+//   • voice/video media (the Cadence engine mounts on this client)
 //   • typing indicators + reaction tags (TAGMSG, both directions)
 //   • cross-device read-marker sync (MARKREAD)
-//   • E2EE DMs (Tsumugi envelopes over PRIVMSG + METADATA ocean.dm-key)
+//   • E2EE DMs (Mooring envelopes over PRIVMSG + METADATA ocean.dm-key)
 //
-// Activation: settings.bridge.enabled AND (an orochi server was detected on
+// Activation: settings.bridge.enabled AND (an Onyx Server was detected on
 // the relay OR an endpoint is pinned via settings.bridge.wsUrl / VITE_IRC_WS).
 // Detection is latched for the app session so a relay blip never tears down a
 // live call. The controller reports into src/state/bridge.ts (bridgeState) and
@@ -78,15 +78,15 @@ const BACKOFF_MAX_MS = 30_000;
 const DM_KEY_METADATA = 'ocean.dm-key';
 const KEY_REQUEST_THROTTLE_MS = 30_000;
 const BRIDGE_DISABLED_MSG =
-  'voice/video requires the orochi bridge (enable in Settings → Bridge)';
+  'voice/video requires the onyx-server bridge (enable in Settings → Bridge)';
 
 // ---------------------------------------------------------------------------
 // Pure helpers (exported for unit tests)
 // ---------------------------------------------------------------------------
 
-/** Activation predicate: enabled AND (orochi seen on the relay OR pinned). */
-export function bridgeShouldRun(enabled: boolean, orochiDetected: boolean, pinnedUrl: string): boolean {
-  return enabled && (orochiDetected || pinnedUrl.trim().length > 0);
+/** Activation predicate: enabled AND (Onyx Server seen on the relay OR pinned). */
+export function bridgeShouldRun(enabled: boolean, onyxServerDetected: boolean, pinnedUrl: string): boolean {
+  return enabled && (onyxServerDetected || pinnedUrl.trim().length > 0);
 }
 
 /** IRC server name a relay buffer belongs to ('' when indeterminable). */
@@ -103,34 +103,34 @@ export function serverNameOf(entry: BufferEntry): string {
 }
 
 /**
- * Our own nick on the relay's orochi connection: the `nick` local var of a
- * server buffer belonging to a detected orochi server (any server buffer when
+ * Our own nick on the relay's Onyx Server connection: the `nick` local var of a
+ * server buffer belonging to a detected Onyx Server (any server buffer when
  * detection hasn't happened, e.g. pinned-endpoint mode). Null when unknown.
  */
 export function relayOwnNick(
   buffers: Record<string, BufferEntry>,
-  orochiServers: ReadonlySet<string>,
+  onyxServers: ReadonlySet<string>,
 ): string | null {
   for (const e of Object.values(buffers)) {
     if (e.buffer.localVars['type'] !== 'server') continue;
     const sn = serverNameOf(e).toLowerCase();
-    if (orochiServers.size > 0 && !orochiServers.has(sn)) continue;
+    if (onyxServers.size > 0 && !onyxServers.has(sn)) continue;
     const nick = e.buffer.localVars['nick'];
     if (nick) return nick;
   }
   return null;
 }
 
-/** All channel buffers on detected orochi servers → [channelLower, ptr, name]. */
+/** All channel buffers on detected Onyx Server nodes → [channelLower, ptr, name]. */
 export function sweepChannelBuffers(
   buffers: Record<string, BufferEntry>,
-  orochiServers: ReadonlySet<string>,
+  onyxServers: ReadonlySet<string>,
 ): Array<{ channel: string; ptr: string }> {
   const out: Array<{ channel: string; ptr: string }> = [];
   for (const e of Object.values(buffers)) {
     if (e.buffer.localVars['type'] !== 'channel') continue;
     const sn = serverNameOf(e).toLowerCase();
-    if (!sn || !orochiServers.has(sn)) continue;
+    if (!sn || !onyxServers.has(sn)) continue;
     const channel = e.buffer.localVars['channel'] ?? e.buffer.shortName ?? e.buffer.name;
     if (channel) out.push({ channel, ptr: e.buffer.id });
   }
@@ -155,7 +155,7 @@ export function findChannelPtr(
 }
 
 /**
- * Map an orochi target to its relay buffer pointer: channels through the
+ * Map an Onyx Server target to its relay buffer pointer: channels through the
  * mirrored channel map, DM nicks through the relay's private buffers.
  */
 export function resolveMappedPtr(
@@ -237,7 +237,7 @@ export function isLoopbackBridgeTransport(url: string): boolean {
 }
 
 export const INSECURE_BRIDGE_TRANSPORT_ERROR =
-  'Orochi bridge requires wss://; ws:// is allowed only for unauthenticated loopback endpoints.';
+  'Onyx Server bridge requires wss://; ws:// is allowed only for unauthenticated loopback endpoints.';
 
 /**
  * Production endpoints must use WSS. The sole exception is a loopback WS
@@ -272,10 +272,10 @@ let bridgeReauthRequired = false;
 /** Exact raw IRC prefix authenticated by this connection's 001 / SASL success. */
 let authenticatedServerPrefix: string | null = null;
 
-/** Detected orochi server names (lowercased), latched for the app session. */
-const orochiServers = new Set<string>();
-const orochiGateways = new Set<string>();
-const [orochiDetected, setOrochiDetected] = createSignal(false);
+/** Detected Onyx Server names (lowercased), latched for the app session. */
+const onyxServers = new Set<string>();
+const onyxGateways = new Set<string>();
+const [onyxServerDetected, setOnyxServerDetected] = createSignal(false);
 
 /** channelLower → relay buffer pointer (inbound mapping). */
 const chanToPtr = new Map<string, string>();
@@ -307,19 +307,19 @@ function trackChannel(channel: string, ptr: string): void {
   if (!known && welcomed && client && !client.sessionSyncActive) client.join(channel);
 }
 
-function noteOrochiServer(serverName: string, wssGateway?: string): void {
-  orochiServers.add(serverName.toLowerCase());
-  if (wssGateway) orochiGateways.add(wssGateway);
-  setOrochiDetected(true);
-  for (const { channel, ptr } of sweepChannelBuffers(buffersState.buffers, orochiServers)) {
+function noteOnyxServer(serverName: string, wssGateway?: string): void {
+  onyxServers.add(serverName.toLowerCase());
+  if (wssGateway) onyxGateways.add(wssGateway);
+  setOnyxServerDetected(true);
+  for (const { channel, ptr } of sweepChannelBuffers(buffersState.buffers, onyxServers)) {
     trackChannel(channel, ptr);
   }
 }
 
 function noteChannelBuffer(serverName: string, channel: string): void {
-  // The observer only fires for known-orochi servers, so latch detection too.
-  orochiServers.add(serverName.toLowerCase());
-  setOrochiDetected(true);
+  // The observer only fires for known Onyx Server nodes, so latch detection too.
+  onyxServers.add(serverName.toLowerCase());
+  setOnyxServerDetected(true);
   const ptr = findChannelPtr(buffersState.buffers, serverName, channel);
   if (ptr) trackChannel(channel, ptr);
 }
@@ -329,7 +329,7 @@ function noteChannelBuffer(serverName: string, channel: string): void {
 // ---------------------------------------------------------------------------
 
 function resolveIdentityNick(): string {
-  const relayNick = relayOwnNick(buffersState.buffers, orochiServers);
+  const relayNick = relayOwnNick(buffersState.buffers, onyxServers);
   if (relayNick) return relayNick;
   const account = settings.bridge.account.trim();
   if (account) return account;
@@ -410,7 +410,7 @@ async function startBridge(): Promise<void> {
   let url = pinned;
   if (!url) {
     try {
-      const detected = [...orochiGateways]
+      const detected = [...onyxGateways]
         .map((wss, i) => nodeFromWssGateway(wss, `detected-${i}`))
         .filter((node): node is IrcNode => node !== null);
       url = (await selectBestNode([...detected, ...NODES])).wss;
@@ -503,7 +503,7 @@ function onWelcome(welcome: IRCMessage): void {
     c.negotiatedCaps.has('draft/metadata-2') && c.loggedIn,
   );
 
-  // Persist credentials so Orochi session tokens (NOTE SESSION TOKEN/MTOKEN)
+  // Persist credentials so Onyx Server session tokens (NOTE SESSION TOKEN/MTOKEN)
   // have a home; tokens only ever arrive on SASL-authenticated sessions.
   const account = settings.bridge.account.trim();
   if (account && settings.bridge.password) {
@@ -523,7 +523,7 @@ function onWelcome(welcome: IRCMessage): void {
     pendingSaslSessionToken = null;
   }
 
-  // With Orochi session-sync, the server restores channel membership and
+  // With Onyx Server session-sync, the server restores channel membership and
   // history after authentication. A client-side JOIN storm races that replay
   // and can duplicate NAMES/history; only mirror explicitly on older servers.
   if (!c.sessionSyncActive) {
@@ -551,7 +551,7 @@ function onDrop(reason: string): void {
     teardownClient();
     _setBridgeState({
       status: 'error',
-      error: 'Orochi session expired. Enter the account password to reconnect.',
+      error: 'Onyx Server session expired. Enter the account password to reconnect.',
     });
     return;
   }
@@ -657,7 +657,7 @@ function handleMetadataKV(target: string | undefined, key: string | undefined, v
 }
 
 function onBridgeMessage(msg: IRCMessage): void {
-  // Orochi issues the fresh SESSIONTOKEN immediately after the pre-registration
+  // Onyx Server issues the fresh SESSIONTOKEN immediately after the pre-registration
   // 903, before 001 can arrive. At this point IRCClient has already validated
   // the SASL state transition and set loggedIn, making this exact numeric
   // prefix robust protocol evidence for the server on this socket.
@@ -749,9 +749,9 @@ const backend: BridgeBackend = {
     if (vars['type'] !== 'private') return null;
     const nick = vars['channel'] ?? entry.buffer.shortName;
     if (!nick) return null;
-    // Only DMs on a detected orochi server (any server in pinned-only mode).
+    // Only DMs on a detected Onyx Server (any server in pinned-only mode).
     const sn = serverNameOf(entry).toLowerCase();
-    if (orochiServers.size > 0 && !orochiServers.has(sn)) return null;
+    if (onyxServers.size > 0 && !onyxServers.has(sn)) return null;
     return nick;
   },
 
@@ -845,15 +845,15 @@ export function replyRawArgs(
 }
 
 /**
- * Send `text` to the buffer's mapped orochi channel as a PRIVMSG carrying the
+ * Send `text` to the buffer's mapped Onyx Server channel as a PRIVMSG carrying the
  * IRCv3 `+draft/reply=<parentMsgid>` message tag, over the DIRECT bridge
  * session. Returns true when the tagged reply was sent, false when it could not
- * be — no live bridge, the buffer does not map to an orochi CHANNEL, or an
+ * be — no live bridge, the buffer does not map to an Onyx Server CHANNEL, or an
  * unsafe msgid — so the caller can fall back to the plain relay path.
  *
  * Relay-vs-direct boundary: the WeeChat relay is the message DISPLAY source but
  * its `input` command cannot carry IRCv3 message tags, so reply linkage rides
- * the direct orochi session (the relay's own weechat is joined to the same
+ * the direct Onyx Server session (the relay's own weechat is joined to the same
  * channel and renders the resulting line as our echo). Scoped to channels — DM
  * echo/E2EE interplay is out of this slice. A first-class
  * `client.privmsg(target, text, tags)` wire helper belongs to the wire layer
@@ -875,15 +875,15 @@ export function sendReply(bufferPtr: string, text: string, replyMsgid: string): 
  * Wire the bridge into the app. Call ONCE at startup (App root). Installs the
  * RelayObserver + MediaCommandSink seams on the connection store, the
  * BridgeBackend on the bridge state module, and a settings-reactive root that
- * starts/stops the direct orochi session as activation conditions change.
+ * starts/stops the direct Onyx Server session as activation conditions change.
  */
 export function initBridge(): void {
   if (initialized) return;
   initialized = true;
 
   setRelayObserver({
-    onOrochiDetected(serverName, wssGateway) {
-      noteOrochiServer(serverName, wssGateway);
+    onOnyxServerDetected(serverName, wssGateway) {
+      noteOnyxServer(serverName, wssGateway);
     },
     onChannelBufferOpened(serverName, channel) {
       noteChannelBuffer(serverName, channel);
@@ -906,9 +906,9 @@ export function initBridge(): void {
   _setPreferenceSyncTransport(preferenceTransport);
   initPreferenceSync();
 
-  // Initial sweep: the relay may have detected orochi servers (and opened
+  // Initial sweep: the relay may have detected Onyx Server nodes (and opened
   // channel buffers) before initBridge ran.
-  for (const sn of Object.keys(ircxState.orochiServers)) noteOrochiServer(sn, ircxState.orochiGateways[sn]);
+  for (const sn of Object.keys(ircxState.onyxServers)) noteOnyxServer(sn, ircxState.onyxGateways[sn]);
 
   // Settings are a Solid store — reactive tracking needs an owner scope.
   createRoot(() => {
@@ -918,7 +918,7 @@ export function initBridge(): void {
       void settings.bridge.password;
       const active = bridgeShouldRun(
         settings.bridge.enabled,
-        orochiDetected(),
+        onyxServerDetected(),
         settings.bridge.wsUrl.trim() || (import.meta.env.VITE_IRC_WS ?? ''),
       );
       if (active) void startBridge();
