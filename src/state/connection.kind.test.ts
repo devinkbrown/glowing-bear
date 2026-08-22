@@ -52,11 +52,12 @@ vi.mock('@/state/onyxSession', () => ({
   isOnyxSessionActive: () => relayMock.start.mock.calls.length > 0,
   sendOnyxInput: vi.fn(() => true),
   requestOnyxHistory: vi.fn(),
-  loadOnyxDialFromSettings: () => ({
+  loadOnyxDialFromSettings: (totp?: string) => ({
     url: 'wss://eshmaki.me:8080',
     nick: 'kain',
     account: 'kain',
     password: 'secret',
+    identifyTotp: totp,
   }),
   getOnyxSessionClient: () => null,
 }));

@@ -34,7 +34,7 @@ import {
 } from '@/state';
 import { connectModalAction } from '@/state/connectModalPolicy';
 import { mediaState } from '@/state/media';
-import { bridgeState, markRead } from '@/state/bridge';
+import { markRead } from '@/state/bridge';
 import { threadsState } from '@/state/threads';
 import { initBridge } from '@/core/bridge';
 import { syncNotificationPolicy, updateTitle } from '@/lib/notifications';

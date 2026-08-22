@@ -131,6 +131,7 @@ export function startOnyxSession(
 
 export function stopOnyxSession(): void {
   const c = client;
+  if (!c) return;
   client = null;
   welcomed = false;
   authenticatedServerPrefix = null;
@@ -139,7 +140,7 @@ export function stopOnyxSession(): void {
   _attachBridgeClient(null);
   _setMediaAvailable(false);
   _setMediaTransportConnected(false);
-  if (c) c.destroy();
+  c.destroy();
 }
 
 export function sendOnyxInput(bufferId: string, text: string): boolean {
