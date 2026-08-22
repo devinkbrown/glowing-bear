@@ -32,6 +32,19 @@ import {
 import { stripColors } from '@/lib/weechat/strip-colors';
 import { isOnyxMyinfo, onyxGatewayFromMyinfo } from '@/lib/irc/onyxDetect';
 import type { ConnectServerType } from '@/lib/connect/serverTypes';
+import {
+  hidesOnyxChrome,
+  isDirectOnyxSession,
+  type SessionKind,
+} from '@/lib/connect/sessionKind';
+import {
+  isOnyxSessionActive,
+  loadOnyxDialFromSettings,
+  requestOnyxHistory,
+  sendOnyxInput,
+  startOnyxSession,
+  stopOnyxSession,
+} from './onyxSession';
 import type { RelayFailureCode } from '@/lib/weechat/relayErrors';
 import { mixedContentBlocked } from '@/lib/weechat/relayUrl';
 import {
@@ -147,6 +160,7 @@ const [connectionState, setConnectionState] = createSignal<ConnectionState>(Conn
 const [connectionError, setConnectionError] = createSignal<string | null>(null);
 const [connectionErrorCode, setConnectionErrorCode] = createSignal<RelayFailureCode | null>(null);
 const [connectServerType, setConnectServerType] = createSignal<ConnectServerType>('weechat');
+const [sessionKind, setSessionKind] = createSignal<SessionKind>('weechat-generic');
 const [onyxExtrasOffered, setOnyxExtrasOffered] = createSignal(false);
 const [lag, setLag] = createSignal(0);
 const [historyReceipt, setHistoryReceipt] = createSignal({ bufferPtr: '', returnedCount: 0, nonce: 0 });
@@ -170,10 +184,16 @@ const [relayDiagnostics, setRelayDiagnostics] = createSignal<RelayDiagnostics>({
 export { connectionState };
 /** Last connection error message, or null (signal accessor). */
 export { connectionError };
-export { connectionErrorCode, connectServerType, onyxExtrasOffered, setConnectServerType };
+export { connectionErrorCode, connectServerType, onyxExtrasOffered, sessionKind, setConnectServerType, setSessionKind };
+
+/** Kind A hides call/GIF/IRCX chrome even after a 004 fingerprint. */
+export function showOnyxChrome(): boolean {
+  return !hidesOnyxChrome(sessionKind()) && isActiveOnyxServer();
+}
 export { isOnyxMyinfo } from '@/lib/irc/onyxDetect';
 
 export function enableOnyxExtras(): void {
+  setSessionKind('weechat-onyx');
   updateBridge({ enabled: true });
   saveSettings();
   setOnyxExtrasOffered(false);
@@ -385,7 +405,7 @@ function detectOnyxForEntry(entry: BufferEntry, line?: WeeChatLine): void {
   const gateway = line ? onyxGatewayFromMyinfo(line.message) : undefined;
   markOnyxServer(sn, gateway);
   relayObserver?.onOnyxServerDetected?.(sn, gateway);
-  if (connectServerType() === 'weechat' && !settings.bridge.enabled) {
+  if (sessionKind() === 'weechat-generic' && !settings.bridge.enabled) {
     setOnyxExtrasOffered(true);
   }
   // Replay channel-opened notifications for channels that existed before
@@ -612,11 +632,16 @@ function handleLineAdded(line: WeeChatLine): void {
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-export function connect(opts?: { totp?: string }): void {
+export function connect(opts?: { totp?: string; onyxTotp?: string; nick?: string }): void {
   // Tear down existing
   disconnect();
   bindNotificationConnectionScope();
   setConnectionErrorCode(null);
+
+  if (isDirectOnyxSession(sessionKind())) {
+    connectOnyxDirect(opts);
+    return;
+  }
 
   if (mixedContentBlocked(settings.relay.tls, settings.relay.host)) {
     setConnectionErrorCode('mixed_content');
@@ -805,6 +830,34 @@ export function connect(opts?: { totp?: string }): void {
   c.connect();
 }
 
+function connectOnyxDirect(opts?: { onyxTotp?: string; nick?: string }): void {
+  const dial = loadOnyxDialFromSettings(opts?.onyxTotp);
+  if (opts?.nick?.trim()) dial.nick = opts.nick.trim();
+  if (!dial.url || !dial.nick) {
+    setConnectionError('Onyx WSS needs an endpoint and nick.');
+    setConnectionState(ConnectionState.ERROR);
+    return;
+  }
+  setConnectionError(null);
+  setConnectionState(ConnectionState.CONNECTING);
+  startOnyxSession(dial, {
+    onReady(server) {
+      markOnyxServer(server, dial.url);
+      setConnectionState(ConnectionState.CONNECTED);
+      setConnectionError(null);
+      setAlertCoordinatorActive(true);
+    },
+    onDisconnected() {
+      setAlertCoordinatorActive(false);
+      setConnectionState(ConnectionState.DISCONNECTED);
+    },
+    onError(err) {
+      setConnectionError(err);
+      setConnectionState(ConnectionState.ERROR);
+    },
+  });
+}
+
 export function disconnect(): void {
   notificationConnectionScope = '';
   setAlertCoordinatorActive(false);
@@ -820,6 +873,7 @@ export function disconnect(): void {
     client.disconnect(true);
     client = null;
   }
+  stopOnyxSession();
   setConnectionState(ConnectionState.DISCONNECTED);
   setRelayDiagnostics({
     phase: 'idle',
@@ -842,6 +896,10 @@ export function disconnect(): void {
 }
 
 export function reconnect(): void {
+  if (isDirectOnyxSession(sessionKind())) {
+    connect();
+    return;
+  }
   if (client) {
     stopPing();
     client.disconnect(false);
@@ -868,7 +926,7 @@ function withMediaSink(target: string, fn: (sink: MediaCommandSink) => void): vo
  */
 export function sendInput(text: string, pointer?: string): boolean {
   const target = pointer ?? buffersState.activeBuffer;
-  if (!client || !target || !text.trim()) return false;
+  if ((!client && !isOnyxSessionActive()) || !target || !text.trim()) return false;
 
   if (text.startsWith('/')) {
     const parts = text.split(/\s+/);
@@ -1027,6 +1085,7 @@ export function sendInput(text: string, pointer?: string): boolean {
 
 /** Send raw input text to a specific buffer via the relay. */
 export function sendTo(bufferPointer: string, text: string): boolean {
+  if (isOnyxSessionActive()) return sendOnyxInput(bufferPointer, text);
   if (!client) return false;
   return client.sendInput(bufferPointer, text);
 }
@@ -1052,7 +1111,14 @@ export function requestHistory(count = 100, pointer?: string): void {
  */
 export function requestHistoryTotal(total: number, pointer?: string): void {
   const target = pointer ?? buffersState.activeBuffer;
-  if (!client || !target) return;
+  if (!target) return;
+  if (isOnyxSessionActive()) {
+    setLoading(target, true);
+    pendingHistoryTarget = target;
+    requestOnyxHistory(target, Math.max(1, Math.floor(total)));
+    return;
+  }
+  if (!client) return;
   const boundedTotal = Math.max(1, Math.floor(total));
   setLoading(target, true);
   pendingHistoryTarget = target;

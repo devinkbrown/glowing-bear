@@ -2,12 +2,13 @@
  * First-class connect server types, verified against onyx-server
  * `docs/reference/config.md` (`[listen]`, `[tls]`) and DarkBear's stack.
  *
- * Implemented as connect paths:
- *   1. weechat   — WeeChat binary `weechat` relay over WS/WSS
- *   2. onyx-wss  — Onyx first-party WSS (`[listen].ws`, typically 8080)
- *   3. onyx-tls  — Implicit TLS IRC (`[tls]` default 6697). Browser cannot
- *                  open raw TCP. Offered only if the desktop stack can
- *                  actually open TLS TCP; current Tauri shell cannot.
+ * Implemented as connect paths (see SessionKind A/B/C/D):
+ *   1. weechat   — WeeChat binary `weechat` relay over WS/WSS (kind A, or B
+ *                  when the user opts into extras)
+ *   2. onyx-wss  — First-class Onyx WSS (`[listen].ws`, typically 8080) — kind C.
+ *                  Optional expander adds a WeeChat relay (kind B).
+ *   3. onyx-tls  — Implicit TLS IRC (`[tls]` default 6697) — kind D. Browser
+ *                  cannot open raw TCP. Current Tauri shell cannot either.
  *
  * Documented, never offered as connect types:
  *   - `[listen].irc` plain IRC (often 6667) — dev/LAN; mixed content on HTTPS

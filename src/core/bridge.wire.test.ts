@@ -48,6 +48,7 @@ interface RelayObserverShape {
 const harness = vi.hoisted(() => ({
   clients: [] as unknown[],
   observer: null as unknown,
+  sessionKind: 'weechat-onyx' as string,
 }));
 
 vi.mock('@/lib/irc/client', () => {
@@ -80,6 +81,7 @@ vi.mock('@/state/connection', () => ({
   }),
   setMediaSink: vi.fn(),
   sendTo: vi.fn(),
+  sessionKind: () => harness.sessionKind,
 }));
 
 vi.mock('@/state/media', () => ({
@@ -201,6 +203,7 @@ async function setup(options: {
   vi.clearAllMocks();
   harness.clients.length = 0;
   harness.observer = null;
+  harness.sessionKind = 'weechat-onyx';
   if (typeof localStorage !== 'undefined') localStorage.clear();
 
   const settings = await import('@/state/settings');
@@ -250,6 +253,7 @@ describe('bridge transport guard', () => {
     vi.clearAllMocks();
     harness.clients.length = 0;
     harness.observer = null;
+    harness.sessionKind = 'weechat-onyx';
     if (typeof localStorage !== 'undefined') localStorage.clear();
     if (typeof sessionStorage !== 'undefined') sessionStorage.clear();
 
@@ -637,5 +641,24 @@ describe('SASL SESSION-TOKEN routing', () => {
 
     expect(client.setSaslSessionToken).not.toHaveBeenCalled();
     expect(vi.mocked(credentials.storeSaslSessionToken)).not.toHaveBeenCalled();
+  });
+});
+
+describe('kind C first-party session', () => {
+  it('does not start a second extras client', async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    harness.clients.length = 0;
+    harness.observer = null;
+    harness.sessionKind = 'onyx-direct-wss';
+    if (typeof localStorage !== 'undefined') localStorage.clear();
+
+    const settings = await import('@/state/settings');
+    settings.updateBridge({ enabled: true, wsUrl: 'wss://bridge.test.invalid', account: 'kain' });
+    await import('@/state/bridge');
+    const core = await import('@/core/bridge');
+    core.initBridge();
+
+    expect(harness.clients).toHaveLength(0);
   });
 });

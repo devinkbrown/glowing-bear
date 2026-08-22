@@ -9,6 +9,7 @@ import type { PropEntry, AccessEntry, UserProfile } from '@/lib/ircx/types';
 import type { OnyxServerServiceFeedback } from '@/lib/irc/serviceFeedback';
 import { buffersState } from './buffers';
 import { sendTo } from './connection';
+import { sendOnIrcSession } from './ircSession';
 
 export type ServicesPanel = 'nick' | 'chan' | 'memo' | null;
 
@@ -124,6 +125,7 @@ function getServerBufferPtr(): string | null {
 }
 
 function sendRawToServer(cmd: string): boolean {
+  if (sendOnIrcSession(cmd)) return true;
   const ptr = getServerBufferPtr();
   if (!ptr) return false;
   return sendTo(ptr, `/quote ${cmd}`);

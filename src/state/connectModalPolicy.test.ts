@@ -21,7 +21,19 @@ describe('connectModalAction', () => {
   });
 
   it('closes the connect modal when first-party Onyx WSS is ready without a relay', () => {
-    expect(connectModalAction(ConnectionState.DISCONNECTED, 'connect', { firstPartyReady: true })).toBe('close');
+    expect(connectModalAction(ConnectionState.DISCONNECTED, 'connect', {
+      firstPartyReady: true,
+      sessionKind: 'onyx-direct-wss',
+    })).toBe('close');
+  });
+
+  it('kind A stays closed only after the WeeChat relay is CONNECTED', () => {
+    expect(connectModalAction(ConnectionState.DISCONNECTED, 'connect', {
+      sessionKind: 'weechat-generic',
+    })).toBe('none');
+    expect(connectModalAction(ConnectionState.CONNECTED, 'connect', {
+      sessionKind: 'weechat-generic',
+    })).toBe('close');
   });
 
   it('leaves the modal open while first-party Onyx WSS is dialing', () => {

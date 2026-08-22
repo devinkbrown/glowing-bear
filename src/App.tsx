@@ -7,6 +7,8 @@ import {
   getTotalUnread,
   connectionState,
   connectServerType,
+  sessionKind,
+  ConnectionState,
   setActive,
   uiState,
   openModal,
@@ -395,10 +397,14 @@ export default function App() {
   // Connect modal follows the relay state (see connectModalPolicy): close it
   // once connected, re-open it when the relay drops with nothing else open.
   createEffect(() => {
-    const firstParty = connectServerType() === 'onyx-wss';
+    const firstParty = connectServerType() === 'onyx-wss' && sessionKind() === 'onyx-direct-wss';
     const action = connectModalAction(connectionState(), uiState.activeModal, {
-      firstPartyReady: firstParty && bridgeState.status === 'ready',
-      firstPartyConnecting: firstParty && (bridgeState.status === 'connecting' || settings.bridge.enabled),
+      firstPartyReady: firstParty && connectionState() === ConnectionState.CONNECTED,
+      firstPartyConnecting: firstParty && (
+        connectionState() === ConnectionState.CONNECTING ||
+        connectionState() === ConnectionState.AUTHENTICATING
+      ),
+      sessionKind: sessionKind(),
     });
     if (action === 'close') closeModal();
     else if (action === 'open') openModal('connect');

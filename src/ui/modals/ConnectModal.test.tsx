@@ -82,12 +82,16 @@ describe('ConnectModal', () => {
     const { getByTestId, getByLabelText, getByRole } = render(() => <ConnectModal open />);
     fireEvent.click(getByTestId('connect-mode-onyx-wss'));
     expect(getByLabelText('Endpoint')).toBeInTheDocument();
+    expect(getByLabelText('Nick')).toBeInTheDocument();
     expect(getByLabelText('Account')).toBeInTheDocument();
     const connect = getByRole('button', { name: /^Connect$/ });
     expect(connect).toBeDisabled();
+    fireEvent.input(getByLabelText('Nick'), { target: { value: 'kain' } });
     fireEvent.input(getByLabelText('Account'), { target: { value: 'kain' } });
     fireEvent.input(getByLabelText('Password'), { target: { value: 'secret' } });
     expect(connect).toBeEnabled();
+    fireEvent.click(connect);
+    expect(state.connect).toHaveBeenCalledTimes(1);
   }, RENDER_TIMEOUT_MS);
 
   it('keeps Connect disabled until required fields are filled', () => {

@@ -27,10 +27,12 @@ export interface IRCClientOptions {
   account?: string;
   realname?: string;
   username?: string;
-  password?: string;     // SASL PLAIN password
+  password?: string;     // SASL PLAIN / SCRAM / IDENTIFY password
   saslSessionToken?: string; // Onyx Server sst_ account re-entry credential
   sessionToken?: string; // Onyx Server SESSION RESUME token (local node)
   meshToken?: string;    // Onyx Server mesh-sealed reclaim token (any node)
+  /** Onyx TOTP for IDENTIFY after welcome when PLAIN/SCRAM are refused. Not WeeChat totp=. */
+  identifyTotp?: string;
   hasClientCert?: boolean;
   /** called for every parsed message */
   onMessage: IRCEventHandler;
@@ -115,7 +117,7 @@ export class IRCClient {
   /** Which SASL mechanism we're using */
   private _saslMech: SaslMechanism | null = null;
   /** SCRAM state between challenge/response steps */
-  private _scramState: { clientFirstMsgBare: string; nonce: string; hash: 'SHA-256'; bits: number } | null = null;
+  private _scramState: { clientFirstMsgBare: string; nonce: string; hash: 'SHA-256' | 'SHA-512'; bits: number } | null = null;
   /**
    * Base64 ServerSignature the client computed at client-final time. Non-null
    * once we've sent the client proof and are awaiting the server-final `v=`.
@@ -577,10 +579,12 @@ export class IRCClient {
             if (caps.length > 0) this.onCapChange?.();
             if (this._capReqPending > 0) this._capReqPending--;
             if (caps.includes('sasl') && (
-              this.opts.saslSessionToken || this.opts.password || this.opts.hasClientCert
+              this.opts.saslSessionToken
+              || this.opts.hasClientCert
+              || (this.opts.password && !this.opts.identifyTotp)
             )) {
               const mech = selectSaslMechanism(this._saslMechs, {
-                hasPassword: Boolean(this.opts.password),
+                hasPassword: Boolean(this.opts.password) && !this.opts.identifyTotp,
                 hasClientCert: Boolean(this.opts.hasClientCert),
                 hasSessionToken: Boolean(this.opts.saslSessionToken),
               });
@@ -655,7 +659,7 @@ export class IRCClient {
           }
         } else if (this._saslMech === 'EXTERNAL') {
           if (param === '+') this.sendRaw('AUTHENTICATE', '+');
-        } else if (this._saslMech === 'SCRAM-SHA-256') {
+        } else if (this._saslMech === 'SCRAM-SHA-256' || this._saslMech === 'SCRAM-SHA-512') {
           if (this._scramServerSig !== null) {
             // We already sent the client proof — this is the server-final
             // message carrying `v=ServerSignature`. Verify it (mutual auth).
@@ -771,6 +775,9 @@ export class IRCClient {
             this.send(buildSessionResumeLine(resumeToken));
           }
           this.sendRaw('SESSION', 'TOKEN');
+        } else if (this.opts.identifyTotp && this.opts.password) {
+          // After TOTP enroll, PLAIN/SCRAM are refused. IDENTIFY carries the code.
+          this.sendRaw('IDENTIFY', this._authcid, this.opts.password, this.opts.identifyTotp);
         }
         this.opts.onConnected?.(msg);
         break;
@@ -856,7 +863,7 @@ export class IRCClient {
   private _retryAfterSaslSessionTokenFailure(clearStoredToken: boolean): boolean {
     if (this._saslMech !== 'SESSION-TOKEN') return false;
     const fallback = selectSaslMechanism(this._saslMechs, {
-      hasPassword: Boolean(this.opts.password),
+      hasPassword: Boolean(this.opts.password) && !this.opts.identifyTotp,
       hasClientCert: Boolean(this.opts.hasClientCert),
       hasSessionToken: false,
     });
@@ -900,13 +907,17 @@ export class IRCClient {
 
   private _wantedCaps(caps: string[]) {
     return wantedCaps(caps, {
-      hasSaslCredentials: Boolean(this.opts.saslSessionToken || this.opts.password || this.opts.hasClientCert),
+      hasSaslCredentials: Boolean(
+        this.opts.saslSessionToken
+        || this.opts.hasClientCert
+        || (this.opts.password && !this.opts.identifyTotp),
+      ),
     });
   }
 
   private _scramClientFirst() {
-    const hash = 'SHA-256';
-    const bits = 256;
+    const hash = this._saslMech === 'SCRAM-SHA-512' ? 'SHA-512' : 'SHA-256';
+    const bits = hash === 'SHA-512' ? 512 : 256;
     const arr = new Uint8Array(18);
     crypto.getRandomValues(arr);
     const nonce = btoa(String.fromCharCode(...arr)).replace(/[+/=]/g, c =>

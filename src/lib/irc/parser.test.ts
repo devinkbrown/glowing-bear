@@ -15,6 +15,7 @@ import {
   parseStandardReply,
   parseSessionTokenNote,
   parseSessionMeshTokenNote,
+  isResumeCredentialPreserved,
   buildSessionResumeLine,
   parseMonitorNumeric,
 } from './parser';
@@ -301,8 +302,13 @@ describe('selectSaslMechanism', () => {
   // The exact mechanism list Onyx Server advertises in the capture's sasl cap.
   const offered = 'PLAIN,EXTERNAL,SCRAM-SHA-256,SCRAM-SHA-512,SCRAM-SHA-512-PLUS,SESSION-TOKEN'.split(',');
 
-  it('prefers SCRAM-SHA-256 over PLAIN when a password is available', () => {
-    expect(selectSaslMechanism(offered, { hasPassword: true })).toBe('SCRAM-SHA-256');
+  it('prefers SCRAM-SHA-512 over SCRAM-SHA-256 and PLAIN when a password is available', () => {
+    expect(selectSaslMechanism(offered, { hasPassword: true })).toBe('SCRAM-SHA-512');
+  });
+
+  it('never offers ANONYMOUS', () => {
+    expect(selectSaslMechanism(['ANONYMOUS', 'PLAIN'], { hasPassword: true })).toBe('PLAIN');
+    expect(selectSaslMechanism(['ANONYMOUS'], { hasPassword: true })).toBeNull();
   });
 
   it('prefers a prior-auth SESSION-TOKEN over replaying the password', () => {
@@ -321,7 +327,7 @@ describe('selectSaslMechanism', () => {
   });
 
   it('never picks EXTERNAL over a password-backed SCRAM', () => {
-    expect(selectSaslMechanism(offered, { hasPassword: true, hasClientCert: true })).toBe('SCRAM-SHA-256');
+    expect(selectSaslMechanism(offered, { hasPassword: true, hasClientCert: true })).toBe('SCRAM-SHA-512');
   });
 
   it('returns null when no usable mechanism matches the credentials', () => {
@@ -424,6 +430,23 @@ describe('session token NOTE parsing', () => {
   it('ignores FAIL SESSION TOKEN (only NOTE carries a token)', () => {
     const msg = parseIRCMessage(':eshmaki.me FAIL SESSION TOKEN :nope');
     expect(parseSessionTokenNote(msg)).toBeNull();
+  });
+});
+
+describe('isResumeCredentialPreserved', () => {
+  it('keeps stored tokens after ORIGIN_UNREACHABLE / RESUME_CREDENTIAL_PRESERVED', () => {
+    expect(isResumeCredentialPreserved(
+      parseIRCMessage(':s WARN SESSION ORIGIN_UNREACHABLE :peer down'),
+    )).toBe(true);
+    expect(isResumeCredentialPreserved(
+      parseIRCMessage(':s WARN SESSION RESUME_CREDENTIAL_PRESERVED :keep token'),
+    )).toBe(true);
+    expect(isResumeCredentialPreserved(
+      parseIRCMessage(':s FAIL SESSION TEMPORARILY_UNAVAILABLE :later'),
+    )).toBe(true);
+    expect(isResumeCredentialPreserved(
+      parseIRCMessage(':s FAIL SESSION INVALID_TOKEN :nope'),
+    )).toBe(false);
   });
 
   it('builds the matching SESSION RESUME line', () => {

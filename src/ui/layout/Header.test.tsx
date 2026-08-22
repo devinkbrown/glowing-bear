@@ -18,6 +18,7 @@ import {
   disconnect,
   markOnyxServer,
   resetSettings,
+  setSessionKind,
   setActiveBuffer,
   uiState,
   upsertBuffer,
@@ -167,6 +168,7 @@ afterAll(() => {
 beforeEach(() => {
   globalThis.localStorage?.clear();
   resetSettings();
+  setSessionKind('weechat-generic');
   clearBuffers();
   clearIrcx();
 });
@@ -204,6 +206,7 @@ describe('Header', () => {
 
   it('shows room join buttons for a channel and routes clicks to joinRoom', () => {
     goOnline(); // connect() tears down state first, so arrange buffers after
+    setSessionKind('weechat-onyx');
     markOnyxServer('eshmaki');
     upsertBuffer(CHANNEL);
     setActiveBuffer('0xc');
@@ -221,6 +224,7 @@ describe('Header', () => {
 
   it('shows 1:1 call buttons for a query buffer and routes clicks to startCall', () => {
     goOnline(); // connect() tears down state first, so arrange buffers after
+    setSessionKind('weechat-onyx');
     markOnyxServer('eshmaki');
     upsertBuffer(QUERY);
     setActiveBuffer('0xq');

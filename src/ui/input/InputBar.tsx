@@ -16,7 +16,7 @@ import {
   complete,
   cycleCompletion,
   resetCompletion,
-  isActiveOnyxServer,
+  showOnyxChrome,
   sendInput,
   settings,
   completedUploadsForBuffer,
@@ -543,7 +543,7 @@ export default function InputBar() {
       </Show>
 
       {/* GIF picker */}
-      <Show when={showGif() && isActiveOnyxServer()}>
+      <Show when={showGif() && showOnyxChrome()}>
         <Suspense fallback={null}>
           <GifPicker
             apiKey={settings.tenorApiKey}
@@ -618,7 +618,7 @@ export default function InputBar() {
           {/* Action buttons — inside the input container */}
           <div class="flex items-center gap-0.5 pb-1.5 shrink-0">
             {/* Upload / GIF — Onyx extras only. Generic WeeChat stays a plain composer. */}
-            <Show when={isActiveOnyxServer()}>
+            <Show when={showOnyxChrome()}>
             <button
               onClick={() => fileEl?.click()}
               disabled={!activeBuffer()}

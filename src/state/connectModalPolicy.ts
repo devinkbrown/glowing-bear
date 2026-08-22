@@ -10,6 +10,7 @@
 
 import { ConnectionState } from '@/lib/weechat/model';
 import type { ModalType } from '@/types';
+import type { SessionKind } from '@/lib/connect/sessionKind';
 
 export type ConnectModalAction = 'open' | 'close' | 'none';
 
@@ -18,6 +19,8 @@ export interface ConnectModalPolicyOptions {
   firstPartyReady?: boolean;
   /** First-party Onyx WSS is dialing — keep the connect card visible. */
   firstPartyConnecting?: boolean;
+  /** Kind A is relay-only; kind C is first-party WSS. */
+  sessionKind?: SessionKind;
 }
 
 export function connectModalAction(

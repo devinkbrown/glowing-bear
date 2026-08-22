@@ -13,9 +13,9 @@ import {
   activityUnreadCount,
   ConnectionState,
   connectionState,
-  connectServerType,
+  sessionKind,
+  showOnyxChrome,
   enableOnyxExtras,
-  isActiveOnyxServer,
   lag,
   onyxExtrasOffered,
   openChannelInfo,
@@ -69,7 +69,7 @@ export default function Header() {
     const e = entry();
     return e && isChannel() ? Object.keys(e.nicks).length : 0;
   };
-  const onOnyxServer = () => isActiveOnyxServer();
+  const onOnyxServer = () => showOnyxChrome();
   const connected = () => connectionState() === ConnectionState.CONNECTED;
 
   // Live badge — scoped to the buffer the active call belongs to: a room call
@@ -218,7 +218,7 @@ export default function Header() {
               />
               <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.relay')}</span>
             </span>
-            <Show when={settings.bridge.enabled || bridgeState.status !== 'off' || connectServerType() === 'onyx-wss'}>
+            <Show when={sessionKind() === 'weechat-onyx' || (settings.bridge.enabled && sessionKind() !== 'onyx-direct-wss')}>
               <span class="flex items-center gap-1" title={t('connectivity.bridge')}>
                 <span
                   class={`h-1.5 w-1.5 rounded-full ${bridgeUp() ? 'bg-emerald-400' : bridgeState.status === 'connecting' ? 'bg-amber-400' : 'bg-gray-600'}`}

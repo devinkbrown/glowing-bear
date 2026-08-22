@@ -13,11 +13,13 @@ import {
   saveProfile,
   saveSettings,
   setConnectServerType,
+  setSessionKind,
   settings,
   updateBridge,
   updateRelay,
   updateSettings,
 } from '@/state';
+import { sessionKindFromConnect } from '@/lib/connect/sessionKind';
 import { bridgeState } from '@/state/bridge';
 import { applyLocalePreference, t } from '@/lib/i18n';
 import type { LocalePreference } from '@/types';
@@ -99,8 +101,11 @@ function ConnectScreen(props: { onClose?: () => void }) {
   const [passwordFromUrl, setPasswordFromUrl] = createSignal(false);
   const [profileName, setProfileName] = createSignal('');
   const [showSaveProfile, setShowSaveProfile] = createSignal(false);
+  const [onyxNick, setOnyxNick] = createSignal(settings.bridge.account);
   const [bridgeAccount, setBridgeAccount] = createSignal(settings.bridge.account);
   const [bridgePassword, setBridgePassword] = createSignal(settings.bridge.password);
+  const [onyxTotp, setOnyxTotp] = createSignal('');
+  const onyxTotpRefs: (HTMLInputElement | undefined)[] = [];
   const [bridgeEndpoint, setBridgeEndpoint] = createSignal(
     settings.bridge.wsUrl || NODES[1]?.wss || 'wss://eshmaki.me:8080',
   );
@@ -112,10 +117,10 @@ function ConnectScreen(props: { onClose?: () => void }) {
   const connecting = () =>
     connectionState() === ConnectionState.CONNECTING ||
     connectionState() === ConnectionState.AUTHENTICATING ||
-    (mode() === 'onyx-wss' && bridgeState.status === 'connecting');
+    (mode() === 'onyx-wss' && showAlsoRelay() && bridgeState.status === 'connecting');
 
   const weechatReady = () => !!host() && !!password();
-  const onyxReady = () => !!bridgeAccount() && !!bridgePassword();
+  const onyxReady = () => !!bridgeEndpoint() && !!(onyxNick() || bridgeAccount()) && !!bridgePassword();
   const ready = () => {
     if (connecting()) return false;
     if (mode() === 'onyx-tls') return false;
@@ -173,25 +178,33 @@ function ConnectScreen(props: { onClose?: () => void }) {
         return;
       }
       persistWeechat();
-      updateBridge({ enabled: settings.bridge.enabled });
+      updateBridge({ enabled: false });
+      setSessionKind('weechat-generic');
       setConnectServerType('weechat');
       saveSettings();
       connect({ totp: totp().trim() || undefined });
       return;
     }
 
+    const useRelay = showAlsoRelay() && weechatReady();
+    const kind = sessionKindFromConnect('onyx-wss', useRelay);
+    const nick = onyxNick().trim() || bridgeAccount().trim();
     updateBridge({
-      enabled: true,
+      enabled: useRelay,
       wsUrl: bridgeEndpoint(),
-      account: bridgeAccount(),
+      account: bridgeAccount().trim() || nick,
       password: bridgePassword(),
     });
     updateSettings({ rememberBridgePassword: rememberBridgePassword() });
+    setSessionKind(kind);
     setConnectServerType('onyx-wss');
-    const useRelay = showAlsoRelay() && weechatReady();
     if (useRelay) persistWeechat();
     saveSettings();
-    if (useRelay) connect({ totp: totp().trim() || undefined });
+    connect({
+      totp: useRelay ? (totp().trim() || undefined) : undefined,
+      onyxTotp: onyxTotp().trim() || undefined,
+      nick,
+    });
   };
 
   const applyProfile = (name: string) => {
@@ -420,6 +433,11 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     <input id="c-endpoint" class="login-input" value={bridgeEndpoint()}
                       onInput={(e) => setBridgeEndpoint(e.currentTarget.value)} autocomplete="off" spellcheck={false} />
                   </Field>
+                  <Field label={t('connect.nick')} id="c-nick">
+                    <input id="c-nick" class="login-input" value={onyxNick()}
+                      onInput={(e) => setOnyxNick(e.currentTarget.value)}
+                      placeholder={t('connect.nick')} autocomplete="nickname" spellcheck={false} />
+                  </Field>
                   <Field label={t('connect.account')} id="c-account">
                     <input id="c-account" class="login-input" value={bridgeAccount()}
                       onInput={(e) => setBridgeAccount(e.currentTarget.value)}
@@ -428,14 +446,39 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   <Field label={t('connect.password')} id="c-onyx-pass">
                     <input id="c-onyx-pass" class="login-input" type="password" value={bridgePassword()}
                       onInput={(e) => setBridgePassword(e.currentTarget.value)}
-                      placeholder={t('connect.accountPassword')} autocomplete="current-password" />
+                      placeholder={t('connect.passwordOrToken')} autocomplete="current-password" />
                   </Field>
+                  <div>
+                    <span class="login-label">{t('connect.onyxTotp')}</span>
+                    <div class="flex gap-2 justify-center">
+                      <Index each={new Array<number>(6).fill(0)}>
+                        {(_, i) => (
+                          <input
+                            ref={(el) => { onyxTotpRefs[i] = el; }}
+                            type="text"
+                            inputmode="numeric"
+                            maxlength={1}
+                            value={onyxTotp()[i] ?? ''}
+                            onInput={(e) => {
+                              const digit = e.currentTarget.value.replace(/[^0-9]/g, '').slice(-1);
+                              const digits = onyxTotp().padEnd(6, ' ').split('');
+                              digits[i] = digit;
+                              setOnyxTotp(digits.join('').trimEnd());
+                              if (digit && i < 5) onyxTotpRefs[i + 1]?.focus();
+                            }}
+                            autocomplete="one-time-code"
+                            aria-label={t('connect.totpDigit', { index: i + 1 })}
+                            class="login-totp-digit"
+                          />
+                        )}
+                      </Index>
+                    </div>
+                  </div>
                   <button type="button" onClick={() => setRememberBridgePassword(!rememberBridgePassword())}
                     aria-pressed={rememberBridgePassword()} class="flex items-center gap-2 text-[11px] text-gray-500">
                     <span class={`login-toggle ${rememberBridgePassword() ? 'login-toggle-on' : ''}`}><span class="login-toggle-dot" /></span>
                     {t('connect.rememberBridge')}
                   </button>
-                  <p class="text-[11px] text-gray-500 leading-relaxed">{t('connect.relayNeeded')}</p>
                   <button type="button" onClick={() => setShowAlsoRelay(!showAlsoRelay())}
                     class="text-left text-[12px] text-gray-500 hover:text-gray-300">
                     {t('connect.alsoRelay')}
