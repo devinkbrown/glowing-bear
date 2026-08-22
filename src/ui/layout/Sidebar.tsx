@@ -19,11 +19,13 @@ import {
   requestHistory,
   requestNicklist,
   sendInput,
+  sessionKind,
   setActive,
   openSplitWith,
   setSidebarOpen,
   settings,
 } from '@/state';
+import { isDirectOnyxSession } from '@/lib/connect/sessionKind';
 import type { BufferEntry, NotifyMode } from '@/state';
 import BearLogo from '@/ui/bits/BearLogo';
 import { bufferKind, type BufferKind } from '@/lib/bufferKind';
@@ -62,6 +64,26 @@ export default function Sidebar(props: SidebarProps) {
     connectionState() === ConnectionState.CONNECTING ||
     connectionState() === ConnectionState.AUTHENTICATING;
   const isReconnecting = () => connectionState() === ConnectionState.RECONNECTING;
+  const onyxDirect = () => isDirectOnyxSession(sessionKind());
+  const connectionHost = () => {
+    if (onyxDirect()) {
+      const raw = settings.bridge.wsUrl.trim();
+      try {
+        return new URL(raw).host || raw;
+      } catch {
+        return raw.replace(/^wss?:\/\//i, '') || t('sidebar.disconnected');
+      }
+    }
+    return settings.relay.host;
+  };
+  const connectionTransport = () => {
+    if (onyxDirect()) {
+      return settings.bridge.wsUrl.trim().toLowerCase().startsWith('ws://')
+        ? t('sidebar.plain')
+        : t('sidebar.wss');
+    }
+    return settings.relay.tls ? 'TLS' : t('sidebar.plain');
+  };
 
   const selectBuffer = (pointer: string, e?: MouseEvent): void => {
     // Alt-click or middle-click sends the buffer to the SPLIT pane (opening it
@@ -190,7 +212,9 @@ export default function Sidebar(props: SidebarProps) {
         </div>
         <div class="min-w-0 flex-1">
           <div class="text-[14px] font-black text-gray-100 tracking-tight leading-tight">DarkBear</div>
-          <div class="text-[9px] uppercase tracking-[0.18em] text-gray-600 leading-tight">{t('sidebar.relayConsole')}</div>
+          <div class="text-[9px] uppercase tracking-[0.18em] text-gray-600 leading-tight">
+            {onyxDirect() ? t('sidebar.onyxConsole') : t('sidebar.relayConsole')}
+          </div>
         </div>
         <button
           onClick={() => openModal('settings')}
@@ -224,13 +248,15 @@ export default function Sidebar(props: SidebarProps) {
               'bg-gray-600': !isConnected() && !isConnecting() && !isReconnecting(),
             }}
           />
-          <span class="truncate">
-            {isConnected() ? settings.relay.host :
+          <span class="truncate" data-testid="connection-host">
+            {isConnected() ? connectionHost() :
              isConnecting() ? t('sidebar.connecting') :
              isReconnecting() ? t('sidebar.reconnecting') :
              t('sidebar.disconnected')}
           </span>
-          <span class="ml-auto font-mono text-[10px] opacity-70">{settings.relay.tls ? 'TLS' : 'plain'}</span>
+          <span class="ml-auto font-mono text-[10px] opacity-70" data-testid="connection-transport">
+            {connectionTransport()}
+          </span>
         </div>
         <div class="grid grid-cols-4 gap-1.5">
           <StatCell label={t('sidebar.unread')} value={stats().unread} hot={stats().unread > 0} />

@@ -622,7 +622,24 @@ html[dir="rtl"] .msg-highlight {
   padding: 1px 12px;
 }
 .msg-row.msg-gap {
-  margin-top: 6px;
+  margin-top: 8px;
+}
+
+.msg-unread-sep {
+  margin-block: 10px;
+}
+.msg-unread-sep-rule {
+  height: 1px;
+  background: color-mix(in srgb, var(--role-mention, #f87171) 42%, transparent);
+}
+.msg-unread-sep-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--role-mention, #f87171);
+  user-select: none;
+  white-space: nowrap;
 }
 .msg-row.msg-system {
   min-height: auto;

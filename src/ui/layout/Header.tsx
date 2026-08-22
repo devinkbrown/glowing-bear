@@ -229,12 +229,12 @@ export default function Header() {
               </span>
             </Show>
             <Show when={hops().chips.includes('extras')}>
-              <span class="flex items-center gap-1" data-testid="hop-extras" title={t('connectivity.bridge')}>
+              <span class="flex items-center gap-1" data-testid="hop-extras" title={t('connectivity.extras')}>
                 <span
                   class={`h-1.5 w-1.5 rounded-full ${extrasUp() ? 'bg-emerald-400' : extrasConnecting() ? 'bg-amber-400' : 'bg-gray-600'}`}
                   aria-hidden="true"
                 />
-                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.bridge')}</span>
+                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.extras')}</span>
               </span>
             </Show>
             <Show when={hops().chips.includes('session')}>

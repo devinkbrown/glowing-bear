@@ -703,8 +703,8 @@ export default function SettingsModal(props: Props) {
               </div>
             </Section>
 
-            <Section label="Reconnection" desc="Network recovery behavior">
-              <Toggle label="Auto Reconnect" desc="Automatically reconnect when the connection drops" on={settings.autoReconnect} onChange={(v) => updateSettings({ autoReconnect: v })} />
+            <Section label={t('settings.reconnection')} desc={t('settings.reconnectionDesc')}>
+              <Toggle label={t('settings.autoReconnect')} desc={t('settings.autoReconnectDesc')} on={settings.autoReconnect} onChange={(v) => updateSettings({ autoReconnect: v })} />
             </Section>
           </Show>
 
@@ -806,7 +806,7 @@ export default function SettingsModal(props: Props) {
               </Show>
             </Section>
 
-            <Section label="Cross-device preferences" desc="Account-scoped sync when Onyx Server metadata is available">
+            <Section label={t('settings.crossDevice')} desc={t('settings.crossDeviceDesc')}>
               <div data-testid="preference-sync-status" class="rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-3">
                 <div class="flex items-center gap-3">
                   <span
@@ -831,17 +831,17 @@ export default function SettingsModal(props: Props) {
                   </div>
                   <button
                     type="button"
-                    aria-label="Sync preferences now"
+                    aria-label={t('settings.syncNowAria')}
                     disabled={!preferenceSyncState.available || preferenceSyncState.status === 'checking'}
                     onClick={() => syncPreferencesNow()}
                     class="shrink-0 rounded-lg border border-[var(--custom-accent,#818cf8)]/20 bg-[var(--custom-accent,#818cf8)]/10 px-3 py-1.5 text-[11px] font-semibold text-[var(--custom-accent,#818cf8)] transition-all hover:bg-[var(--custom-accent,#818cf8)]/15 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Sync now
+                    {t('settings.syncNow')}
                   </button>
                 </div>
               </div>
               <p class="mt-2 text-[10px] leading-relaxed text-gray-600">
-                Syncs theme, font and motion accessibility, alert controls, per-buffer notification tiers, pins, mutes, and read positions. Passwords, endpoints, custom CSS, local archives, and media devices stay on this browser. Export/import remains the fallback without the capability.
+                {t('settings.crossDeviceFallback')}
               </p>
             </Section>
           </Show>

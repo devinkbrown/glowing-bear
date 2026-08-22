@@ -343,6 +343,11 @@ describe('InputBar relay acknowledgement', () => {
     expect(queryByLabelText('Upload file')).toBeNull();
   });
 
+  it('keeps the composer on the same 72ch measure as the transcript', () => {
+    const { getByTestId } = render(() => <InputBar />);
+    expect(getByTestId('composer-measure').className).toContain('max-w-[72ch]');
+  });
+
   it('restores a selected GIF URL when relay dispatch is rejected', async () => {
     setSessionKind('weechat-onyx');
     markOnyxServer('eshmaki');

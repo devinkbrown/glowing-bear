@@ -77,11 +77,15 @@ export default function ConnectModal(props: Props) {
 function ConnectScreen(props: { onClose?: () => void }) {
   const lowDecorativeQuality = currentPerformanceTier() === 'low';
   const prefersReducedMotion = createMediaQuery('(prefers-reduced-motion: reduce)');
+  const shortViewport = createMediaQuery('(max-height: 740px)');
   const decorativeMotionEnabled = () =>
     !lowDecorativeQuality &&
     !prefersReducedMotion() &&
     settings.animateThemes &&
     settings.sceneMotion !== 'reduced';
+  // Short viewports keep the password in view: the illustrated mascot never
+  // sits above the secret field on a phone landscape / compact height.
+  const compactHero = () => !decorativeMotionEnabled() || shortViewport();
 
   const [mode, setMode] = createSignal<ConnectServerType>('weechat');
   const [host, setHost] = createSignal(settings.relay.host);
@@ -325,16 +329,18 @@ function ConnectScreen(props: { onClose?: () => void }) {
       </Show>
 
       <div class="min-h-dvh flex flex-col relative z-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <div class="flex-1 min-h-[24px] sm:min-h-0" />
+        <div class="flex-1 min-h-[12px] sm:min-h-0 connect-flex-spacer" />
 
-        <div class="flex flex-col items-center px-6 pb-1 sm:pb-2 select-none"
-          style={{ animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both' }}>
+        <div
+          class="connect-hero flex flex-col items-center px-6 pb-1 sm:pb-2 select-none"
+          style={decorativeMotionEnabled() ? { animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both' } : undefined}
+        >
           <Show
-            when={decorativeMotionEnabled()}
+            when={!compactHero()}
             fallback={
               <div
                 data-testid="connect-compact-mark"
-                class="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.035] font-mono text-[13px] font-black tracking-[0.16em] text-gray-300"
+                class="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.035] font-mono text-[13px] font-black tracking-[0.16em] text-gray-300"
                 aria-hidden="true"
               >
                 DB
@@ -345,10 +351,13 @@ function ConnectScreen(props: { onClose?: () => void }) {
               <AstronautBear animated={false} size={72} class="sm:w-[88px] sm:h-[88px]" accent={tc().accent} theme={settings.theme} />
             </Suspense>
           </Show>
-          <h1 class="text-[22px] sm:text-[26px] font-bold tracking-tight text-[var(--color-gray-100)] mt-1">DarkBear</h1>
+          <h1 class="connect-hero-title text-[22px] sm:text-[26px] font-bold tracking-tight text-[var(--color-gray-100)] mt-1">DarkBear</h1>
         </div>
 
-        <div class="w-full sm:max-w-[440px] sm:mx-auto" style={{ animation: 'fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both' }}>
+        <div
+          class="w-full sm:max-w-[440px] sm:mx-auto"
+          style={decorativeMotionEnabled() ? { animation: 'fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both' } : undefined}
+        >
           <div class="px-5 pb-6 sm:px-0 sm:pb-0">
             <div class="login-card-inner">
               <div class="mb-5" role="radiogroup" aria-label={t('connect.serverType')}>
@@ -631,7 +640,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
           </div>
         </div>
 
-        <div class="flex-1 min-h-[20px] sm:min-h-0" />
+        <div class="flex-1 min-h-[12px] sm:min-h-0 connect-flex-spacer" />
 
         <div class="flex items-center justify-center gap-3 pb-4 sm:pb-6">
           <p class="text-[10px] text-gray-700 font-mono tracking-wider">v3.0</p>
@@ -759,6 +768,23 @@ function ConnectScreen(props: { onClose?: () => void }) {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        .login-tls {
+          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 6%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 12%, transparent);
+          color: var(--color-gray-400, #9aa3b8);
+        }
+        .login-tls-on {
+          background: color-mix(in srgb, var(--custom-accent, #818cf8) 12%, transparent);
+          border-color: color-mix(in srgb, var(--custom-accent, #818cf8) 28%, transparent);
+          color: var(--color-gray-100, #e8eaf0);
+        }
+        @media (max-height: 740px) {
+          .connect-hero-title { font-size: 18px; margin-top: 2px; }
+          .connect-flex-spacer { min-height: 8px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .login-ripple { animation: none !important; }
+        }
       `}</style>
     </div>
   );
@@ -840,9 +866,10 @@ function WeeChatFields(props: {
               min={1} max={65535} class="login-input" />
           </Field>
         </div>
-        <button type="button" onClick={props.onTls}
-          class={`flex items-center justify-center px-5 min-w-[88px] login-input-height rounded-[14px] sm:rounded-xl text-[13px] font-semibold border
-            ${props.tls ? 'bg-emerald-500/12 border-emerald-500/25 text-emerald-300' : 'bg-white/[0.03] border-white/[0.08] text-gray-500'}`}>
+        <button type="button" onClick={props.onTls} aria-pressed={props.tls}
+          class={`flex items-center justify-center px-5 min-w-[88px] login-input-height rounded-[14px] sm:rounded-xl text-[13px] font-semibold ${
+            props.tls ? 'login-tls-on' : 'login-tls'
+          }`}>
           TLS
         </button>
       </div>
@@ -854,7 +881,7 @@ function WeeChatFields(props: {
             class="login-input login-secret-input !pr-12" />
           <button type="button" onClick={props.onShowPassword} tabindex={-1}
             aria-label={props.showPassword ? t('connect.hideSecret') : t('connect.showSecret')}
-            class="login-secret-toggle absolute right-0 top-0 bottom-0 w-11 flex items-center justify-center text-gray-600">
+            class="login-secret-toggle absolute end-0 top-0 bottom-0 w-11 flex items-center justify-center text-gray-600">
             ·
           </button>
         </div>

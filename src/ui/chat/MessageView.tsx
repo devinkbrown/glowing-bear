@@ -307,12 +307,12 @@ function DaySeparator(props: { date: Date }) {
 
 function ReadMarkerRow() {
   return (
-    <div class="flex items-center gap-2 my-1.5 px-3 sm:px-1">
-      <div class="flex-1 h-px bg-[var(--role-mention,#f87171)]/25" />
-      <span class="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--role-mention,#f87171)]/55 select-none">
+    <div class="msg-unread-sep flex items-center gap-2 px-3 sm:px-1" data-testid="unread-separator">
+      <div class="msg-unread-sep-rule flex-1" />
+      <span class="msg-unread-sep-label">
         {t('message.new')}
       </span>
-      <div class="flex-1 h-px bg-[var(--role-mention,#f87171)]/25" />
+      <div class="msg-unread-sep-rule flex-1" />
     </div>
   );
 }

@@ -553,8 +553,9 @@ export default function InputBar() {
         </Suspense>
       </Show>
 
-      {/* Input row */}
+      {/* Input row — same 72ch measure as the transcript */}
       <div class="px-2 sm:px-3 pt-2 pb-1.5">
+        <div class="composer-measure mx-auto w-full max-w-[72ch]" data-testid="composer-measure">
         {/* Reply chip — shown while a pending reply target is set for this buffer */}
         <Show when={replyTarget()}>
           {(reply) => (
@@ -686,6 +687,7 @@ export default function InputBar() {
               </button>
             </Show>
           </div>
+        </div>
         </div>
       </div>
     </div>

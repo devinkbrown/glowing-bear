@@ -341,13 +341,13 @@ function ReplyingToIndicator(props: { parentMsgid: string }) {
     <button
       type="button"
       class="reply-quote mb-0.5 flex max-w-full items-center gap-1 truncate text-left text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
-      aria-label="Jump to replied message"
+      aria-label={t('message.jumpToReply')}
       onClick={() => requestScrollToMessage(props.parentMsgid)}
     >
       <svg class="w-3 h-3 shrink-0 -scale-x-100 opacity-70" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 4L4 8l4 4M4 8h6a4 4 0 014 4" />
       </svg>
-      <span class="truncate">{preview() ?? 'replying to a message'}</span>
+      <span class="truncate">{preview() ?? t('composer.replyingTo', { target: t('composer.message') })}</span>
     </button>
   );
 }

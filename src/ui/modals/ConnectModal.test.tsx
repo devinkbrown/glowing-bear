@@ -30,9 +30,9 @@ const RENDER_TIMEOUT_MS = 20_000;
 import { resetSettings, updateRelay } from '@/state';
 import ConnectModal from './ConnectModal';
 
-function stubMatchMedia(matches = false): void {
+function stubMatchMedia(matches: boolean | ((query: string) => boolean) = false): void {
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches,
+    matches: typeof matches === 'function' ? matches(query) : matches,
     media: query,
     onchange: null,
     addEventListener: vi.fn(),
@@ -131,5 +131,31 @@ describe('ConnectModal', () => {
     fireEvent.click(getByRole('button', { name: /^Connect$/ }));
 
     expect(state.connect).toHaveBeenCalledTimes(1);
+  }, RENDER_TIMEOUT_MS);
+
+  it('uses the compact mark on a short viewport so the mascot never crowds the password', () => {
+    stubMatchMedia((query) => query.includes('max-height'));
+    const { getByTestId, getByLabelText } = render(() => <ConnectModal open />);
+
+    expect(getByTestId('connect-compact-mark')).toBeInTheDocument();
+    expect(getByLabelText('Password')).toBeInTheDocument();
+  }, RENDER_TIMEOUT_MS);
+
+  it('submits a ready WeeChat form with Ctrl+Enter', () => {
+    const { getByLabelText } = render(() => <ConnectModal open />);
+
+    fireEvent.input(getByLabelText('Hostname'), { target: { value: 'relay.example.test' } });
+    fireEvent.input(getByLabelText('Password'), { target: { value: 'relay-secret' } });
+    fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
+
+    expect(state.connect).toHaveBeenCalledTimes(1);
+  }, RENDER_TIMEOUT_MS);
+
+  it('keeps TLS as a quiet pressed toggle, not a second primary CTA', () => {
+    const { getByRole } = render(() => <ConnectModal open />);
+    const tls = getByRole('button', { name: 'TLS' });
+    expect(tls).toHaveAttribute('aria-pressed', 'true');
+    expect(tls.className).toContain('login-tls-on');
+    expect(tls.className).not.toMatch(/emerald/);
   }, RENDER_TIMEOUT_MS);
 });
