@@ -826,7 +826,7 @@ function entry(pointer: string): BufferEntry {
       sendInput('/call alice');
 
       const last = entry(CHAN).lines[entry(CHAN).lines.length - 1];
-      expect(last?.message).toContain('requires the onyx-server bridge');
+      expect(last?.message).toContain('needs Onyx extras');
       expect(last?.tags).toContain('darkbear_system');
       expect(c.sendInput).not.toHaveBeenCalled();
     });

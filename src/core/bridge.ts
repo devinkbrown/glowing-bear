@@ -81,7 +81,7 @@ const BACKOFF_MAX_MS = 30_000;
 const DM_KEY_METADATA = 'ocean.dm-key';
 const KEY_REQUEST_THROTTLE_MS = 30_000;
 const BRIDGE_DISABLED_MSG =
-  'voice/video requires the onyx-server bridge (enable in Settings → Bridge)';
+  'voice/video needs Onyx extras (enable in Settings → Connection)';
 
 // ---------------------------------------------------------------------------
 // Pure helpers (exported for unit tests)

@@ -117,7 +117,7 @@ import {
 
 const PING_INTERVAL_MS = 15_000;
 const QUERY_PENDING_TIMEOUT_MS = 10_000;
-const BRIDGE_REQUIRED_MSG = 'voice/video requires the onyx-server bridge (enable in Settings → Bridge)';
+const BRIDGE_REQUIRED_MSG = 'voice/video needs Onyx extras (enable in Settings → Connection)';
 
 // ---------------------------------------------------------------------------
 // Bridge seams

@@ -277,8 +277,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
   const mixedBlocked = () => mode() === 'weechat' && mixedContentBlocked(tls(), host());
 
   createEffect(() => {
-    const reveal = diagnoseReveal(errorCode());
-    if (reveal === 'totp' || reveal === 'advanced') setShowAdvanced(true);
+    if (diagnoseReveal(errorCode()) === 'advanced') setShowAdvanced(true);
   });
 
   const setLocale = (locale: LocalePreference) => {
@@ -336,7 +335,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
         <div class="w-full sm:max-w-[440px] sm:mx-auto" style={{ animation: 'fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both' }}>
           <div class="px-5 pb-6 sm:px-0 sm:pb-0">
             <div class="login-card-inner">
-              <div class="mb-4" role="radiogroup" aria-label={t('connect.serverType')}>
+              <div class="mb-5" role="radiogroup" aria-label={t('connect.serverType')}>
                 <div class="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white/[0.035] border border-white/[0.06]">
                   <ModeButton
                     id="weechat"
@@ -351,7 +350,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     onSelect={() => setMode('onyx-wss')}
                   />
                 </div>
-                <p class="mt-2 text-center text-[11px] leading-snug text-gray-500 min-h-[2.75rem]">
+                <p class="mt-2 text-center text-[11px] leading-snug text-gray-500">
                   {mode() === 'weechat' && t('connect.taglineWeechat')}
                   {mode() === 'onyx-wss' && t('connect.taglineOnyx')}
                   {mode() === 'onyx-tls' && t('connect.modeOnyxTlsUnavailable')}
@@ -362,7 +361,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   aria-checked={mode() === 'onyx-tls'}
                   data-testid="connect-mode-onyx-tls"
                   onClick={() => setMode('onyx-tls')}
-                  class="mt-0.5 w-full min-h-[44px] text-[11px] text-gray-600 hover:text-gray-400"
+                  class={`mt-1 w-full login-quiet ${mode() === 'onyx-tls' ? 'text-gray-400' : ''}`}
                 >
                   {t('connect.modeOnyxTls')}
                 </button>
@@ -470,7 +469,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   <button
                     type="button"
                     onClick={() => setShowOnyxTotp(!showOnyxTotp())}
-                    class="text-left text-[12px] text-gray-500 hover:text-gray-300 min-h-[44px]"
+                    class="login-quiet text-left"
                     aria-expanded={showOnyxTotp()}
                   >
                     {t('connect.onyxTotp')}
@@ -506,7 +505,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     {t('connect.rememberAccount')}
                   </button>
                   <button type="button" onClick={() => setShowAlsoRelay(!showAlsoRelay())}
-                    class="text-left text-[12px] text-gray-500 hover:text-gray-300">
+                    class="login-quiet text-left" aria-expanded={showAlsoRelay()}>
                     {t('connect.alsoRelay')}
                   </button>
                   <Show when={showAlsoRelay()}>
@@ -554,25 +553,26 @@ function ConnectScreen(props: { onClose?: () => void }) {
               </div>
               </form>
 
-              <button type="button" onClick={() => setShowSetup(!showSetup())}
-                class="mt-3 w-full text-[12px] text-gray-500 hover:text-gray-300 min-h-[44px]"
-                aria-expanded={showSetup()}>
-                {showSetup() ? t('connect.setupClose') : t('connect.setup')}
-              </button>
-              <SetupGuide
-                open={showSetup()}
-                type={mode()}
-                port={port()}
-                tls={tls()}
-                path={path()}
-                endpoint={bridgeEndpoint()}
-              />
-
+              <div class="mt-2 flex flex-col">
+                <button type="button" onClick={() => setShowSetup(!showSetup())}
+                  class="login-quiet w-full text-center"
+                  aria-expanded={showSetup()}>
+                  {showSetup() ? t('connect.setupClose') : t('connect.setup')}
+                </button>
+                <SetupGuide
+                  open={showSetup()}
+                  type={mode()}
+                  port={port()}
+                  tls={tls()}
+                  path={path()}
+                  endpoint={bridgeEndpoint()}
+                />
+                <Show when={mode() === 'weechat'}>
               <Show
                 when={showSaveProfile()}
                 fallback={
                   <button type="button" onClick={() => setShowSaveProfile(true)}
-                    class="mt-3 w-full h-[44px] text-[13px] text-gray-600 border border-dashed border-white/[0.06] rounded-xl">
+                    class="login-quiet w-full text-center">
                     {t('connect.saveProfile')}
                   </button>
                 }
@@ -591,6 +591,8 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   </button>
                 </div>
               </Show>
+                </Show>
+              </div>
 
               <Show when={props.onClose}>
                 <button type="button" onClick={() => props.onClose?.()}
@@ -662,6 +664,13 @@ function ConnectScreen(props: { onClose?: () => void }) {
           transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .login-toggle-on .login-toggle-dot { transform: translateX(18px); }
+        .login-quiet {
+          min-height: 44px; font-size: 12px; color: #6b6f8a;
+        }
+        .login-quiet:hover { color: #c5c9d8; }
+        @media (min-width: 640px) {
+          .login-quiet { min-height: 32px; }
+        }
         .login-totp-digit {
           width: 42px; height: 52px; text-align: center; font-family: var(--mono-font);
           font-size: 22px; font-weight: 600; color: #e0e4f0; background: rgba(255,255,255,0.035);
@@ -785,7 +794,7 @@ function WeeChatFields(props: {
           <span>{t('connect.remember')}<span class="block text-[9px] text-gray-700">{t('connect.sessionOnly')}</span></span>
         </button>
       </Field>
-      <button type="button" onClick={props.onAdvanced} class="text-[12px] text-gray-600 self-start">
+      <button type="button" onClick={props.onAdvanced} class="login-quiet self-start" aria-expanded={props.showAdvanced}>
         {t('connect.advanced')}
       </button>
       <Show when={props.showAdvanced || props.showTotp}>

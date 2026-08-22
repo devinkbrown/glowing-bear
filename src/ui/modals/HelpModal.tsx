@@ -89,14 +89,14 @@ export default function HelpModal(props: Props) {
         </div>
 
         <div class="border-t border-white/[0.06] pt-4">
-          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">IRCX / Onyx Server Commands</h3>
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Onyx Server commands</h3>
           <CommandList items={IRCX_COMMANDS} />
         </div>
 
         <div class="border-t border-white/[0.06] pt-4">
-          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">Voice / Video (Onyx Server bridge)</h3>
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">Voice / Video (Onyx extras)</h3>
           <p class="text-[10px] text-gray-600 leading-relaxed mb-2">
-            These commands require the Onyx Server bridge — enable it under Settings → Connection.
+            These commands need Onyx extras — enable them under Settings → Connection.
           </p>
           <CommandList items={BRIDGE_COMMANDS} />
         </div>

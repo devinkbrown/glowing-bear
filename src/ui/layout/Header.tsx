@@ -165,7 +165,7 @@ export default function Header() {
               type="button"
               onClick={() => openChannelInfo(chanName())}
               class="w-6 h-6 flex items-center justify-center rounded text-gray-600 hover:text-gray-300 transition-colors shrink-0"
-              title={`${t('header.channelInfo')} (IRCX PROP + ACCESS)`}
+              title={t('header.channelInfo')}
               aria-label={t('header.channelInfo')}
             >
               <svg class="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">

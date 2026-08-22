@@ -51,6 +51,6 @@ test.describe('connect entry surface', () => {
     await expect(page.getByTestId('setup-drawer')).toBeVisible();
     await expect(page.getByTestId('setup-tab-onyx')).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByText(/wss:\/\/eshmaki.me:8080/)).toBeVisible();
-    await expect(page.getByText(/No STARTTLS/)).toBeVisible();
+    await expect(page.getByText(/has no STARTTLS/i)).toBeVisible();
   });
 });

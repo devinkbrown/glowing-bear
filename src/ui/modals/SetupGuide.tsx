@@ -51,7 +51,7 @@ function CopyBlock(props: { label?: string; text: string }) {
         <button
           type="button"
           onClick={() => copy(props.text)}
-          class="shrink-0 w-9 self-stretch flex items-center justify-center text-gray-600 hover:text-[var(--custom-accent,#818cf8)] active:scale-90 transition-all border-l border-white/[0.05]"
+          class="shrink-0 min-w-[44px] self-stretch flex items-center justify-center text-gray-600 hover:text-[var(--custom-accent,#818cf8)] active:scale-90 transition-all border-l border-white/[0.05]"
           aria-label={t('setup.copy')}
         >
           {copied() ? t('setup.copied') : t('setup.copy')}
@@ -83,7 +83,7 @@ export default function SetupGuide(props: SetupGuideProps) {
   return (
     <Show when={props.open}>
       <div data-testid="setup-drawer" class="mt-4 flex flex-col gap-3 animate-fade-in">
-        <div class="flex flex-wrap gap-1" role="tablist" aria-label={t('connect.setup')}>
+        <div class="grid grid-flow-col auto-cols-fr gap-1 p-1 rounded-xl bg-white/[0.035] border border-white/[0.06]" role="tablist" aria-label={t('connect.setup')}>
           <For each={tabs()}>
             {(id) => (
               <button
@@ -92,7 +92,7 @@ export default function SetupGuide(props: SetupGuideProps) {
                 aria-selected={tab() === id}
                 data-testid={`setup-tab-${id}`}
                 onClick={() => setTab(id)}
-                class={`px-3 py-1.5 rounded-lg text-[11px] font-semibold ${tab() === id ? 'bg-white/[0.08] text-gray-200' : 'text-gray-500 hover:text-gray-300'}`}
+                class={`min-h-[36px] sm:min-h-[32px] px-2 rounded-lg text-[11px] font-semibold ${tab() === id ? 'bg-[var(--custom-accent,#818cf8)] text-white' : 'text-gray-500 hover:text-gray-300'}`}
               >
                 {t(`setup.${id}`)}
               </button>

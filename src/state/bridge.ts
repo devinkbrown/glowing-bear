@@ -90,7 +90,7 @@ export function _setBridgeBackend(b: BridgeBackend | null): void {
 }
 
 const BRIDGE_REQUIRED_MSG =
-  'voice/video requires the onyx-server bridge (enable in Settings → Bridge)';
+  'voice/video needs Onyx extras (enable in Settings → Connection)';
 
 /**
  * Run an action once the bridge session is ready. Connects on demand when the

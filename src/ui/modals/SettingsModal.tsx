@@ -769,35 +769,35 @@ export default function SettingsModal(props: Props) {
               <Toggle label={t('settings.enableExtras')} desc={t('settings.enableExtrasDesc')} on={bridge().enabled} onChange={(v) => patchBridge({ enabled: v })} />
               <Show when={bridge().enabled}>
                 <div class="mt-2 space-y-3 animate-fade-in">
-                  <InputField label="WebSocket URL" value={bridge().wsUrl} placeholder="wss://node.example.com/irc (empty = auto node probing)"
+                  <InputField label={t('settings.wsUrl')} value={bridge().wsUrl} placeholder="wss://node.example.com/irc"
                     onChange={(v) => patchBridge({ wsUrl: v })} />
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <InputField label="Account" value={bridge().account} placeholder="Account (nick)"
+                    <InputField label={t('connect.account')} value={bridge().account} placeholder={t('connect.accountNick')}
                       onChange={(v) => patchBridge({ account: v })} />
-                    <InputField label="Password" value={bridge().password} placeholder="Account password" type="password"
+                    <InputField label={t('connect.password')} value={bridge().password} placeholder={t('connect.accountPassword')} type="password"
                       onChange={(v) => patchBridge({ password: v })} />
                   </div>
                   <div class="space-y-0">
                     <Toggle label={t('connect.rememberBridge')} desc={t('connect.sessionOnly')} on={settings.rememberBridgePassword}
                       onChange={(v) => updateSettings({ rememberBridgePassword: v })} />
-                    <Toggle label="Auto-join Media" desc="Automatically join a channel's voice/video room when one is live" on={bridge().autoJoinMedia} onChange={(v) => patchBridge({ autoJoinMedia: v })} />
-                    <Toggle label="E2EE DMs" desc="Encrypt direct messages when the peer publishes a DarkBear device key" on={bridge().e2eeDms} onChange={(v) => patchBridge({ e2eeDms: v })} />
+                    <Toggle label={t('settings.autoJoinMedia')} desc={t('settings.autoJoinMediaDesc')} on={bridge().autoJoinMedia} onChange={(v) => patchBridge({ autoJoinMedia: v })} />
+                    <Toggle label={t('settings.e2eeDms')} desc={t('settings.e2eeDmsDesc')} on={bridge().e2eeDms} onChange={(v) => patchBridge({ e2eeDms: v })} />
                     <Show when={bridge().e2eeDms}>
                       <label class="mt-2 block rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5">
-                        <span class="block text-[12px] font-semibold text-gray-300">DM delivery policy</span>
+                        <span class="block text-[12px] font-semibold text-gray-300">{t('settings.e2eePolicy')}</span>
                         <span class="mb-2 block text-[10px] leading-relaxed text-gray-600">
-                          Verified-only blocks sending until the peer fingerprint is confirmed on this device.
+                          {t('settings.e2eePolicyDesc')}
                         </span>
                         <select
-                          aria-label="DM delivery policy"
+                          aria-label={t('settings.e2eePolicy')}
                           value={bridge().e2eePolicy}
                           onChange={(event) => patchBridge({
                             e2eePolicy: event.currentTarget.value === 'verified' ? 'verified' : 'opportunistic',
                           })}
                           class="w-full rounded-lg border border-white/[0.08] bg-gray-950 px-3 py-2 text-[12px] text-gray-200 outline-none focus:border-[var(--custom-accent,#818cf8)]/40"
                         >
-                          <option value="opportunistic">Encrypt when available</option>
-                          <option value="verified">Require verified encryption</option>
+                          <option value="opportunistic">{t('settings.e2eeOpportunistic')}</option>
+                          <option value="verified">{t('settings.e2eeVerified')}</option>
                         </select>
                       </label>
                     </Show>
