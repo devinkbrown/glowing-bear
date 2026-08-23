@@ -9,7 +9,6 @@ import {
   connectionError,
   connectionErrorCode,
   connectionState,
-  relayDiagnostics,
   saveProfile,
   saveSettings,
   setConnectServerType,
@@ -287,6 +286,30 @@ function ConnectScreen(props: { onClose?: () => void }) {
   const showTotp = () =>
     showAdvanced() || diagnoseReveal(errorCode()) === 'totp' || errorCode() === 'totp_required';
   const mixedBlocked = () => mode() === 'weechat' && mixedContentBlocked(tls(), host());
+  // One form alert: a single failure plus at most one next action. Phase logs
+  // stay off the first-run card — connecting status lives on the CTA.
+  const formAlert = () => {
+    if (errorText()) {
+      return { kind: 'error' as const, message: errorText()!, next: nextAction() };
+    }
+    if (mixedBlocked()) {
+      return {
+        kind: 'warn' as const,
+        message: t('connect.error.mixed_content'),
+        next: t('connect.next.mixed_content'),
+      };
+    }
+    if (passwordFromUrl()) {
+      return { kind: 'warn' as const, message: t('connect.passwordInUrl'), next: null };
+    }
+    return null;
+  };
+  const selectedHint = () => {
+    if (mode() === 'weechat') return t('connect.taglineWeechat');
+    if (mode() === 'onyx-wss') return t('connect.taglineOnyx');
+    return t('connect.modeOnyxTlsUnavailable');
+  };
+  const ctaDominant = () => ready() || connecting();
 
   createEffect(() => {
     if (diagnoseReveal(errorCode()) === 'advanced') setShowAdvanced(true);
@@ -361,7 +384,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
           <div class="px-5 pb-6 sm:px-0 sm:pb-0">
             <div class="login-card-inner">
               <div class="mb-5" role="radiogroup" aria-label={t('connect.serverType')}>
-                <div class="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white/[0.035] border border-white/[0.06]">
+                <div class={`login-segment ${mode() === 'onyx-tls' ? 'login-segment-dim' : ''}`}>
                   <ModeButton
                     id="weechat"
                     active={mode() === 'weechat'}
@@ -375,12 +398,13 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     onSelect={() => setMode('onyx-wss')}
                   />
                 </div>
-                <p class={mode() === 'onyx-tls'
-                  ? 'login-state mt-3 text-[12px] leading-snug'
-                  : 'mt-2 text-center text-[11px] leading-snug text-[var(--color-gray-500)]'}>
-                  {mode() === 'weechat' && t('connect.taglineWeechat')}
-                  {mode() === 'onyx-wss' && t('connect.taglineOnyx')}
-                  {mode() === 'onyx-tls' && t('connect.modeOnyxTlsUnavailable')}
+                <p
+                  data-testid="connect-mode-hint"
+                  class={mode() === 'onyx-tls'
+                    ? 'login-state mt-3 text-[12px] leading-snug'
+                    : `login-segment-hint login-segment-hint-${mode() === 'onyx-wss' ? 'onyx' : 'weechat'}`}
+                >
+                  {selectedHint()}
                 </p>
                 <button
                   type="button"
@@ -407,34 +431,22 @@ function ConnectScreen(props: { onClose?: () => void }) {
                 </div>
               </Show>
 
-              <Show when={errorText()}>
-                <div
-                  role="alert"
-                  data-testid="connect-diagnose"
-                  data-error-code={errorCode() ?? ''}
-                  class="login-state login-state-error mb-4 text-[12px] leading-snug"
-                >
-                  <p>{errorText()}</p>
-                  <Show when={nextAction()}>
-                    <p data-testid="connect-next-action" class="mt-0.5 text-red-200/70">{nextAction()}</p>
-                  </Show>
-                </div>
-              </Show>
-
-              <Show when={mixedBlocked()}>
-                <div role="status" class="login-state login-state-warn mb-4 text-[12px] leading-snug">
-                  {t('connect.error.mixed_content')} {t('connect.next.mixed_content')}
-                </div>
-              </Show>
-
-              <Show when={passwordFromUrl()}>
-                <p class="mb-3 text-[11px] text-amber-300">{t('connect.passwordInUrl')}</p>
-              </Show>
-
-              <Show when={relayDiagnostics().phase !== 'idle'}>
-                <p class="mb-3 text-[11px] font-mono text-gray-500" data-testid="relay-phase">
-                  {t('connect.phase', { phase: relayDiagnostics().phase })}
-                </p>
+              <Show when={formAlert()}>
+                {(alert) => (
+                  <div
+                    role="alert"
+                    data-testid="connect-diagnose"
+                    data-error-code={errorCode() ?? ''}
+                    class={`login-state mb-4 text-[12px] leading-snug ${
+                      alert().kind === 'error' ? 'login-state-error' : 'login-state-warn'
+                    }`}
+                  >
+                    <p>{alert().message}</p>
+                    <Show when={alert().next}>
+                      <p data-testid="connect-next-action" class="login-state-next mt-1">{alert().next}</p>
+                    </Show>
+                  </div>
+                )}
               </Show>
 
               <form
@@ -577,10 +589,8 @@ function ConnectScreen(props: { onClose?: () => void }) {
 
               <div class="pt-3">
                 <button type="submit" disabled={!ready()}
-                  class={`group w-full login-btn-height login-cta text-[15px] font-semibold flex items-center justify-center gap-2.5 transition-all
-                    ${ready()
-                      ? 'bg-[var(--custom-accent,#818cf8)] text-white cursor-pointer'
-                      : 'login-btn-wait cursor-not-allowed'}`}>
+                  class={`group w-full login-btn-height login-cta text-[15px] font-semibold flex items-center justify-center gap-2.5
+                    ${ctaDominant() ? 'login-cta-ready' : 'login-cta-idle'}`}>
                   <Show when={connecting()} fallback={t('connect.connect')}>
                     <span class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                     {statusText()}
@@ -690,12 +700,65 @@ function ConnectScreen(props: { onClose?: () => void }) {
           border-color: color-mix(in srgb, var(--custom-accent, #818cf8) 55%, transparent);
           box-shadow: 0 0 0 3px color-mix(in srgb, var(--custom-accent, #818cf8) 28%, transparent);
         }
-        .login-btn-wait {
-          background: color-mix(in srgb, var(--custom-accent, #818cf8) 22%, transparent);
-          color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 62%, transparent);
-          border: 1px solid color-mix(in srgb, var(--custom-accent, #818cf8) 18%, transparent);
-        }
         .login-cta { border-radius: 14px; }
+        .login-cta-ready {
+          background: var(--custom-accent, #818cf8);
+          color: #fff;
+          cursor: pointer;
+        }
+        .login-cta-idle {
+          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 6%, transparent);
+          color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 42%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 10%, transparent);
+          cursor: not-allowed;
+        }
+        .login-cta:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--custom-accent, #818cf8) 80%, white);
+          outline-offset: 3px;
+        }
+        .login-segment {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0;
+          padding: 3px;
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 5%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 10%, transparent);
+        }
+        .login-segment-dim { opacity: 0.55; }
+        .login-segment-btn {
+          min-height: 44px;
+          border-radius: 11px;
+          padding: 0 8px;
+          text-align: center;
+          font-size: 14px;
+          font-weight: 650;
+          color: var(--color-gray-400, #9aa3b8);
+        }
+        .login-segment-btn[aria-checked="true"] {
+          background: var(--custom-accent, #818cf8);
+          color: #fff;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.28);
+        }
+        .login-segment-btn:hover:not([aria-checked="true"]) {
+          color: var(--color-gray-200, #e0e4f0);
+        }
+        .login-segment-btn:focus-visible {
+          z-index: 1;
+          outline: 2px solid color-mix(in srgb, var(--custom-accent, #818cf8) 80%, white);
+          outline-offset: 2px;
+        }
+        .login-segment-hint {
+          margin-top: 8px;
+          font-size: 12px;
+          line-height: 1.4;
+          color: var(--color-gray-500);
+        }
+        .login-segment-hint-weechat { text-align: start; }
+        .login-segment-hint-onyx { text-align: end; }
+        .login-state-next {
+          color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 72%, var(--role-mention, #f87171));
+        }
         .login-state {
           border-radius: 14px;
           border: 1px solid color-mix(in srgb, var(--custom-accent, #818cf8) 22%, transparent);
@@ -736,6 +799,13 @@ function ConnectScreen(props: { onClose?: () => void }) {
           min-height: 44px; font-size: 12px; color: var(--color-gray-500);
         }
         .login-quiet:hover { color: var(--color-gray-300); }
+        .login-quiet:focus-visible,
+        .login-tls:focus-visible,
+        .login-tls-on:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--custom-accent, #818cf8) 80%, white);
+          outline-offset: 2px;
+          border-radius: 10px;
+        }
         @media (min-width: 640px) {
           .login-quiet { min-height: 32px; }
         }
@@ -805,11 +875,7 @@ function ModeButton(props: {
       data-testid={`connect-mode-${props.id}`}
       disabled={props.disabled}
       onClick={() => { if (!props.disabled) props.onSelect(); }}
-      class={`min-h-[44px] rounded-lg px-2 text-center text-[13px] font-semibold transition-colors focus-visible:z-10 ${
-        props.active
-          ? 'bg-[var(--custom-accent,#818cf8)] text-white shadow-sm'
-          : 'text-[var(--color-gray-400)] hover:text-[var(--color-gray-200)]'
-      } ${props.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+      class={`login-segment-btn ${props.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
     >
       {props.title}
     </button>

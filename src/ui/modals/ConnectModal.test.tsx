@@ -99,12 +99,14 @@ describe('ConnectModal', () => {
     const connect = getByRole('button', { name: /^Connect$/ });
 
     expect(connect).toBeDisabled();
+    expect(connect.className).toContain('login-cta-idle');
 
     fireEvent.input(getByLabelText('Hostname'), { target: { value: 'relay.example.test' } });
     expect(connect).toBeDisabled();
 
     fireEvent.input(getByLabelText('Password'), { target: { value: 'relay-secret' } });
     expect(connect).toBeEnabled();
+    expect(connect.className).toContain('login-cta-ready');
   }, RENDER_TIMEOUT_MS);
 
   it('keeps the theme picker and setup drawer off the first-run card', () => {
@@ -149,6 +151,18 @@ describe('ConnectModal', () => {
     fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true });
 
     expect(state.connect).toHaveBeenCalledTimes(1);
+  }, RENDER_TIMEOUT_MS);
+
+  it('shows only the selected mode hint under the segmented picker', () => {
+    const { getByTestId, getByText, queryByText } = render(() => <ConnectModal open />);
+    expect(getByTestId('connect-mode-hint')).toHaveTextContent('Your WeeChat, in the browser.');
+    expect(queryByText('First-party Onyx: one socket for chat and media.')).toBeNull();
+
+    fireEvent.click(getByTestId('connect-mode-onyx-wss'));
+    expect(getByTestId('connect-mode-hint')).toHaveTextContent('First-party Onyx: one socket for chat and media.');
+    expect(queryByText('Your WeeChat, in the browser.')).toBeNull();
+    expect(getByTestId('connect-mode-weechat')).toHaveAttribute('aria-checked', 'false');
+    expect(getByTestId('connect-mode-onyx-wss')).toHaveAttribute('aria-checked', 'true');
   }, RENDER_TIMEOUT_MS);
 
   it('keeps TLS as a quiet pressed toggle, not a second primary CTA', () => {
