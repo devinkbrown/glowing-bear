@@ -18,8 +18,10 @@ test.describe('connect entry surface', () => {
     await page.getByTestId('connect-mode-onyx-tls').click();
     await expect(page.getByTestId('connect-tls-empty')).toBeVisible();
     await expect(page.getByText(/Browsers cannot open raw TLS IRC/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Use WeeChat' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Use Onyx' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeDisabled();
-    await page.getByTestId('connect-mode-weechat').click();
+    await page.getByRole('button', { name: 'Use WeeChat' }).click();
 
     const host = page.getByLabel('Hostname', { exact: true });
     const port = page.getByLabel('Port', { exact: true });

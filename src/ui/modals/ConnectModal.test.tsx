@@ -215,4 +215,27 @@ describe('ConnectModal', () => {
     expect(mixed.getByTestId('connect-alert-title')).toHaveTextContent('Needs TLS');
     expect(mixed.getByTestId('connect-tls-attention')).toBeInTheDocument();
   }, RENDER_TIMEOUT_MS);
+
+  it('keeps locale in the brand meta, not an orphan footer after the card', () => {
+    const { getByLabelText, getByTestId, container } = render(() => <ConnectModal open />);
+    const locale = getByLabelText('Language');
+    expect(locale).toHaveAttribute('id', 'connect-locale');
+    expect(locale.closest('.connect-brand-meta')).not.toBeNull();
+    expect(getByTestId('connect-product-line').closest('.connect-brand-copy')).not.toBeNull();
+    expect(container.querySelectorAll('#connect-locale')).toHaveLength(1);
+  }, RENDER_TIMEOUT_MS);
+
+  it('lets TLS-unavailable actions restore a designed connectable mode', () => {
+    const { getByTestId, getByRole, getByLabelText } = render(() => <ConnectModal open />);
+    fireEvent.click(getByTestId('connect-mode-onyx-tls'));
+    expect(getByTestId('connect-tls-empty')).toBeInTheDocument();
+    expect(getByRole('button', { name: 'Use WeeChat' })).toBeInTheDocument();
+    expect(getByRole('button', { name: 'Use Onyx' })).toBeInTheDocument();
+    expect(getByRole('button', { name: /^Connect$/ })).toBeDisabled();
+
+    fireEvent.click(getByRole('button', { name: 'Use WeeChat' }));
+    expect(getByTestId('connect-mode-weechat')).toHaveAttribute('aria-checked', 'true');
+    expect(getByLabelText('Hostname')).toBeInTheDocument();
+    expect(getByRole('button', { name: 'TLS' })).toBeInTheDocument();
+  }, RENDER_TIMEOUT_MS);
 });

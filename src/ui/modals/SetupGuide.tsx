@@ -83,7 +83,7 @@ export default function SetupGuide(props: SetupGuideProps) {
   return (
     <Show when={props.open}>
       <div data-testid="setup-drawer" class="mt-4 flex flex-col gap-3 animate-fade-in">
-        <div class="grid grid-flow-col auto-cols-fr gap-1 p-1 rounded-xl bg-white/[0.035] border border-white/[0.06]" role="tablist" aria-label={t('connect.setup')}>
+        <div class="setup-tabs" role="tablist" aria-label={t('connect.setup')}>
           <For each={tabs()}>
             {(id) => (
               <button
@@ -92,7 +92,7 @@ export default function SetupGuide(props: SetupGuideProps) {
                 aria-selected={tab() === id}
                 data-testid={`setup-tab-${id}`}
                 onClick={() => setTab(id)}
-                class={`min-h-[36px] sm:min-h-[32px] px-2 rounded-lg text-[11px] font-semibold ${tab() === id ? 'bg-[var(--custom-accent,#818cf8)] text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                class="setup-tab"
               >
                 {t(`setup.${id}`)}
               </button>

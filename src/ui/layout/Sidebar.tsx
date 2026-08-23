@@ -287,10 +287,10 @@ export default function Sidebar(props: SidebarProps) {
                 e.currentTarget.blur();
               }
             }}
-            class="sidebar-filter-input w-full border border-white/[0.07] bg-white/[0.035] py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none transition-colors placeholder:text-gray-600 focus:border-[var(--role-primary,#818cf8)]/35 focus:bg-white/[0.055] sm:py-2 sm:text-[12px]"
+            class="sidebar-filter-input w-full py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none placeholder:text-gray-600 sm:py-2 sm:text-[12px]"
           />
         </label>
-        <div class="grid grid-cols-4 gap-1 rounded-xl border border-white/[0.055] bg-black/20 p-1">
+        <div class="sidebar-mode-strip">
           <ModeButton label={t('sidebar.all')} active={modeActive('all')} onClick={() => setBufferMode('all')} />
           <ModeButton label={t('sidebar.hot')} active={modeActive('unread')} onClick={() => setBufferMode('unread')} />
           <ModeButton label="@" active={modeActive('mentions')} onClick={() => setBufferMode('mentions')} />
@@ -442,7 +442,7 @@ export default function Sidebar(props: SidebarProps) {
           <div class="shrink-0 px-3 py-2" style={{ 'padding-bottom': 'max(0.5rem, env(safe-area-inset-bottom))' }}>
             <button
               onClick={(e) => selectBuffer(pointer(), e)}
-              class="w-full flex items-center justify-center gap-2 py-2.5 sm:py-2 rounded-full bg-[var(--role-mention,#f87171)]/10 text-[var(--role-mention,#f87171)] text-[12px] sm:text-[11px] font-semibold hover:bg-[var(--role-mention,#f87171)]/15 active:bg-[var(--role-mention,#f87171)]/20 transition-all"
+              class="sidebar-jump"
             >
               <svg class="w-3.5 h-3.5 sm:w-3 sm:h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                 <path d="M8 2v8M5 7l3 3 3-3" />
@@ -644,10 +644,10 @@ function NotifyButton(props: { mode: NotifyMode; temporaryMutedUntil: number; on
 function StatCell(props: { label: string; value: number; hot?: boolean; danger?: boolean }) {
   return (
     <div
-      class="rounded-xl border border-white/[0.055] bg-white/[0.025] px-2 py-1.5 text-center"
+      class="sidebar-stat"
       classList={{
-        'border-[var(--role-primary,#818cf8)]/20 bg-[var(--role-primary,#818cf8)]/[0.06]': props.hot && !props.danger,
-        'border-[var(--role-mention,#f87171)]/20 bg-[var(--role-mention,#f87171)]/[0.07]': props.hot && props.danger,
+        'sidebar-stat-hot': Boolean(props.hot && !props.danger),
+        'sidebar-stat-danger': Boolean(props.hot && props.danger),
       }}
     >
       <div

@@ -623,7 +623,7 @@ export default function InputBar() {
             <button
               onClick={() => fileEl?.click()}
               disabled={!activeBuffer()}
-              class="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.1] active:scale-90 transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] disabled:opacity-20 disabled:cursor-default disabled:hover:bg-transparent disabled:active:scale-100"
+              class="composer-tool"
               title={t('composer.upload')}
               aria-label={t('composer.upload')}
             >
@@ -650,11 +650,7 @@ export default function InputBar() {
             <button
               onClick={toggleGif}
               disabled={!activeBuffer()}
-              class="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg transition-[color,background-color,transform] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-90 disabled:opacity-20 disabled:cursor-default disabled:active:scale-100"
-              classList={{
-                'text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/15 ring-1 ring-[var(--custom-accent,#818cf8)]/25': showGif(),
-                'text-gray-500 hover:text-gray-200 hover:bg-white/[0.06] active:bg-white/[0.1]': !showGif(),
-              }}
+              class={`composer-tool ${showGif() ? 'composer-tool-on' : ''}`}
               title={t('composer.gif')}
               aria-label={t('composer.gif')}
             >
@@ -666,7 +662,7 @@ export default function InputBar() {
             <Show
               when={!submitting()}
               fallback={
-                <div class="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center">
+                <div class="composer-tool">
                   <span class="w-4 h-4 border-2 border-gray-600 border-t-[var(--custom-accent,#818cf8)] rounded-full animate-spin" />
                 </div>
               }
@@ -674,11 +670,7 @@ export default function InputBar() {
               <button
                 onClick={submit}
                 disabled={!hasText() || !activeBuffer() || submitting()}
-                class="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl sm:rounded-lg transition-[opacity,transform,box-shadow,background-color,filter] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                classList={{
-                  'bg-[var(--custom-accent,#818cf8)] text-white hover:brightness-110 active:scale-90 shadow-md shadow-[var(--custom-accent,#818cf8)]/30': hasText(),
-                  'bg-white/[0.03] text-gray-600 cursor-default': !hasText(),
-                }}
+                class={`composer-tool ${hasText() ? 'composer-send-ready' : 'composer-send-idle'}`}
                 aria-label={t('composer.send')}
               >
                 <svg class="w-[17px] h-[17px] sm:w-[15px] sm:h-[15px]" viewBox="0 0 16 16" fill="currentColor">

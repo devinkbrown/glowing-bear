@@ -746,15 +746,15 @@ export default function SettingsModal(props: Props) {
                 <div class="space-y-1.5 mb-3">
                   <For each={settings.profiles}>
                     {(p) => (
-                      <div class="flex items-center gap-2 bg-white/[0.02] border border-white/[0.05] rounded-lg px-3 py-2">
+                      <div class="settings-row flex items-center gap-2 px-3 py-2">
                         <span class="text-[12px] text-gray-300 font-medium flex-1 truncate">{p.name}</span>
                         <span class="text-[10px] text-gray-600 font-mono truncate max-w-[120px]">{p.relay.host}:{p.relay.port}</span>
                         <button onClick={() => loadProfile(p.name)}
-                          class="text-[10px] font-semibold text-[var(--custom-accent,#818cf8)] hover:opacity-80 transition-opacity px-1.5 min-h-[44px] sm:min-h-0">
+                          class="settings-btn px-2 text-[10px] font-semibold text-[var(--role-primary,#818cf8)]">
                           {t('settings.loadProfile')}
                         </button>
                         <button onClick={() => { if (confirm(t('settings.confirmDeleteProfile', { name: p.name }))) deleteProfile(p.name); }}
-                          class="text-[10px] font-semibold text-red-400 hover:text-red-300 transition-colors px-1.5 min-h-[44px] sm:min-h-0">
+                          class="settings-btn px-2 text-[10px] font-semibold text-[var(--role-mention,#f87171)]">
                           {t('settings.deleteProfile')}
                         </button>
                       </div>
@@ -768,7 +768,7 @@ export default function SettingsModal(props: Props) {
                   class="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700 min-h-[44px]" />
                 <button onClick={() => { const name = profileName().trim(); if (name) { saveProfile(name); setProfileName(''); } }}
                   disabled={!profileName().trim()}
-                  class="px-3 py-1.5 text-[11px] font-semibold text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/10 border border-[var(--custom-accent,#818cf8)]/20 rounded-lg hover:bg-[var(--custom-accent,#818cf8)]/15 disabled:opacity-40 disabled:cursor-not-allowed transition-all min-h-[44px]">
+                  class="settings-btn px-3 text-[11px] font-semibold text-[var(--role-primary,#818cf8)] bg-[var(--role-primary,#818cf8)]/10 border border-[var(--role-primary,#818cf8)]/20 disabled:opacity-40 disabled:cursor-not-allowed">
                   {t('settings.saveCurrent')}
                 </button>
               </div>

@@ -386,8 +386,25 @@ function ConnectScreen(props: { onClose?: () => void }) {
               <AstronautBear animated={false} size={72} class="sm:w-[88px] sm:h-[88px]" accent={tc().accent} theme={settings.theme} />
             </Suspense>
           </Show>
-          <h1 class="connect-hero-title">DarkBear</h1>
-          <p data-testid="connect-product-line" class="connect-product-line">{t('connect.productLine')}</p>
+          <div class="connect-brand-copy">
+            <h1 class="connect-hero-title">DarkBear</h1>
+            <p data-testid="connect-product-line" class="connect-product-line">{t('connect.productLine')}</p>
+          </div>
+          <div class="connect-brand-meta">
+            <p class="text-[10px] text-gray-700 font-mono tracking-wider">v3.0</p>
+            <label class="sr-only" for="connect-locale">{t('locale.language')}</label>
+            <select
+              id="connect-locale"
+              class="login-locale"
+              value={settings.locale}
+              onChange={(e) => setLocale(e.currentTarget.value as LocalePreference)}
+            >
+              <option value="system">{t('locale.system')}</option>
+              <option value="en">{t('locale.english')}</option>
+              <option value="de">{t('locale.german')}</option>
+              <option value="ar">{t('locale.arabic')}</option>
+            </select>
+          </div>
         </div>
 
         <div class={`connect-card ${decorativeMotionEnabled() ? 'connect-motion-card' : ''}`}>
@@ -421,9 +438,10 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   aria-checked={mode() === 'onyx-tls'}
                   data-testid="connect-mode-onyx-tls"
                   onClick={() => setMode('onyx-tls')}
-                  class={`mt-1 w-full login-quiet ${mode() === 'onyx-tls' ? 'text-gray-400' : ''}`}
+                  class="login-tertiary"
                 >
-                  {t('connect.modeOnyxTls')}
+                  <span>{t('connect.modeOnyxTls')}</span>
+                  <span class="login-tertiary-tag">{t('connect.tlsEmptyTitle')}</span>
                 </button>
               </div>
 
@@ -508,11 +526,19 @@ function ConnectScreen(props: { onClose?: () => void }) {
                 <div class="login-empty mb-1" data-testid="connect-tls-empty">
                   <p class="login-empty-title">{t('connect.tlsEmptyTitle')}</p>
                   <p class="login-empty-body">{t('connect.modeOnyxTlsUnavailable')}</p>
+                  <div class="login-empty-actions">
+                    <button type="button" class="login-empty-action" onClick={() => setMode('weechat')}>
+                      {t('connect.useWeechat')}
+                    </button>
+                    <button type="button" class="login-empty-action" onClick={() => setMode('onyx-wss')}>
+                      {t('connect.useOnyx')}
+                    </button>
+                  </div>
                 </div>
               </Show>
 
               <Show when={mode() === 'onyx-wss'}>
-                <div class="flex flex-col gap-3">
+                <div class="login-stack">
                   <Field label={t('connect.endpoint')} id="c-endpoint">
                     <input id="c-endpoint" class="login-input" value={bridgeEndpoint()}
                       onInput={(e) => setBridgeEndpoint(e.currentTarget.value)} autocomplete="off" spellcheck={false} />
@@ -577,7 +603,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     </div>
                   </Show>
                   <button type="button" onClick={() => setRememberBridgePassword(!rememberBridgePassword())}
-                    aria-pressed={rememberBridgePassword()} class="flex items-center gap-2 text-[11px] text-gray-500">
+                    aria-pressed={rememberBridgePassword()} class="login-remember">
                     <span class={`login-toggle ${rememberBridgePassword() ? 'login-toggle-on' : ''}`}><span class="login-toggle-dot" /></span>
                     {t('connect.rememberAccount')}
                   </button>
@@ -629,7 +655,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
               </div>
               </form>
 
-              <div class="mt-2 flex flex-col">
+              <div class="login-card-foot">
                 <button type="button" onClick={() => setShowSetup(!showSetup())}
                   class="login-quiet w-full text-center"
                   aria-expanded={showSetup()}>
@@ -662,7 +688,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                       if (e.key === 'Enter') doSaveProfile();
                     }} />
                   <button type="button" onClick={doSaveProfile} disabled={!profileName().trim()}
-                    class="px-4 h-[44px] text-[13px] font-semibold text-[var(--custom-accent,#818cf8)]">
+                    class="login-save">
                     {t('connect.save')}
                   </button>
                 </div>
@@ -672,7 +698,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
 
               <Show when={props.onClose}>
                 <button type="button" onClick={() => props.onClose?.()}
-                  class="mt-2 w-full h-[44px] text-[13px] text-gray-600">
+                  class="login-quiet w-full text-center">
                   {t('connect.backToChat')}
                 </button>
               </Show>
@@ -681,22 +707,6 @@ function ConnectScreen(props: { onClose?: () => void }) {
         </div>
 
         <div class="flex-1 min-h-[12px] sm:min-h-0 connect-flex-spacer" />
-
-        <div class="flex items-center justify-center gap-3 pb-4 sm:pb-6">
-          <p class="text-[10px] text-gray-700 font-mono tracking-wider">v3.0</p>
-          <label class="sr-only" for="connect-locale">{t('locale.language')}</label>
-          <select
-            id="connect-locale"
-            class="login-locale"
-            value={settings.locale}
-            onChange={(e) => setLocale(e.currentTarget.value as LocalePreference)}
-          >
-            <option value="system">{t('locale.system')}</option>
-            <option value="en">{t('locale.english')}</option>
-            <option value="de">{t('locale.german')}</option>
-            <option value="ar">{t('locale.arabic')}</option>
-          </select>
-        </div>
       </div>
 
     </div>
@@ -762,7 +772,7 @@ function WeeChatFields(props: {
   attention: FieldAttention;
 }) {
   return (
-    <div class="flex flex-col gap-3">
+    <div class="login-stack">
       <Field label={t('connect.hostname')} id="c-host">
         <input ref={props.hostRef} id="c-host" type="text" value={props.host}
           onInput={(e) => props.onHost(e.currentTarget.value)}
@@ -797,7 +807,7 @@ function WeeChatFields(props: {
           </button>
         </div>
         <button type="button" onClick={props.onRemember} aria-pressed={props.remember}
-          class="mt-2 flex items-center gap-2 text-left text-[11px] text-gray-500">
+          class="login-remember mt-1">
           <span class={`login-toggle ${props.remember ? 'login-toggle-on' : ''}`}><span class="login-toggle-dot" /></span>
           <span>{t('connect.remember')}<span class="block text-[9px] text-gray-700">{t('connect.sessionOnly')}</span></span>
         </button>
@@ -806,7 +816,7 @@ function WeeChatFields(props: {
         {t('connect.advanced')}
       </button>
       <Show when={props.showAdvanced || props.showTotp}>
-        <div class="flex flex-col gap-3">
+        <div class="login-stack">
           <Show when={props.showAdvanced}>
             <div class="flex items-center justify-between min-h-[44px]">
               <span class="text-[13px] text-gray-400">{t('connect.compression')}</span>

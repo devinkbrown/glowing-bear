@@ -54,8 +54,8 @@ function CommandList(props: { items: { cmd: string; desc: MessageKey }[] }) {
     <div class="space-y-0.5">
       <For each={props.items}>
         {(item) => (
-          <div class="flex items-center justify-between py-2 group">
-            <span class="text-gray-400 text-[13px] group-hover:text-gray-200 transition-colors">{t(item.desc)}</span>
+          <div class="help-row">
+            <span class="text-gray-400 text-[13px]">{t(item.desc)}</span>
             <code class="help-code text-[10px] font-mono text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/[0.06] px-2 py-1 shrink-0 ms-3">
               {item.cmd}
             </code>
@@ -75,8 +75,8 @@ export default function HelpModal(props: Props) {
           <div class="space-y-0.5">
             <For each={SHORTCUTS}>
               {(s) => (
-                <div class="flex items-center justify-between py-2 group">
-                  <span class="text-gray-400 text-[13px] group-hover:text-gray-200 transition-colors">{t(s.desc)}</span>
+                <div class="help-row">
+                  <span class="text-gray-400 text-[13px]">{t(s.desc)}</span>
                   <kbd class="help-kbd text-[11px] font-mono text-gray-400 bg-white/[0.04] border border-white/[0.06] px-2 py-1 shrink-0 ms-4">
                     {s.keys}
                   </kbd>
