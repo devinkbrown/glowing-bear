@@ -495,7 +495,7 @@ export default function InputBar() {
       {/* Paste preview */}
       <Show when={pastePreview()}>
         {(preview) => (
-          <div class="absolute bottom-full left-2 right-2 sm:left-3 sm:right-3 mb-1 bg-gray-900 border border-white/[0.06] rounded-xl p-3 shadow-xl animate-slide-down">
+          <div class="absolute bottom-full left-2 right-2 sm:left-3 sm:right-3 mb-1 chrome-pop p-3 animate-slide-down">
             <div class="flex items-start gap-3">
               <img
                 src={preview().dataUrl}
@@ -510,13 +510,13 @@ export default function InputBar() {
                 <div class="flex gap-2">
                   <button
                     onClick={confirmPasteUpload}
-                    class="px-4 py-2 sm:px-3 sm:py-1 rounded-lg text-[12px] sm:text-[11px] font-medium bg-[var(--custom-accent,#818cf8)] text-white hover:opacity-85 active:opacity-70 disabled:opacity-40 transition-all"
+                    class="login-save px-4"
                   >
                     {t('composer.addQueue')}
                   </button>
                   <button
                     onClick={() => setPastePreview(null)}
-                    class="px-4 py-2 sm:px-3 sm:py-1 rounded-lg text-[12px] sm:text-[11px] font-medium text-gray-400 hover:text-gray-200 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+                    class="login-ghost px-4"
                   >
                     {t('composer.cancel')}
                   </button>

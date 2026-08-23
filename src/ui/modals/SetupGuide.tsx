@@ -51,7 +51,7 @@ function CopyBlock(props: { label?: string; text: string }) {
         <button
           type="button"
           onClick={() => copy(props.text)}
-          class="shrink-0 min-w-[44px] self-stretch flex items-center justify-center text-gray-600 hover:text-[var(--custom-accent,#818cf8)] active:scale-90 transition-all border-l border-white/[0.05]"
+          class="setup-copy"
           aria-label={t('setup.copy')}
         >
           {copied() ? t('setup.copied') : t('setup.copy')}

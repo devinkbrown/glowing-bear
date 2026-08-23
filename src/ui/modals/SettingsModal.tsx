@@ -765,7 +765,7 @@ export default function SettingsModal(props: Props) {
               <div class="flex gap-2">
                 <input type="text" value={profileName()} onInput={(e) => setProfileName(e.currentTarget.value)}
                   placeholder={t('connect.profileName')}
-                  class="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-lg text-gray-200 text-[12px] px-3 py-1.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/30 transition-colors placeholder:text-gray-700 min-h-[44px]" />
+                  class="settings-input flex-1 text-[12px] text-gray-200 px-3 placeholder:text-gray-700" />
                 <button onClick={() => { const name = profileName().trim(); if (name) { saveProfile(name); setProfileName(''); } }}
                   disabled={!profileName().trim()}
                   class="settings-btn px-3 text-[11px] font-semibold text-[var(--role-primary,#818cf8)] bg-[var(--role-primary,#818cf8)]/10 border border-[var(--role-primary,#818cf8)]/20 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -1236,7 +1236,7 @@ function InputField(props: {
         {props.label}
         <input type={props.type ?? 'text'} value={props.value} placeholder={props.placeholder}
           onInput={(e) => props.onChange(e.currentTarget.value)}
-          class="settings-input w-full mt-1.5 bg-white/[0.035] border border-white/[0.07] text-gray-100 text-[13px] sm:text-[12px] px-3 py-2.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/35 focus:bg-white/[0.055] transition-colors placeholder:text-gray-700 normal-case tracking-normal font-normal" />
+          class="settings-input w-full mt-1.5 text-gray-100 text-[13px] sm:text-[12px] px-3 placeholder:text-gray-700" />
       </label>
     </div>
   );

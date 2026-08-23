@@ -118,12 +118,12 @@ export default function Header() {
             <DmSecurityControl peer={chanName()} />
           </Show>
           <Show when={serverName()}>
-            <span class="hidden sm:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-white/[0.045] text-gray-500 border border-white/[0.06] shrink-0">
+            <span class="chrome-chip hidden sm:inline-flex shrink-0">
               {serverName()}
             </span>
           </Show>
           <Show when={!isIrc()}>
-            <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-white/[0.06] text-gray-500 border border-white/[0.06] shrink-0">
+            <span class="chrome-chip shrink-0">
               {BUFFER_KIND_LABEL[kind()]}
             </span>
           </Show>
@@ -136,7 +136,7 @@ export default function Header() {
           <Show when={onOnyxServer()}>
             <span
               data-testid="onyx-chip"
-              class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-[var(--custom-accent,#818cf8)]/[0.08] text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/15 shrink-0"
+              class="chrome-chip chrome-chip-accent hidden md:inline-flex shrink-0"
             >
               {t('header.onyxChip')}
             </span>
@@ -154,7 +154,7 @@ export default function Header() {
               type="button"
               data-testid="enable-onyx-extras"
               onClick={() => enableOnyxExtras()}
-              class="hidden md:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/25 shrink-0"
+              class="chrome-chip chrome-chip-accent hidden md:inline-flex shrink-0"
               title={t('header.extrasHint')}
             >
               {t('header.enableExtras')}
@@ -208,7 +208,7 @@ export default function Header() {
         </Show>
         <Show when={topicExpanded() && title()}>
           <div class="absolute top-full left-0 right-0 mt-1 sm:-ml-3 sm:-mr-3 z-30 animate-slide-down">
-            <div class="bg-gray-900 border border-white/[0.08] rounded-xl shadow-xl px-4 py-3 mx-1 sm:mx-0">
+            <div class="chrome-pop px-4 py-3 mx-1 sm:mx-0">
               <p class="text-[12px] sm:text-[13px] text-gray-300 leading-relaxed break-words" innerHTML={title()} />
             </div>
           </div>
@@ -345,14 +345,14 @@ export default function Header() {
             </svg>
           </button>
           <Show when={ircxOpen()}>
-            <div class="absolute top-full right-0 mt-1 z-30 bg-gray-900 border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden min-w-[170px] animate-slide-down">
+            <div class="absolute top-full right-0 mt-1 z-30 chrome-pop overflow-hidden min-w-[170px] animate-slide-down">
               <Show when={onOnyxServer()}>
                 <button
                   onClick={() => {
                     openServicesPanel('nick');
                     setIrcxOpen(false);
                   }}
-                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+                  class="msg-menu-item"
                 >
                   <span class="w-4 h-4 flex items-center justify-center shrink-0">
                     <svg class="w-4 h-4 text-[var(--custom-accent,#818cf8)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
@@ -368,7 +368,7 @@ export default function Header() {
                   openModal('channelList');
                   setIrcxOpen(false);
                 }}
-                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+                class="msg-menu-item"
               >
                 <span class="w-4 h-4 flex items-center justify-center shrink-0">
                   <svg class="w-4 h-4 text-[var(--role-online,#34d399)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">

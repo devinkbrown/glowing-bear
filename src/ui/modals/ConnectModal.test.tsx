@@ -74,10 +74,11 @@ describe('ConnectModal', () => {
   });
 
   it('exposes the typed server picker and keeps TLS documented, not fake-connectable', () => {
-    const { getByTestId, getByRole, getByText, getAllByText } = render(() => <ConnectModal open />);
+    const { getByTestId, getByRole, getByText, getAllByText, queryByText } = render(() => <ConnectModal open />);
     expect(getByTestId('connect-mode-weechat')).toBeInTheDocument();
     expect(getByTestId('connect-mode-onyx-wss')).toBeInTheDocument();
     expect(getByTestId('connect-mode-onyx-tls')).toBeEnabled();
+    expect(queryByText('Not available here')).toBeNull();
     fireEvent.click(getByTestId('connect-mode-onyx-tls'));
     expect(getByRole('button', { name: /^Connect$/ })).toBeDisabled();
     expect(getByTestId('connect-tls-empty')).toBeInTheDocument();

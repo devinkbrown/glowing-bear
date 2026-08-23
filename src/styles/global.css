@@ -1642,48 +1642,43 @@ nav, aside, header, .video-controls {
   border-radius: var(--control-radius-lg);
   padding: 20px;
 }
+/* Stacked product — phone and tablet portrait. Same hierarchy, wider card. */
 @media (min-width: 640px) {
-  .login-card-inner { padding: 28px; }
   .connect-shell { max-width: 480px; }
-  .connect-brand {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 14px 16px;
-    padding: 0 0 20px;
-    text-align: start;
-  }
-  .connect-brand-copy { flex: 1; }
-  .connect-hero-title { margin-top: 0; font-size: 28px; }
-  .connect-product-line { margin-top: 4px; font-size: 13px; }
-  .connect-brand-meta { width: 100%; justify-content: flex-start; margin-top: 0; }
+  .login-card-inner { padding: 28px; }
   .connect-card { padding-inline: 0; }
+  .connect-hero-title { font-size: 30px; }
+  .connect-product-line { font-size: 13px; }
 }
-@media (min-width: 960px) {
+/* Split product — tablet landscape and desktop. One layout, scaled type. */
+@media (min-width: 800px) {
   .connect-shell {
     max-width: 920px;
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 72px;
-    padding: 48px 32px;
+    gap: 56px;
+    padding: 40px 28px;
     margin-block: auto;
   }
   .connect-brand {
     flex: 1;
-    flex-direction: column;
-    flex-wrap: nowrap;
     align-items: flex-start;
     padding: 0;
     text-align: start;
   }
-  .connect-hero-title { font-size: 44px; margin-top: 16px; }
-  .connect-product-line { font-size: 16px; letter-spacing: 0.02em; }
-  .connect-brand-meta { margin-top: 28px; }
-  .connect-card { width: 440px; flex-shrink: 0; padding-inline: 0; }
+  .connect-hero-title { font-size: 40px; margin-top: 16px; }
+  .connect-product-line { font-size: 15px; letter-spacing: 0.02em; }
+  .connect-brand-meta { justify-content: flex-start; margin-top: 24px; }
+  .connect-card { width: 420px; flex-shrink: 0; padding-inline: 0; }
   html[dir="rtl"] .connect-brand { align-items: flex-end; text-align: end; }
   html[dir="rtl"] .connect-brand-meta { justify-content: flex-end; }
+}
+@media (min-width: 1100px) {
+  .connect-shell { gap: 72px; padding: 48px 32px; }
+  .connect-hero-title { font-size: 44px; }
+  .connect-product-line { font-size: 16px; }
+  .connect-card { width: 440px; }
 }
 .connect-hero-title {
   font-size: 26px;
@@ -1755,6 +1750,7 @@ nav, aside, header, .video-controls {
 }
 .login-cta {
   width: 100%;
+  margin-top: 16px;
   font-size: 15px;
   font-weight: 600;
 }
@@ -1810,10 +1806,9 @@ nav, aside, header, .video-controls {
   margin-top: 10px;
   font-size: 13px;
   line-height: 1.45;
+  text-align: start;
   color: var(--color-gray-500);
 }
-.login-segment-hint-weechat { text-align: start; }
-.login-segment-hint-onyx { text-align: end; }
 .login-state {
   padding: 12px 14px;
   color: var(--color-gray-200);
@@ -2157,13 +2152,42 @@ nav, aside, header, .video-controls {
 }
 .login-toggle-on .login-toggle-dot { transform: translateX(18px); }
 html[dir="rtl"] .login-toggle-on .login-toggle-dot { transform: translateX(-18px); }
-.login-quiet {
+.login-quiet,
+.login-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 44px;
+  padding: 0 12px;
   font-size: 12px;
   color: var(--color-gray-500);
-  border-radius: var(--control-radius-sm);
+  border-radius: var(--control-radius);
 }
-.login-quiet:hover { color: var(--color-gray-300); }
+.login-ghost-start { justify-content: flex-start; }
+.login-stack > .login-ghost,
+.login-card-foot > .login-ghost,
+.login-card-inner > .login-ghost { width: 100%; }
+.login-quiet:hover,
+.login-ghost:hover {
+  color: var(--color-gray-300);
+  background: var(--fill-hover);
+}
+.login-pair {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.login-pair .login-field { flex: 1; min-width: 0; }
+.login-tls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  height: 52px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 650;
+}
 .login-quiet:focus-visible,
 .login-tls:focus-visible,
 .login-tls-on:focus-visible,
@@ -2228,6 +2252,14 @@ html[dir="rtl"] .login-toggle-on .login-toggle-dot { transform: translateX(-18px
 .settings-input,
 .settings-select {
   border-radius: var(--control-radius);
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
+  min-height: 44px;
+}
+.settings-input:focus,
+.settings-select:focus {
+  border-color: color-mix(in srgb, var(--role-primary, #818cf8) 35%, var(--hairline));
+  background: var(--fill-hover);
 }
 .help-kbd,
 .help-code {
@@ -2253,6 +2285,66 @@ html[dir="rtl"] .login-toggle-on .login-toggle-dot { transform: translateX(-18px
   background: color-mix(in srgb, var(--role-online, #34d399) 12%, transparent);
   color: var(--role-online, #34d399);
 }
+.chrome-chip-accent {
+  border-color: color-mix(in srgb, var(--role-primary, #818cf8) 28%, transparent);
+  background: color-mix(in srgb, var(--role-primary, #818cf8) 10%, transparent);
+  color: var(--role-primary, #818cf8);
+}
+.chrome-pop {
+  border-radius: var(--control-radius);
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+}
+.chrome-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  color: var(--color-gray-400);
+}
+.chrome-icon:hover {
+  color: var(--color-gray-100);
+  background: var(--fill-hover);
+}
+.sidebar-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: var(--control-radius);
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--color-gray-500);
+}
+.sidebar-pill-on {
+  border-color: color-mix(in srgb, var(--role-online, #34d399) 25%, var(--hairline));
+  background: color-mix(in srgb, var(--role-online, #34d399) 8%, var(--fill-quiet));
+  color: var(--role-online, #34d399);
+}
+.sidebar-pill-wait {
+  border-color: color-mix(in srgb, #fbbf24 25%, var(--hairline));
+  background: color-mix(in srgb, #fbbf24 8%, var(--fill-quiet));
+  color: #fcd34d;
+}
+.setup-copy {
+  flex-shrink: 0;
+  min-width: 44px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-inline-start: 1px solid var(--hairline);
+  color: var(--color-gray-500);
+  font-size: 11px;
+  font-weight: 650;
+}
+.setup-copy:hover { color: var(--role-primary, #818cf8); background: var(--fill-hover); }
 .msg-whisper {
   background: color-mix(in srgb, var(--role-info, #7dd3fc) 6%, transparent);
   border-inline-start: 2px solid color-mix(in srgb, var(--role-info, #7dd3fc) 40%, transparent);
@@ -2277,13 +2369,15 @@ html[dir="rtl"] .login-toggle-on .login-toggle-dot { transform: translateX(-18px
 }
 
 @media (min-width: 640px) {
-  .connect-hero-title { font-size: 32px; }
   .login-mark { height: 56px; width: 56px; }
   .login-input { height: 46px; font-size: 14px; padding: 0 14px; }
-  .login-input-height { height: 46px; }
+  .login-input-height,
+  .login-tls { height: 46px; }
   .login-btn-height { height: 48px; }
-  .login-quiet { min-height: 32px; }
+  .login-quiet,
+  .login-ghost { min-height: 36px; }
   .login-totp-digit { width: 40px; height: 46px; font-size: 20px; }
+  .sidebar-pill { min-height: 36px; }
 }
 @media (max-height: 740px) {
   .connect-hero-title { font-size: 20px; margin-top: 2px; }

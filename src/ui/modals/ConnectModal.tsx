@@ -427,7 +427,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                 <Show when={mode() !== 'onyx-tls'}>
                   <p
                     data-testid="connect-mode-hint"
-                    class={`login-segment-hint login-segment-hint-${mode() === 'onyx-wss' ? 'onyx' : 'weechat'}`}
+                    class="login-segment-hint"
                   >
                     {selectedHint()}
                   </p>
@@ -441,7 +441,9 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   class="login-tertiary"
                 >
                   <span>{t('connect.modeOnyxTls')}</span>
-                  <span class="login-tertiary-tag">{t('connect.tlsEmptyTitle')}</span>
+                  <Show when={mode() === 'onyx-tls'}>
+                    <span class="login-tertiary-tag">{t('connect.tlsEmptyTitle')}</span>
+                  </Show>
                 </button>
               </div>
 
@@ -563,7 +565,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   <button
                     type="button"
                     onClick={() => setShowOnyxTotp(!showOnyxTotp())}
-                    class="login-quiet text-left"
+                    class="login-ghost login-ghost-start"
                     aria-expanded={showOnyxTotp()}
                   >
                     {t('connect.onyxTotp')}
@@ -608,7 +610,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     {t('connect.rememberAccount')}
                   </button>
                   <button type="button" onClick={() => setShowAlsoRelay(!showAlsoRelay())}
-                    class="login-quiet text-left" aria-expanded={showAlsoRelay()}>
+                    class="login-ghost login-ghost-start" aria-expanded={showAlsoRelay()}>
                     {t('connect.alsoRelay')}
                   </button>
                   <Show when={showAlsoRelay()}>
@@ -643,21 +645,19 @@ function ConnectScreen(props: { onClose?: () => void }) {
                 </div>
               </Show>
 
-              <div class="pt-3">
-                <button type="submit" disabled={!ready()}
-                  class={`group login-btn-height login-cta flex items-center justify-center gap-2.5
-                    ${ctaDominant() ? 'login-cta-ready' : 'login-cta-idle'}`}>
-                  <Show when={connecting()} fallback={t('connect.connect')}>
-                    <span class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                    {statusText()}
-                  </Show>
-                </button>
-              </div>
+              <button type="submit" disabled={!ready()}
+                class={`login-btn-height login-cta flex items-center justify-center gap-2.5
+                  ${ctaDominant() ? 'login-cta-ready' : 'login-cta-idle'}`}>
+                <Show when={connecting()} fallback={t('connect.connect')}>
+                  <span class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  {statusText()}
+                </Show>
+              </button>
               </form>
 
               <div class="login-card-foot">
                 <button type="button" onClick={() => setShowSetup(!showSetup())}
-                  class="login-quiet w-full text-center"
+                  class="login-ghost"
                   aria-expanded={showSetup()}>
                   {showSetup() ? t('connect.setupClose') : t('connect.setup')}
                 </button>
@@ -674,7 +674,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                 when={showSaveProfile()}
                 fallback={
                   <button type="button" onClick={() => setShowSaveProfile(true)}
-                    class="login-quiet w-full text-center">
+                    class="login-ghost">
                     {t('connect.saveProfile')}
                   </button>
                 }
@@ -698,7 +698,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
 
               <Show when={props.onClose}>
                 <button type="button" onClick={() => props.onClose?.()}
-                  class="login-quiet w-full text-center">
+                  class="login-ghost">
                   {t('connect.backToChat')}
                 </button>
               </Show>
@@ -778,17 +778,15 @@ function WeeChatFields(props: {
           onInput={(e) => props.onHost(e.currentTarget.value)}
           placeholder={t('connect.hostnamePlaceholder')} autocomplete="off" spellcheck={false} class="login-input" />
       </Field>
-      <div class="flex items-end gap-3">
-        <div class="flex-1">
-          <Field label={t('connect.port')} id="c-port">
-            <input id="c-port" type="number" value={props.port}
-              onInput={(e) => props.onPort(Number(e.currentTarget.value))}
-              min={1} max={65535} class="login-input" />
-          </Field>
-        </div>
+      <div class="login-pair">
+        <Field label={t('connect.port')} id="c-port">
+          <input id="c-port" type="number" value={props.port}
+            onInput={(e) => props.onPort(Number(e.currentTarget.value))}
+            min={1} max={65535} class="login-input" />
+        </Field>
         <button type="button" onClick={props.onTls} aria-pressed={props.tls}
           data-testid={props.attention === 'tls' ? 'connect-tls-attention' : undefined}
-          class={`flex items-center justify-center px-5 min-w-[88px] login-input-height text-[13px] font-semibold login-tls ${
+          class={`login-tls ${
             props.tls ? 'login-tls-on' : ''
           } ${props.attention === 'tls' ? 'login-tls-attention' : ''}`}>
           TLS
@@ -812,7 +810,7 @@ function WeeChatFields(props: {
           <span>{t('connect.remember')}<span class="block text-[9px] text-gray-700">{t('connect.sessionOnly')}</span></span>
         </button>
       </Field>
-      <button type="button" onClick={props.onAdvanced} class="login-quiet self-start" aria-expanded={props.showAdvanced}>
+      <button type="button" onClick={props.onAdvanced} class="login-ghost login-ghost-start" aria-expanded={props.showAdvanced}>
         {t('connect.advanced')}
       </button>
       <Show when={props.showAdvanced || props.showTotp}>
