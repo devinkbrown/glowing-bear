@@ -154,7 +154,7 @@ describe('ConnectModal', () => {
   }, RENDER_TIMEOUT_MS);
 
   it('shows only the selected mode hint under the segmented picker', () => {
-    const { getByTestId, getByText, queryByText } = render(() => <ConnectModal open />);
+    const { getByTestId, queryByText } = render(() => <ConnectModal open />);
     expect(getByTestId('connect-mode-hint')).toHaveTextContent('Your WeeChat, in the browser.');
     expect(queryByText('First-party Onyx: one socket for chat and media.')).toBeNull();
 
