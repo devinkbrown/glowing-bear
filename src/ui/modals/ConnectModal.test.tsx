@@ -74,14 +74,14 @@ describe('ConnectModal', () => {
   });
 
   it('exposes the typed server picker and keeps TLS documented, not fake-connectable', () => {
-    const { getByTestId, getByRole, getByText } = render(() => <ConnectModal open />);
+    const { getByTestId, getByRole, getByText, getAllByText } = render(() => <ConnectModal open />);
     expect(getByTestId('connect-mode-weechat')).toBeInTheDocument();
     expect(getByTestId('connect-mode-onyx-wss')).toBeInTheDocument();
     expect(getByTestId('connect-mode-onyx-tls')).toBeEnabled();
     fireEvent.click(getByTestId('connect-mode-onyx-tls'));
     expect(getByRole('button', { name: /^Connect$/ })).toBeDisabled();
     expect(getByTestId('connect-tls-empty')).toBeInTheDocument();
-    expect(getByText('Not available here')).toBeInTheDocument();
+    expect(getAllByText('Not available here').length).toBe(2);
     expect(getByText(/Browsers cannot open raw TLS IRC/)).toBeInTheDocument();
     expect(getByRole('button', { name: /^How do I set this up/ })).toHaveAttribute('aria-expanded', 'false');
   }, RENDER_TIMEOUT_MS);
