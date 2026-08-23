@@ -8,6 +8,7 @@ test.describe('connect entry surface', () => {
     await page.goto('/');
 
     await expect(page.getByRole('heading', { name: 'DarkBear', level: 1 })).toBeVisible();
+    await expect(page.getByTestId('connect-product-line')).toHaveText('IRC, in the browser.');
     await expect(page.getByText('Your WeeChat, in the browser.')).toBeVisible();
 
     await expect(page.getByTestId('connect-mode-weechat')).toBeVisible();
@@ -15,6 +16,7 @@ test.describe('connect entry surface', () => {
     await expect(page.getByTestId('connect-mode-onyx-tls')).toBeVisible();
     await expect(page.getByTestId('connect-mode-onyx-tls')).toBeEnabled();
     await page.getByTestId('connect-mode-onyx-tls').click();
+    await expect(page.getByTestId('connect-tls-empty')).toBeVisible();
     await expect(page.getByText(/Browsers cannot open raw TLS IRC/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeDisabled();
     await page.getByTestId('connect-mode-weechat').click();

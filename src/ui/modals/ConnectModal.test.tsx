@@ -74,8 +74,16 @@ describe('ConnectModal', () => {
     expect(getByTestId('connect-mode-onyx-tls')).toBeEnabled();
     fireEvent.click(getByTestId('connect-mode-onyx-tls'));
     expect(getByRole('button', { name: /^Connect$/ })).toBeDisabled();
+    expect(getByTestId('connect-tls-empty')).toBeInTheDocument();
+    expect(getByText('Not available here')).toBeInTheDocument();
     expect(getByText(/Browsers cannot open raw TLS IRC/)).toBeInTheDocument();
     expect(getByRole('button', { name: /^How do I set this up/ })).toHaveAttribute('aria-expanded', 'false');
+  }, RENDER_TIMEOUT_MS);
+
+  it('sets a product line under the title so the card reads as a login, not a leftover form', () => {
+    const { getByRole, getByTestId } = render(() => <ConnectModal open />);
+    expect(getByRole('heading', { name: 'DarkBear', level: 1 })).toBeInTheDocument();
+    expect(getByTestId('connect-product-line')).toHaveTextContent('IRC, in the browser.');
   }, RENDER_TIMEOUT_MS);
 
   it('shows Onyx WSS account fields and enables Connect without a relay', () => {

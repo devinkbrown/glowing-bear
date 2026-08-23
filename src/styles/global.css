@@ -90,6 +90,15 @@ body {
   --mono-font: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
   --sidebar-w: 260px;
   --app-radius: 12px;
+  /* Shared control geometry — login, hops, composer, chips, settings.
+     Shape tokens only (no new colour roles). Surfaces mix existing gray/role. */
+  --control-radius: var(--app-radius);
+  --control-radius-lg: 16px;
+  --control-radius-sm: 8px;
+  --hairline: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 12%, transparent);
+  --fill-quiet: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 6%, transparent);
+  --fill-hover: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 9%, transparent);
+  --focus-ring: color-mix(in srgb, var(--role-primary, #818cf8) 80%, white);
   /* Translucency surface tokens for darkbear-ui panels/overlays. Derived from
      the active theme's own ground ramp via color-mix, so a single definition
      re-colours per theme by construction (the [data-theme] blocks re-price
@@ -272,14 +281,19 @@ html[dir="rtl"] .msg-highlight {
 
 .darkbear-connection-pill {
   border-width: 1px;
+  border-radius: var(--control-radius);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+}
+.sidebar-brand {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 5%, transparent);
+  margin-bottom: 2px;
 }
 
 .darkbear-server-header {
   position: sticky;
   top: 0;
   z-index: 2;
-  border-radius: 10px;
+  border-radius: var(--control-radius);
   background: linear-gradient(180deg, color-mix(in srgb, var(--color-gray-950, #000005) 92%, transparent), transparent);
   backdrop-filter: blur(8px);
 }
@@ -626,7 +640,7 @@ html[dir="rtl"] .msg-highlight {
 }
 
 .msg-unread-sep {
-  margin-block: 10px;
+  margin-block: 12px;
 }
 .msg-unread-sep-rule {
   height: 1px;
@@ -638,6 +652,24 @@ html[dir="rtl"] .msg-highlight {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--role-mention, #f87171);
+  user-select: none;
+  white-space: nowrap;
+}
+.msg-day-sep {
+  margin-block: 10px;
+}
+.msg-day-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-gray-500, #6b7288);
   user-select: none;
   white-space: nowrap;
 }
@@ -693,8 +725,8 @@ html[dir="rtl"] .msg-highlight {
     transition: background 0.08s;
   }
   .msg-row:not(.msg-highlight):hover {
-    background: rgba(255,255,255,0.02);
-    border-radius: 4px;
+    background: var(--fill-quiet);
+    border-radius: var(--control-radius-sm);
   }
   .msg-row:hover .msg-ts.invisible {
     visibility: visible;
@@ -759,7 +791,7 @@ html[dir="rtl"] .msg-highlight {
 .irc-inline-image {
   max-height: 220px;
   max-width: min(100%, 420px);
-  border-radius: 10px;
+  border-radius: var(--control-radius);
   display: block;
   margin-top: 6px;
   border: 1px solid rgba(255,255,255,0.05);
@@ -930,6 +962,20 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 5px; }
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes login-float-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -25px) scale(1.06); }
+  66% { transform: translate(-20px, 18px) scale(0.96); }
+}
+@keyframes login-float-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40% { transform: translate(-28px, 18px) scale(1.04); }
+  70% { transform: translate(16px, -12px) scale(0.97); }
+}
+@keyframes login-ripple {
+  0%, 100% { opacity: 0.12; transform: scale(1); }
+  50% { opacity: 0.22; transform: scale(1.06); }
+}
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -999,21 +1045,30 @@ html[data-performance="low"] .backdrop-blur-xl {
    Inputs/controls set outline:none and signal focus only via a faint border.
    Give every keyboard-focused control a high-contrast, theme-aware ring. */
 :focus-visible {
-  outline: 2px solid var(--custom-accent, #818cf8);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--custom-accent, #818cf8);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .composer-textarea:focus-visible {
   outline: none;
 }
+.composer-shell {
+  border-radius: var(--control-radius);
+}
 .composer-shell:has(.composer-textarea:focus-visible) {
-  outline: 2px solid var(--custom-accent, #818cf8);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+.composer-reply {
+  border-radius: var(--control-radius);
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
+  border-inline-start: 2px solid var(--role-primary, #818cf8);
 }
 /* Pointer clicks should not paint the ring; only keyboard focus does. */
 :focus:not(:focus-visible) {
@@ -1538,4 +1593,322 @@ nav, aside, header, .video-controls {
      pulls bright codes DOWN to L<=0.50 (verified >=4.5:1 on #f9fafb), hue kept. */
   --irc-l-floor: 0;
   --irc-l-ceil:  0.5;
+}
+
+/* ── Login + control system ───────────────────────────────────────────────
+   One radius / hairline / fill / accent language for ConnectShell and the
+   chat chrome that used to inherit one-off Glowing Bear paddings. Colour
+   still comes from existing --role-* and gray ramps — no new roles. */
+.login-card-inner {}
+@media (min-width: 640px) {
+  .login-card-inner {
+    background: linear-gradient(160deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.012) 100%);
+    border: 1px solid var(--hairline);
+    box-shadow: 0 30px 100px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    border-radius: var(--control-radius-lg);
+    padding: 28px;
+  }
+}
+.connect-hero-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--color-gray-100, #e8eaf0);
+  margin-top: 8px;
+}
+.connect-product-line {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--color-gray-500, #6b7288);
+}
+.login-mark {
+  display: flex;
+  height: 48px;
+  width: 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--control-radius);
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
+  font-family: var(--mono-font);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--color-gray-300, #c4c9d8);
+}
+.login-field { display: flex; flex-direction: column; gap: 0; }
+.login-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-gray-500);
+  padding-inline-start: 2px;
+  margin-bottom: 6px;
+}
+.login-input,
+.login-totp-digit,
+.login-tls,
+.login-cta,
+.login-state,
+.login-empty,
+.login-chip {
+  border-radius: var(--control-radius);
+  border: 1px solid var(--hairline);
+}
+.login-input {
+  width: 100%;
+  height: 52px;
+  background: var(--fill-quiet);
+  color: var(--color-gray-200, #e0e4f0);
+  font-size: 16px;
+  padding: 0 16px;
+  outline: none;
+}
+.login-input:focus-visible,
+.login-totp-digit:focus-visible {
+  border-color: color-mix(in srgb, var(--role-primary, #818cf8) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--role-primary, #818cf8) 28%, transparent);
+  outline: none;
+}
+.login-cta {
+  width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+}
+.login-cta-ready {
+  background: var(--role-primary, #818cf8);
+  color: #fff;
+  cursor: pointer;
+  border-color: transparent;
+}
+.login-cta-idle {
+  background: var(--fill-quiet);
+  color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 42%, transparent);
+  cursor: not-allowed;
+}
+.login-cta:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.login-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 3px;
+  border-radius: var(--control-radius);
+  background: var(--fill-quiet);
+  border: 1px solid var(--hairline);
+}
+.login-segment-dim { opacity: 0.55; }
+.login-segment-btn {
+  min-height: 44px;
+  border-radius: calc(var(--control-radius) - 3px);
+  padding: 0 8px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--color-gray-400, #9aa3b8);
+}
+.login-segment-btn[aria-checked="true"] {
+  background: var(--role-primary, #818cf8);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.28);
+}
+.login-segment-btn:hover:not([aria-checked="true"]):not(:disabled) {
+  color: var(--color-gray-200, #e0e4f0);
+  background: var(--fill-hover);
+}
+.login-segment-btn:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.login-segment-hint {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-gray-500);
+}
+.login-segment-hint-weechat { text-align: start; }
+.login-segment-hint-onyx { text-align: end; }
+.login-state {
+  padding: 12px 14px;
+  color: var(--color-gray-200);
+  text-align: start;
+  background: color-mix(in srgb, var(--role-primary, #818cf8) 8%, transparent);
+  border-color: color-mix(in srgb, var(--role-primary, #818cf8) 22%, transparent);
+}
+.login-state-error {
+  border-color: color-mix(in srgb, var(--role-mention, #f87171) 28%, transparent);
+  background: color-mix(in srgb, var(--role-mention, #f87171) 8%, transparent);
+}
+.login-state-warn {
+  border-color: color-mix(in srgb, var(--role-info, #7dd3fc) 28%, transparent);
+  background: color-mix(in srgb, var(--role-info, #7dd3fc) 8%, transparent);
+}
+.login-state-progress {
+  border-color: color-mix(in srgb, var(--role-primary, #818cf8) 28%, transparent);
+  background: color-mix(in srgb, var(--role-primary, #818cf8) 8%, transparent);
+}
+.login-state-next {
+  color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 72%, var(--role-mention, #f87171));
+}
+.login-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 16px;
+  text-align: center;
+  background: var(--fill-quiet);
+}
+.login-empty-title {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--color-gray-200, #e0e4f0);
+}
+.login-empty-body {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-gray-500, #6b7288);
+}
+.login-ripple { animation: login-ripple 48s ease-in-out infinite; }
+.login-input-height { height: 52px; }
+.login-btn-height { height: 54px; }
+.login-chip {
+  flex-shrink: 0;
+  padding: 0 16px;
+  min-height: 44px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--fill-quiet);
+  color: var(--color-gray-400);
+}
+.login-chip:hover {
+  background: var(--fill-hover);
+  color: var(--color-gray-200);
+}
+.login-toggle {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--hairline);
+  flex-shrink: 0;
+}
+.login-toggle-on { background: color-mix(in srgb, var(--role-primary, #818cf8) 70%, transparent); }
+.login-toggle-dot {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.login-toggle-on .login-toggle-dot { transform: translateX(18px); }
+html[dir="rtl"] .login-toggle-on .login-toggle-dot { transform: translateX(-18px); }
+.login-quiet {
+  min-height: 44px;
+  font-size: 12px;
+  color: var(--color-gray-500);
+  border-radius: var(--control-radius-sm);
+}
+.login-quiet:hover { color: var(--color-gray-300); }
+.login-quiet:focus-visible,
+.login-tls:focus-visible,
+.login-tls-on:focus-visible,
+.login-chip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.login-totp-digit {
+  width: 42px;
+  height: 52px;
+  text-align: center;
+  font-family: var(--mono-font);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--color-gray-200, #e0e4f0);
+  background: var(--fill-quiet);
+  outline: none;
+}
+.login-tls {
+  background: var(--fill-quiet);
+  color: var(--color-gray-400, #9aa3b8);
+}
+.login-tls-on {
+  background: color-mix(in srgb, var(--role-primary, #818cf8) 12%, transparent);
+  border-color: color-mix(in srgb, var(--role-primary, #818cf8) 28%, transparent);
+  color: var(--color-gray-100, #e8eaf0);
+}
+.login-locale {
+  background: transparent;
+  font-size: 10px;
+  color: var(--color-gray-500);
+  outline: none;
+  border-radius: var(--control-radius-sm);
+}
+.connect-motion { animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.connect-motion-card { animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both; }
+.guide-no-scrollbar { scrollbar-width: none; }
+
+.hop-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
+}
+.hop-chip-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-gray-500);
+}
+.settings-section {
+  border-radius: var(--control-radius-lg);
+}
+.settings-input,
+.settings-select {
+  border-radius: var(--control-radius);
+}
+.help-kbd,
+.help-code {
+  border-radius: var(--control-radius-sm);
+}
+
+@media (min-width: 640px) {
+  .connect-hero-title { font-size: 32px; }
+  .login-mark { height: 56px; width: 56px; }
+  .login-input { height: 46px; font-size: 14px; padding: 0 14px; }
+  .login-input-height { height: 46px; }
+  .login-btn-height { height: 48px; }
+  .login-quiet { min-height: 32px; }
+  .login-totp-digit { width: 40px; height: 46px; font-size: 20px; }
+}
+@media (max-height: 740px) {
+  .connect-hero-title { font-size: 20px; margin-top: 2px; }
+  .connect-product-line { margin-top: 2px; }
+  .connect-flex-spacer { min-height: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-ripple,
+  .connect-motion,
+  .connect-motion-card { animation: none !important; }
 }

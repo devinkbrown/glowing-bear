@@ -220,30 +220,30 @@ export default function Header() {
         <Show when={hops().show}>
           <div class="flex items-center gap-1.5 pr-1" data-testid="connectivity-hops" aria-label={t(hops().hopsLabelKey)}>
             <Show when={hops().chips.includes('relay')}>
-              <span class="flex items-center gap-1" data-testid="hop-relay" title={t('connectivity.relay')}>
+              <span class="hop-chip" data-testid="hop-relay" title={t('connectivity.relay')}>
                 <span
-                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-emerald-400' : 'bg-gray-600'}`}
+                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-[var(--role-online,#34d399)]' : 'bg-gray-600'}`}
                   aria-hidden="true"
                 />
-                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.relay')}</span>
+                <span class="hop-chip-label hidden lg:inline">{t('connectivity.relay')}</span>
               </span>
             </Show>
             <Show when={hops().chips.includes('extras')}>
-              <span class="flex items-center gap-1" data-testid="hop-extras" title={t('connectivity.extras')}>
+              <span class="hop-chip" data-testid="hop-extras" title={t('connectivity.extras')}>
                 <span
-                  class={`h-1.5 w-1.5 rounded-full ${extrasUp() ? 'bg-emerald-400' : extrasConnecting() ? 'bg-amber-400' : 'bg-gray-600'}`}
+                  class={`h-1.5 w-1.5 rounded-full ${extrasUp() ? 'bg-[var(--role-online,#34d399)]' : extrasConnecting() ? 'bg-amber-400' : 'bg-gray-600'}`}
                   aria-hidden="true"
                 />
-                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.extras')}</span>
+                <span class="hop-chip-label hidden lg:inline">{t('connectivity.extras')}</span>
               </span>
             </Show>
             <Show when={hops().chips.includes('session')}>
-              <span class="flex items-center gap-1" data-testid="hop-session" title={t('connectivity.session')}>
+              <span class="hop-chip" data-testid="hop-session" title={t('connectivity.session')}>
                 <span
-                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-emerald-400' : 'bg-gray-600'}`}
+                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-[var(--role-online,#34d399)]' : 'bg-gray-600'}`}
                   aria-hidden="true"
                 />
-                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.session')}</span>
+                <span class="hop-chip-label hidden lg:inline">{t('connectivity.session')}</span>
               </span>
             </Show>
           </div>

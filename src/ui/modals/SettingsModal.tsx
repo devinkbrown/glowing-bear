@@ -47,7 +47,9 @@ import {
   deleteUserAction,
   resetOperatorIncidents,
   resetUploads,
+  sessionKind,
 } from '@/state';
+import { isDirectOnyxSession } from '@/lib/connect/sessionKind';
 import type { BridgeSettings, CustomColors, LocalePreference, SafeCommandId, ThemeId } from '@/state';
 import Modal from '@/ui/bits/Modal';
 import { clearCredentials } from '@/lib/credentials';
@@ -172,6 +174,9 @@ export default function SettingsModal(props: Props) {
 
   const bridge = (): BridgeExt => settings.bridge as BridgeExt;
   const patchBridge = (p: Partial<BridgeExt>): void => updateBridge(p);
+  const onyxDirect = () => isDirectOnyxSession(sessionKind());
+  const connectionTabDesc = (): MessageKey =>
+    onyxDirect() ? 'settings.tabConnectionDescriptionOnyx' : 'settings.tabConnectionDescription';
   const relayErrorId = () => diagnosticErrorId('relay', diagnosticErrorCode(connectionError()));
   const bridgeErrorId = () => diagnosticErrorId('bridge', diagnosticErrorCode(bridgeState.error));
   const mediaErrorId = () => diagnosticErrorId('media', diagnosticErrorCode(mediaState.error));
@@ -345,7 +350,9 @@ export default function SettingsModal(props: Props) {
                 </span>
                 <span class="min-w-0">
                   <span class="block text-[12px] font-bold leading-tight">{t(tabOption.label)}</span>
-                  <span class="mt-0.5 block truncate text-[10px] leading-tight text-gray-600">{t(tabOption.desc)}</span>
+                  <span class="mt-0.5 block truncate text-[10px] leading-tight text-gray-600">
+                    {t(tabOption.id === 'connection' ? connectionTabDesc() : tabOption.desc)}
+                  </span>
                 </span>
               </button>
             )}
@@ -397,7 +404,9 @@ export default function SettingsModal(props: Props) {
           <div class="hidden items-center justify-between border-b border-white/[0.06] px-5 py-4 lg:flex">
             <div>
               <p class="text-[10px] font-black uppercase tracking-[0.16em] text-gray-600">
-                {t(TABS.find((tabOption) => tabOption.id === tab())?.desc ?? 'settings.tabAppearanceDescription')}
+                {t(tab() === 'connection'
+                  ? connectionTabDesc()
+                  : (TABS.find((tabOption) => tabOption.id === tab())?.desc ?? 'settings.tabAppearanceDescription'))}
               </p>
               <h3 class="mt-1 text-[17px] font-black tracking-tight text-gray-50">
                 {t(TABS.find((tabOption) => tabOption.id === tab())?.label ?? 'settings.tabAppearance')}
@@ -710,7 +719,10 @@ export default function SettingsModal(props: Props) {
 
           {/* ─── CONNECTION ─── */}
           <Show when={tab() === 'connection'}>
-            <Section label={t('settings.relaySection')} desc={t('settings.relaySectionDesc')}>
+            <Section
+              label={onyxDirect() ? t('settings.weechatOptional') : t('settings.relaySection')}
+              desc={onyxDirect() ? t('settings.weechatOptionalDesc') : t('settings.relaySectionDesc')}
+            >
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <InputField label={t('settings.host')} value={settings.relay.host} placeholder="irc.example.com"
                   onChange={(v) => updateRelay({ host: v })} />
@@ -722,9 +734,9 @@ export default function SettingsModal(props: Props) {
                 <Toggle label={t('connect.compression')} desc={t('settings.compressionDesc')} on={settings.relay.compression} onChange={(v) => updateRelay({ compression: v })} />
               </div>
               <div class="mt-2">
-                <InputField label={t('connect.password')} value={settings.relay.password} placeholder={t('settings.optionalRelayPassword')} type="password"
+                <InputField label={t('connect.password')} value={settings.relay.password} placeholder={onyxDirect() ? t('connect.password') : t('settings.optionalRelayPassword')} type="password"
                   onChange={(v) => updateRelay({ password: v })} />
-                <Toggle label={t('settings.rememberRelay')} desc={t('settings.rememberRelayDesc')} on={settings.rememberRelayPassword}
+                <Toggle label={onyxDirect() ? t('connect.remember') : t('settings.rememberRelay')} desc={t('settings.rememberRelayDesc')} on={settings.rememberRelayPassword}
                   onChange={(v) => updateSettings({ rememberRelayPassword: v })} />
               </div>
             </Section>
@@ -995,7 +1007,7 @@ export default function SettingsModal(props: Props) {
 
             <Section label="Diagnostics" desc="Connection and runtime health without message or credential data">
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <DiagnosticValue label="Relay" value={connectionState()} detail={connectionError() ? relayErrorId() : (relayDiagnostics().serverVersion || 'not connected')} />
+                <DiagnosticValue label={onyxDirect() ? t('settings.session') : t('settings.relaySection')} value={connectionState()} detail={connectionError() ? relayErrorId() : (relayDiagnostics().serverVersion || 'not connected')} />
                 <DiagnosticValue label="Phase" value={relayDiagnostics().phase} detail={relayPhaseDetail()} />
                 <DiagnosticValue label="Protocol" value={relayDiagnostics().protocolMode} detail={protocolDetail()} />
                 <DiagnosticValue label="Onyx" value={bridgeState.status} detail={bridgeState.error ? bridgeErrorId() : (bridgeState.e2eeReady ? 'device key published' : 'DM encryption idle')} />
@@ -1055,12 +1067,12 @@ function DiagnosticValue(props: { label: string; value: string; detail: string }
 
 function PreferenceOverview(props: { bridgeEnabled: boolean }) {
   return (
-    <div class="settings-overview rounded-3xl border border-white/[0.07] bg-white/[0.03] p-3 sm:p-4">
+    <div class="settings-overview settings-section border border-white/[0.07] bg-white/[0.03] p-3 sm:p-4">
       <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <OverviewTile label="Theme" value={String(settings.theme)} tone="accent" />
         <OverviewTile label="Messages" value={settings.compactMode ? 'compact' : 'comfortable'} />
         <OverviewTile label="Alerts" value={settings.notifications ? 'enabled' : 'quiet'} hot={settings.notifications} />
-        <OverviewTile label="Onyx" value={props.bridgeEnabled ? 'extras on' : 'relay only'} hot={props.bridgeEnabled} />
+        <OverviewTile label="Onyx" value={props.bridgeEnabled ? t('settings.on') : t('settings.off')} hot={props.bridgeEnabled} />
       </div>
       <div class="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <QuickToggle label="Compact" on={settings.compactMode} onClick={() => updateSettings({ compactMode: !settings.compactMode })} />
@@ -1118,7 +1130,7 @@ function QuickToggle(props: { label: string; on: boolean; onClick: (e: MouseEven
 
 function Section(props: { label: string; desc?: string; children: JSX.Element }) {
   return (
-    <section class="settings-section rounded-3xl border border-white/[0.06] bg-black/20 p-3 sm:p-4">
+    <section class="settings-section border border-white/[0.06] bg-black/20 p-3 sm:p-4">
       <div class="mb-2">
         <h3 class="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">{props.label}</h3>
         <Show when={props.desc}>
@@ -1224,7 +1236,7 @@ function InputField(props: {
         {props.label}
         <input type={props.type ?? 'text'} value={props.value} placeholder={props.placeholder}
           onInput={(e) => props.onChange(e.currentTarget.value)}
-          class="w-full mt-1.5 bg-white/[0.035] border border-white/[0.07] rounded-xl text-gray-100 text-[13px] sm:text-[12px] px-3 py-2.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/35 focus:bg-white/[0.055] transition-colors placeholder:text-gray-700 normal-case tracking-normal font-normal" />
+          class="settings-input w-full mt-1.5 bg-white/[0.035] border border-white/[0.07] text-gray-100 text-[13px] sm:text-[12px] px-3 py-2.5 outline-none focus:border-[var(--custom-accent,#818cf8)]/35 focus:bg-white/[0.055] transition-colors placeholder:text-gray-700 normal-case tracking-normal font-normal" />
       </label>
     </div>
   );

@@ -295,12 +295,10 @@ function embedsFor(line: WeeChatLine): MediaEmbed[] {
 
 function DaySeparator(props: { date: Date }) {
   return (
-    <div class="flex items-center gap-2 py-2 my-0.5 px-3 sm:px-1">
-      <div class="flex-1 h-px bg-white/[0.035]" />
-      <span class="text-[10px] font-medium text-gray-600 select-none whitespace-nowrap">
+    <div class="msg-day-sep flex items-center justify-center px-3 sm:px-1" data-testid="day-separator">
+      <span class="msg-day-chip">
         {formatDate(props.date, { weekday: 'short', month: 'short', day: 'numeric' })}
       </span>
-      <div class="flex-1 h-px bg-white/[0.035]" />
     </div>
   );
 }

@@ -355,15 +355,14 @@ function ConnectScreen(props: { onClose?: () => void }) {
         <div class="flex-1 min-h-[12px] sm:min-h-0 connect-flex-spacer" />
 
         <div
-          class="connect-hero flex flex-col items-center px-6 pb-1 sm:pb-2 select-none"
-          style={decorativeMotionEnabled() ? { animation: 'fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both' } : undefined}
+          class={`connect-hero flex flex-col items-center px-6 pb-2 sm:pb-3 select-none ${decorativeMotionEnabled() ? 'connect-motion' : ''}`}
         >
           <Show
             when={!compactHero()}
             fallback={
               <div
                 data-testid="connect-compact-mark"
-                class="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.035] font-mono text-[13px] font-black tracking-[0.16em] text-gray-300"
+                class="login-mark"
                 aria-hidden="true"
               >
                 DB
@@ -374,12 +373,12 @@ function ConnectScreen(props: { onClose?: () => void }) {
               <AstronautBear animated={false} size={72} class="sm:w-[88px] sm:h-[88px]" accent={tc().accent} theme={settings.theme} />
             </Suspense>
           </Show>
-          <h1 class="connect-hero-title text-[22px] sm:text-[26px] font-bold tracking-tight text-[var(--color-gray-100)] mt-1">DarkBear</h1>
+          <h1 class="connect-hero-title">DarkBear</h1>
+          <p data-testid="connect-product-line" class="connect-product-line">{t('connect.productLine')}</p>
         </div>
 
         <div
-          class="w-full sm:max-w-[440px] sm:mx-auto"
-          style={decorativeMotionEnabled() ? { animation: 'fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both' } : undefined}
+          class={`w-full sm:max-w-[440px] sm:mx-auto ${decorativeMotionEnabled() ? 'connect-motion-card' : ''}`}
         >
           <div class="px-5 pb-6 sm:px-0 sm:pb-0">
             <div class="login-card-inner">
@@ -398,14 +397,14 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     onSelect={() => setMode('onyx-wss')}
                   />
                 </div>
-                <p
-                  data-testid="connect-mode-hint"
-                  class={mode() === 'onyx-tls'
-                    ? 'login-state mt-3 text-[12px] leading-snug'
-                    : `login-segment-hint login-segment-hint-${mode() === 'onyx-wss' ? 'onyx' : 'weechat'}`}
-                >
-                  {selectedHint()}
-                </p>
+                <Show when={mode() !== 'onyx-tls'}>
+                  <p
+                    data-testid="connect-mode-hint"
+                    class={`login-segment-hint login-segment-hint-${mode() === 'onyx-wss' ? 'onyx' : 'weechat'}`}
+                  >
+                    {selectedHint()}
+                  </p>
+                </Show>
                 <button
                   type="button"
                   role="radio"
@@ -423,7 +422,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   <For each={settings.profiles}>
                     {(p) => (
                       <button type="button" onClick={() => applyProfile(p.name)}
-                        class="shrink-0 px-4 py-2.5 text-[13px] font-medium rounded-xl bg-white/[0.03] border border-white/[0.06] text-gray-400 min-h-[44px]">
+                        class="login-chip">
                         {p.name}
                       </button>
                     )}
@@ -437,7 +436,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     role="alert"
                     data-testid="connect-diagnose"
                     data-error-code={errorCode() ?? ''}
-                    class={`login-state mb-4 text-[12px] leading-snug ${
+                    class={`login-state mb-4 text-[13px] leading-snug ${
                       alert().kind === 'error' ? 'login-state-error' : 'login-state-warn'
                     }`}
                   >
@@ -447,6 +446,11 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     </Show>
                   </div>
                 )}
+              </Show>
+              <Show when={connecting() && !formAlert()}>
+                <div role="status" data-testid="connect-progress" class="login-state login-state-progress mb-4 text-[13px] leading-snug">
+                  {statusText() ?? t('connect.connecting')}
+                </div>
               </Show>
 
               <form
@@ -483,6 +487,13 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   onTotpDigit={handleTotpDigit}
                   onTotpKeyDown={handleTotpKeyDown}
                 />
+              </Show>
+
+              <Show when={mode() === 'onyx-tls'}>
+                <div class="login-empty mb-1" data-testid="connect-tls-empty">
+                  <p class="login-empty-title">{t('connect.tlsEmptyTitle')}</p>
+                  <p class="login-empty-body">{t('connect.modeOnyxTlsUnavailable')}</p>
+                </div>
               </Show>
 
               <Show when={mode() === 'onyx-wss'}>
@@ -589,7 +600,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
 
               <div class="pt-3">
                 <button type="submit" disabled={!ready()}
-                  class={`group w-full login-btn-height login-cta text-[15px] font-semibold flex items-center justify-center gap-2.5
+                  class={`group login-btn-height login-cta flex items-center justify-center gap-2.5
                     ${ctaDominant() ? 'login-cta-ready' : 'login-cta-idle'}`}>
                   <Show when={connecting()} fallback={t('connect.connect')}>
                     <span class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
@@ -657,7 +668,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
           <label class="sr-only" for="connect-locale">{t('locale.language')}</label>
           <select
             id="connect-locale"
-            class="bg-transparent text-[10px] text-gray-500 outline-none"
+            class="login-locale"
             value={settings.locale}
             onChange={(e) => setLocale(e.currentTarget.value as LocalePreference)}
           >
@@ -669,193 +680,6 @@ function ConnectScreen(props: { onClose?: () => void }) {
         </div>
       </div>
 
-      <style>{`
-        .login-card-inner {}
-        @media (min-width: 640px) {
-          .login-card-inner {
-            background: linear-gradient(160deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.012) 100%);
-            border: 1px solid rgba(255,255,255,0.06);
-            box-shadow: 0 30px 100px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
-            -webkit-backdrop-filter: blur(24px);
-            backdrop-filter: blur(24px);
-            border-radius: 20px;
-            padding: 28px;
-          }
-        }
-        .login-field { display: flex; flex-direction: column; gap: 0; }
-        .login-label {
-          display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
-          text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-gray-500);
-          padding-inline-start: 2px; margin-bottom: 6px;
-        }
-        .login-input {
-          width: 100%; height: 52px;
-          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 6%, transparent);
-          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 12%, transparent);
-          border-radius: 14px; color: var(--color-gray-200, #e0e4f0);
-          font-size: 16px; padding: 0 16px; outline: none;
-        }
-        .login-input:focus-visible,
-        .login-totp-digit:focus-visible {
-          border-color: color-mix(in srgb, var(--custom-accent, #818cf8) 55%, transparent);
-          box-shadow: 0 0 0 3px color-mix(in srgb, var(--custom-accent, #818cf8) 28%, transparent);
-        }
-        .login-cta { border-radius: 14px; }
-        .login-cta-ready {
-          background: var(--custom-accent, #818cf8);
-          color: #fff;
-          cursor: pointer;
-        }
-        .login-cta-idle {
-          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 6%, transparent);
-          color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 42%, transparent);
-          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 10%, transparent);
-          cursor: not-allowed;
-        }
-        .login-cta:focus-visible {
-          outline: 2px solid color-mix(in srgb, var(--custom-accent, #818cf8) 80%, white);
-          outline-offset: 3px;
-        }
-        .login-segment {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 0;
-          padding: 3px;
-          border-radius: 14px;
-          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 5%, transparent);
-          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 10%, transparent);
-        }
-        .login-segment-dim { opacity: 0.55; }
-        .login-segment-btn {
-          min-height: 44px;
-          border-radius: 11px;
-          padding: 0 8px;
-          text-align: center;
-          font-size: 14px;
-          font-weight: 650;
-          color: var(--color-gray-400, #9aa3b8);
-        }
-        .login-segment-btn[aria-checked="true"] {
-          background: var(--custom-accent, #818cf8);
-          color: #fff;
-          box-shadow: 0 1px 2px rgba(0,0,0,0.28);
-        }
-        .login-segment-btn:hover:not([aria-checked="true"]) {
-          color: var(--color-gray-200, #e0e4f0);
-        }
-        .login-segment-btn:focus-visible {
-          z-index: 1;
-          outline: 2px solid color-mix(in srgb, var(--custom-accent, #818cf8) 80%, white);
-          outline-offset: 2px;
-        }
-        .login-segment-hint {
-          margin-top: 8px;
-          font-size: 12px;
-          line-height: 1.4;
-          color: var(--color-gray-500);
-        }
-        .login-segment-hint-weechat { text-align: start; }
-        .login-segment-hint-onyx { text-align: end; }
-        .login-state-next {
-          color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 72%, var(--role-mention, #f87171));
-        }
-        .login-state {
-          border-radius: 14px;
-          border: 1px solid color-mix(in srgb, var(--custom-accent, #818cf8) 22%, transparent);
-          background: color-mix(in srgb, var(--custom-accent, #818cf8) 8%, transparent);
-          padding: 12px 14px;
-          color: var(--color-gray-200);
-          text-align: start;
-        }
-        .login-state-error {
-          border-color: color-mix(in srgb, var(--role-mention, #f87171) 28%, transparent);
-          background: color-mix(in srgb, var(--role-mention, #f87171) 8%, transparent);
-        }
-        .login-state-warn {
-          border-color: color-mix(in srgb, #f59e0b 28%, transparent);
-          background: color-mix(in srgb, #f59e0b 8%, transparent);
-        }
-        .login-ripple { animation: login-ripple 48s ease-in-out infinite; }
-        .login-input-height { height: 52px; }
-        .login-btn-height { height: 54px; }
-        @media (min-width: 640px) {
-          .login-input { height: 46px; font-size: 14px; border-radius: 12px; padding: 0 14px; }
-          .login-input-height { height: 46px; }
-          .login-btn-height { height: 48px; }
-          .login-cta, .login-state { border-radius: 12px; }
-        }
-        .login-toggle {
-          position: relative; width: 44px; height: 26px; border-radius: 13px;
-          background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.06); flex-shrink: 0;
-        }
-        .login-toggle-on { background: color-mix(in srgb, var(--custom-accent, #818cf8) 70%, transparent); }
-        .login-toggle-dot {
-          position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: white;
-          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .login-toggle-on .login-toggle-dot { transform: translateX(18px); }
-        html[dir="rtl"] .login-toggle-on .login-toggle-dot { transform: translateX(-18px); }
-        .login-quiet {
-          min-height: 44px; font-size: 12px; color: var(--color-gray-500);
-        }
-        .login-quiet:hover { color: var(--color-gray-300); }
-        .login-quiet:focus-visible,
-        .login-tls:focus-visible,
-        .login-tls-on:focus-visible {
-          outline: 2px solid color-mix(in srgb, var(--custom-accent, #818cf8) 80%, white);
-          outline-offset: 2px;
-          border-radius: 10px;
-        }
-        @media (min-width: 640px) {
-          .login-quiet { min-height: 32px; }
-        }
-        .login-totp-digit {
-          width: 42px; height: 52px; text-align: center; font-family: var(--mono-font);
-          font-size: 22px; font-weight: 600; color: var(--color-gray-200, #e0e4f0);
-          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 6%, transparent);
-          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 12%, transparent);
-          border-radius: 12px; outline: none;
-        }
-        @media (min-width: 640px) {
-          .login-totp-digit { width: 40px; height: 46px; font-size: 20px; border-radius: 10px; }
-        }
-        .guide-no-scrollbar { scrollbar-width: none; }
-        @keyframes login-float-a {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(40px, -25px) scale(1.06); }
-          66% { transform: translate(-20px, 18px) scale(0.96); }
-        }
-        @keyframes login-float-b {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          40% { transform: translate(-28px, 18px) scale(1.04); }
-          70% { transform: translate(16px, -12px) scale(0.97); }
-        }
-        @keyframes login-ripple {
-          0%, 100% { opacity: 0.12; transform: scale(1); }
-          50% { opacity: 0.22; transform: scale(1.06); }
-        }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .login-tls {
-          background: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 6%, transparent);
-          border: 1px solid color-mix(in srgb, var(--color-gray-100, #e8eaf0) 12%, transparent);
-          color: var(--color-gray-400, #9aa3b8);
-        }
-        .login-tls-on {
-          background: color-mix(in srgb, var(--custom-accent, #818cf8) 12%, transparent);
-          border-color: color-mix(in srgb, var(--custom-accent, #818cf8) 28%, transparent);
-          color: var(--color-gray-100, #e8eaf0);
-        }
-        @media (max-height: 740px) {
-          .connect-hero-title { font-size: 18px; margin-top: 2px; }
-          .connect-flex-spacer { min-height: 8px; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .login-ripple { animation: none !important; }
-        }
-      `}</style>
     </div>
   );
 }
@@ -933,8 +757,8 @@ function WeeChatFields(props: {
           </Field>
         </div>
         <button type="button" onClick={props.onTls} aria-pressed={props.tls}
-          class={`flex items-center justify-center px-5 min-w-[88px] login-input-height rounded-[14px] sm:rounded-xl text-[13px] font-semibold ${
-            props.tls ? 'login-tls-on' : 'login-tls'
+          class={`flex items-center justify-center px-5 min-w-[88px] login-input-height text-[13px] font-semibold login-tls ${
+            props.tls ? 'login-tls-on' : ''
           }`}>
           TLS
         </button>

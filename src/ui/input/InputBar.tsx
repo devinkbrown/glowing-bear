@@ -559,7 +559,7 @@ export default function InputBar() {
         {/* Reply chip — shown while a pending reply target is set for this buffer */}
         <Show when={replyTarget()}>
           {(reply) => (
-            <div class="flex items-center gap-2 mb-1.5 pl-2.5 pr-1.5 py-1.5 rounded-lg bg-white/[0.03] border-l-2 border-[var(--custom-accent,#818cf8)]">
+            <div class="composer-reply flex items-center gap-2 mb-1.5 pl-2.5 pr-1.5 py-1.5">
               <svg class="w-3.5 h-3.5 shrink-0 text-[var(--custom-accent,#818cf8)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6 4 2 8l4 4M2 8h7a5 5 0 0 1 5 5v0" />
               </svg>
@@ -582,7 +582,7 @@ export default function InputBar() {
           )}
         </Show>
         <div
-          class="composer-shell flex items-end gap-1.5 rounded-2xl sm:rounded-xl border px-2 sm:px-3 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+          class="composer-shell flex items-end gap-1.5 border px-2 sm:px-3 py-1.5 transition-[background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
           classList={{
             'bg-white/[0.05] border-[var(--custom-accent,#818cf8)]/40 ring-1 ring-[var(--custom-accent,#818cf8)]/25 shadow-lg shadow-black/25': focused(),
             'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.03] hover:border-white/[0.1]': !focused(),

@@ -198,7 +198,7 @@ export default function Sidebar(props: SidebarProps) {
       style={{ width: `min(${settings.sidebarWidth}px, 85vw)`, 'flex-shrink': 0 }}
     >
       {/* Brand */}
-      <div class="flex items-center gap-2.5 pl-4 pr-3 pt-4 pb-3 shrink-0">
+      <div class="sidebar-brand flex items-center gap-2.5 pl-4 pr-3 pt-4 pb-3 shrink-0">
         <div class="relative">
           <BearLogo size={26} />
           <span
