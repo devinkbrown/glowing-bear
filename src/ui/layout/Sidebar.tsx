@@ -19,11 +19,13 @@ import {
   requestHistory,
   requestNicklist,
   sendInput,
+  sessionKind,
   setActive,
   openSplitWith,
   setSidebarOpen,
   settings,
 } from '@/state';
+import { isDirectOnyxSession } from '@/lib/connect/sessionKind';
 import type { BufferEntry, NotifyMode } from '@/state';
 import BearLogo from '@/ui/bits/BearLogo';
 import { bufferKind, type BufferKind } from '@/lib/bufferKind';
@@ -62,6 +64,26 @@ export default function Sidebar(props: SidebarProps) {
     connectionState() === ConnectionState.CONNECTING ||
     connectionState() === ConnectionState.AUTHENTICATING;
   const isReconnecting = () => connectionState() === ConnectionState.RECONNECTING;
+  const onyxDirect = () => isDirectOnyxSession(sessionKind());
+  const connectionHost = () => {
+    if (onyxDirect()) {
+      const raw = settings.bridge.wsUrl.trim();
+      try {
+        return new URL(raw).host || raw;
+      } catch {
+        return raw.replace(/^wss?:\/\//i, '') || t('sidebar.disconnected');
+      }
+    }
+    return settings.relay.host;
+  };
+  const connectionTransport = () => {
+    if (onyxDirect()) {
+      return settings.bridge.wsUrl.trim().toLowerCase().startsWith('ws://')
+        ? t('sidebar.plain')
+        : t('sidebar.wss');
+    }
+    return settings.relay.tls ? 'TLS' : t('sidebar.plain');
+  };
 
   const selectBuffer = (pointer: string, e?: MouseEvent): void => {
     // Alt-click or middle-click sends the buffer to the SPLIT pane (opening it
@@ -176,7 +198,7 @@ export default function Sidebar(props: SidebarProps) {
       style={{ width: `min(${settings.sidebarWidth}px, 85vw)`, 'flex-shrink': 0 }}
     >
       {/* Brand */}
-      <div class="flex items-center gap-2.5 pl-4 pr-3 pt-4 pb-3 shrink-0">
+      <div class="sidebar-brand flex items-center gap-2.5 pl-4 pr-3 pt-4 pb-3 shrink-0">
         <div class="relative">
           <BearLogo size={26} />
           <span
@@ -190,7 +212,9 @@ export default function Sidebar(props: SidebarProps) {
         </div>
         <div class="min-w-0 flex-1">
           <div class="text-[14px] font-black text-gray-100 tracking-tight leading-tight">DarkBear</div>
-          <div class="text-[9px] uppercase tracking-[0.18em] text-gray-600 leading-tight">{t('sidebar.relayConsole')}</div>
+          <div class="text-[9px] uppercase tracking-[0.18em] text-gray-600 leading-tight">
+            {onyxDirect() ? t('sidebar.onyxConsole') : t('sidebar.relayConsole')}
+          </div>
         </div>
         <button
           onClick={() => openModal('settings')}
@@ -208,11 +232,10 @@ export default function Sidebar(props: SidebarProps) {
       {/* Connection + activity deck */}
       <div class="mx-3 mb-3 shrink-0 space-y-2">
         <div
-          class="darkbear-connection-pill flex items-center gap-2 px-3 py-2 min-h-[44px] sm:min-h-0 rounded-xl text-[11px] font-semibold"
+          class="darkbear-connection-pill sidebar-pill"
           classList={{
-            'bg-[var(--role-online,#34d399)]/[0.08] text-[var(--role-online,#34d399)] border-[var(--role-online,#34d399)]/25': isConnected(),
-            'bg-amber-500/[0.08] text-amber-300 border-amber-400/15': isConnecting() || isReconnecting(),
-            'bg-white/[0.03] text-gray-500': !isConnected() && !isConnecting(),
+            'sidebar-pill-on': isConnected(),
+            'sidebar-pill-wait': isConnecting() || isReconnecting(),
           }}
         >
           <span
@@ -224,13 +247,15 @@ export default function Sidebar(props: SidebarProps) {
               'bg-gray-600': !isConnected() && !isConnecting() && !isReconnecting(),
             }}
           />
-          <span class="truncate">
-            {isConnected() ? settings.relay.host :
+          <span class="truncate" data-testid="connection-host">
+            {isConnected() ? connectionHost() :
              isConnecting() ? t('sidebar.connecting') :
              isReconnecting() ? t('sidebar.reconnecting') :
              t('sidebar.disconnected')}
           </span>
-          <span class="ml-auto font-mono text-[10px] opacity-70">{settings.relay.tls ? 'TLS' : 'plain'}</span>
+          <span class="ml-auto font-mono text-[10px] opacity-70" data-testid="connection-transport">
+            {connectionTransport()}
+          </span>
         </div>
         <div class="grid grid-cols-4 gap-1.5">
           <StatCell label={t('sidebar.unread')} value={stats().unread} hot={stats().unread > 0} />
@@ -261,10 +286,10 @@ export default function Sidebar(props: SidebarProps) {
                 e.currentTarget.blur();
               }
             }}
-            class="sidebar-filter-input w-full rounded-xl border border-white/[0.07] bg-white/[0.035] py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none transition-colors placeholder:text-gray-600 focus:border-[var(--role-primary,#818cf8)]/35 focus:bg-white/[0.055] sm:py-2 sm:text-[12px]"
+            class="sidebar-filter-input w-full py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none placeholder:text-gray-600 sm:py-2 sm:text-[12px]"
           />
         </label>
-        <div class="grid grid-cols-4 gap-1 rounded-xl border border-white/[0.055] bg-black/20 p-1">
+        <div class="sidebar-mode-strip">
           <ModeButton label={t('sidebar.all')} active={modeActive('all')} onClick={() => setBufferMode('all')} />
           <ModeButton label={t('sidebar.hot')} active={modeActive('unread')} onClick={() => setBufferMode('unread')} />
           <ModeButton label="@" active={modeActive('mentions')} onClick={() => setBufferMode('mentions')} />
@@ -416,7 +441,7 @@ export default function Sidebar(props: SidebarProps) {
           <div class="shrink-0 px-3 py-2" style={{ 'padding-bottom': 'max(0.5rem, env(safe-area-inset-bottom))' }}>
             <button
               onClick={(e) => selectBuffer(pointer(), e)}
-              class="w-full flex items-center justify-center gap-2 py-2.5 sm:py-2 rounded-full bg-[var(--role-mention,#f87171)]/10 text-[var(--role-mention,#f87171)] text-[12px] sm:text-[11px] font-semibold hover:bg-[var(--role-mention,#f87171)]/15 active:bg-[var(--role-mention,#f87171)]/20 transition-all"
+              class="sidebar-jump"
             >
               <svg class="w-3.5 h-3.5 sm:w-3 sm:h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                 <path d="M8 2v8M5 7l3 3 3-3" />
@@ -618,10 +643,10 @@ function NotifyButton(props: { mode: NotifyMode; temporaryMutedUntil: number; on
 function StatCell(props: { label: string; value: number; hot?: boolean; danger?: boolean }) {
   return (
     <div
-      class="rounded-xl border border-white/[0.055] bg-white/[0.025] px-2 py-1.5 text-center"
+      class="sidebar-stat"
       classList={{
-        'border-[var(--role-primary,#818cf8)]/20 bg-[var(--role-primary,#818cf8)]/[0.06]': props.hot && !props.danger,
-        'border-[var(--role-mention,#f87171)]/20 bg-[var(--role-mention,#f87171)]/[0.07]': props.hot && props.danger,
+        'sidebar-stat-hot': Boolean(props.hot && !props.danger),
+        'sidebar-stat-danger': Boolean(props.hot && props.danger),
       }}
     >
       <div

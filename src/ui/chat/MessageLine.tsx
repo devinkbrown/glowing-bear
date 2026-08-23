@@ -110,7 +110,7 @@ function MessageContextMenu(props: ContextMenuProps) {
     <>
       <div class="fixed inset-0 z-[90]" onClick={() => props.onClose()} onTouchStart={() => props.onClose()} />
       <div class="fixed z-[100] animate-fade-up" style={{ left: `${left()}px`, top: `${top()}px` }}>
-        <div class="bg-gray-900 border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden min-w-[150px]">
+        <div class="msg-menu">
           <Show when={props.canReact}>
             <div class="flex items-center gap-0.5 px-2 pt-2 pb-1.5 border-b border-white/[0.06]">
               <For each={REACT_EMOJI}>
@@ -133,7 +133,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                   props.onReply();
                   props.onClose();
                 }}
-                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+                class="msg-menu-item"
               >
                 <svg class="w-3.5 h-3.5 shrink-0 -scale-x-100" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M8 4L4 8l4 4M4 8h6a4 4 0 014 4" />
@@ -147,7 +147,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                   props.onOpenThread();
                   props.onClose();
                 }}
-                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+                class="msg-menu-item"
               >
                 <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M2.5 3.5h11v7h-6l-3.5 3v-3H2.5z" />
@@ -161,7 +161,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                   props.onToggleSaved();
                   props.onClose();
                 }}
-                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+                class="msg-menu-item"
               >
                 <span class="w-3.5 text-center">{props.saved ? '★' : '☆'}</span>
                 {props.saved ? t('message.unsave') : t('message.save')}
@@ -172,7 +172,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                 navigator.clipboard.writeText(props.text).catch(() => undefined);
                 props.onClose();
               }}
-              class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+              class="msg-menu-item"
             >
               <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="5" y="5" width="9" height="9" rx="1.5" />
@@ -187,7 +187,7 @@ function MessageContextMenu(props: ContextMenuProps) {
                   if (url) navigator.clipboard.writeText(url).catch(() => undefined);
                   props.onClose();
                 }}
-                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+                class="msg-menu-item"
               >
                 <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                   <path d="M6.5 9.5l3-3M7 10a3 3 0 01-4.24 0 3 3 0 010-4.24L4.5 4M9 6a3 3 0 014.24 0 3 3 0 010 4.24L11.5 12" />
@@ -341,13 +341,13 @@ function ReplyingToIndicator(props: { parentMsgid: string }) {
     <button
       type="button"
       class="reply-quote mb-0.5 flex max-w-full items-center gap-1 truncate text-left text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
-      aria-label="Jump to replied message"
+      aria-label={t('message.jumpToReply')}
       onClick={() => requestScrollToMessage(props.parentMsgid)}
     >
       <svg class="w-3 h-3 shrink-0 -scale-x-100 opacity-70" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 4L4 8l4 4M4 8h6a4 4 0 014 4" />
       </svg>
-      <span class="truncate">{preview() ?? 'replying to a message'}</span>
+      <span class="truncate">{preview() ?? t('composer.replyingTo', { target: t('composer.message') })}</span>
     </button>
   );
 }
@@ -638,7 +638,7 @@ export default function MessageLine(props: MessageLineProps) {
 
         <Match when={props.line.isWhisper}>
           <div
-            class={`msg-row ${settings.compactMode ? '' : 'py-0.5'} bg-amber-500/[0.04] border-l-2 border-amber-500/40`}
+            class={`msg-row msg-whisper ${settings.compactMode ? '' : 'py-0.5'}`}
             {...rowHandlers}
           >
             <Show when={timestamp()}>
@@ -646,12 +646,12 @@ export default function MessageLine(props: MessageLineProps) {
             </Show>
             <Show when={!props.grouped} fallback={<span class="msg-nick" />}>
               <span class="msg-nick" style={nickStyle()}>
-                <span class="text-amber-500/60 text-[10px] font-medium mr-1">WHISPER</span>
+                <span class="text-[var(--role-info,#7dd3fc)]/70 text-[10px] font-medium mr-1">WHISPER</span>
                 {prefixChar()}{nick()}
               </span>
             </Show>
             <div class="msg-body">
-              <span class="irc-msg-text text-[13px] text-amber-200/80" innerHTML={html()} onClick={onBodyClick} />
+              <span class="irc-msg-text text-[13px] text-[var(--role-info,#7dd3fc)]/85" innerHTML={html()} onClick={onBodyClick} />
             </div>
           </div>
         </Match>

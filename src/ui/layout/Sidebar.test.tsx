@@ -15,6 +15,8 @@ import {
   getNotifyMode,
   resetSettings,
   setNotifyMode,
+  setSessionKind,
+  updateBridge,
   updateHotlist,
   upsertBuffer,
 } from '@/state';
@@ -219,6 +221,16 @@ describe('Sidebar', () => {
     // Label + icon update reactively to the new tier on the same element.
     expect(btn).toHaveAttribute('data-notify-mode', 'mentions');
     expect(btn.getAttribute('aria-label')).toMatch(/mentions only/);
+  });
+
+  it('labels a first-party Onyx session without relay-console copy', () => {
+    setSessionKind('onyx-direct-wss');
+    updateBridge({ wsUrl: 'wss://eshmaki.me:8080' });
+    const { getByText, getByTestId, queryByText } = render(() => <Sidebar />);
+
+    expect(getByText('Onyx')).toBeInTheDocument();
+    expect(queryByText('Relay console')).toBeNull();
+    expect(getByTestId('connection-transport')).toHaveTextContent('WSS');
   });
 
   it('filters the buffer deck by unread and DM modes', () => {

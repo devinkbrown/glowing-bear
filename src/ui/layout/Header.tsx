@@ -118,25 +118,25 @@ export default function Header() {
             <DmSecurityControl peer={chanName()} />
           </Show>
           <Show when={serverName()}>
-            <span class="hidden sm:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-white/[0.045] text-gray-500 border border-white/[0.06] shrink-0">
+            <span class="chrome-chip hidden sm:inline-flex shrink-0">
               {serverName()}
             </span>
           </Show>
           <Show when={!isIrc()}>
-            <span class="px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-white/[0.06] text-gray-500 border border-white/[0.06] shrink-0">
+            <span class="chrome-chip shrink-0">
               {BUFFER_KIND_LABEL[kind()]}
             </span>
           </Show>
           <Show when={isChannel() && nickCount() > 0}>
-            <span class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-white/[0.035] text-gray-500 border border-white/[0.05] shrink-0">
-              <span class="h-1.5 w-1.5 rounded-full bg-emerald-400/70" />
+            <span class="chrome-chip hidden md:inline-flex shrink-0">
+              <span class="h-1.5 w-1.5 rounded-full bg-[var(--role-online,#34d399)]/70" />
               {t('header.users', { count: formatNumber(nickCount()) })}
             </span>
           </Show>
           <Show when={onOnyxServer()}>
             <span
               data-testid="onyx-chip"
-              class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-[0.14em] bg-[var(--custom-accent,#818cf8)]/[0.08] text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/15 shrink-0"
+              class="chrome-chip chrome-chip-accent hidden md:inline-flex shrink-0"
             >
               {t('header.onyxChip')}
             </span>
@@ -144,7 +144,7 @@ export default function Header() {
           <Show when={bridgeState.sessionRestored}>
             <span
               data-testid="session-restored"
-              class="hidden md:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-emerald-500/12 text-emerald-300 border border-emerald-500/20 shrink-0"
+              class="chrome-chip chrome-chip-live hidden md:inline-flex shrink-0"
             >
               {t('header.sessionRestored')}
             </span>
@@ -154,7 +154,7 @@ export default function Header() {
               type="button"
               data-testid="enable-onyx-extras"
               onClick={() => enableOnyxExtras()}
-              class="hidden md:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-[var(--custom-accent,#818cf8)]/15 text-[var(--custom-accent,#818cf8)] border border-[var(--custom-accent,#818cf8)]/25 shrink-0"
+              class="chrome-chip chrome-chip-accent hidden md:inline-flex shrink-0"
               title={t('header.extrasHint')}
             >
               {t('header.enableExtras')}
@@ -176,8 +176,8 @@ export default function Header() {
           </Show>
           {/* In-call badge */}
           <Show when={liveHere()}>
-            <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[9px] font-semibold uppercase tracking-wider shrink-0">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span class="chrome-chip chrome-chip-live shrink-0">
+              <span class="w-1.5 h-1.5 rounded-full bg-[var(--role-online,#34d399)] animate-pulse" />
               {t('header.live')}
             </span>
           </Show>
@@ -208,7 +208,7 @@ export default function Header() {
         </Show>
         <Show when={topicExpanded() && title()}>
           <div class="absolute top-full left-0 right-0 mt-1 sm:-ml-3 sm:-mr-3 z-30 animate-slide-down">
-            <div class="bg-gray-900 border border-white/[0.08] rounded-xl shadow-xl px-4 py-3 mx-1 sm:mx-0">
+            <div class="chrome-pop px-4 py-3 mx-1 sm:mx-0">
               <p class="text-[12px] sm:text-[13px] text-gray-300 leading-relaxed break-words" innerHTML={title()} />
             </div>
           </div>
@@ -220,30 +220,30 @@ export default function Header() {
         <Show when={hops().show}>
           <div class="flex items-center gap-1.5 pr-1" data-testid="connectivity-hops" aria-label={t(hops().hopsLabelKey)}>
             <Show when={hops().chips.includes('relay')}>
-              <span class="flex items-center gap-1" data-testid="hop-relay" title={t('connectivity.relay')}>
+              <span class="hop-chip" data-testid="hop-relay" title={t('connectivity.relay')}>
                 <span
-                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-emerald-400' : 'bg-gray-600'}`}
+                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-[var(--role-online,#34d399)]' : 'bg-gray-600'}`}
                   aria-hidden="true"
                 />
-                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.relay')}</span>
+                <span class="hop-chip-label hidden lg:inline">{t('connectivity.relay')}</span>
               </span>
             </Show>
             <Show when={hops().chips.includes('extras')}>
-              <span class="flex items-center gap-1" data-testid="hop-extras" title={t('connectivity.bridge')}>
+              <span class="hop-chip" data-testid="hop-extras" title={t('connectivity.extras')}>
                 <span
-                  class={`h-1.5 w-1.5 rounded-full ${extrasUp() ? 'bg-emerald-400' : extrasConnecting() ? 'bg-amber-400' : 'bg-gray-600'}`}
+                  class={`h-1.5 w-1.5 rounded-full ${extrasUp() ? 'bg-[var(--role-online,#34d399)]' : extrasConnecting() ? 'bg-amber-400' : 'bg-gray-600'}`}
                   aria-hidden="true"
                 />
-                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.bridge')}</span>
+                <span class="hop-chip-label hidden lg:inline">{t('connectivity.extras')}</span>
               </span>
             </Show>
             <Show when={hops().chips.includes('session')}>
-              <span class="flex items-center gap-1" data-testid="hop-session" title={t('connectivity.session')}>
+              <span class="hop-chip" data-testid="hop-session" title={t('connectivity.session')}>
                 <span
-                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-emerald-400' : 'bg-gray-600'}`}
+                  class={`h-1.5 w-1.5 rounded-full ${connected() ? 'bg-[var(--role-online,#34d399)]' : 'bg-gray-600'}`}
                   aria-hidden="true"
                 />
-                <span class="hidden lg:inline text-[9px] uppercase tracking-wider text-gray-500">{t('connectivity.session')}</span>
+                <span class="hop-chip-label hidden lg:inline">{t('connectivity.session')}</span>
               </span>
             </Show>
           </div>
@@ -251,7 +251,7 @@ export default function Header() {
         <Show when={connected()}>
           <div class="flex items-center gap-1.5">
             <Show when={showTls()}>
-              <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-500/70" viewBox="0 0 16 16" fill="currentColor">
+              <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[var(--role-online,#34d399)]/70" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H3.75A1.75 1.75 0 0 0 2 7.75v5.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0 0 14 13.25v-5.5A1.75 1.75 0 0 0 12.25 6H11V4.5A3.5 3.5 0 0 0 7.5 1h.5zM6 4.5A2 2 0 0 1 8 2.5a2 2 0 0 1 2 2V6H6V4.5z" />
               </svg>
             </Show>
@@ -285,7 +285,7 @@ export default function Header() {
           </button>
           <button
             onClick={() => (isPrivate() ? requestStartCall(bufName(), true) : requestRoomJoin(chanName(), true))}
-            class="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-emerald-400 hover:bg-white/[0.04] active:bg-white/[0.06] transition-all"
+            class="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-[var(--role-online,#34d399)] hover:bg-white/[0.04] active:bg-white/[0.06] transition-all"
             title={isPrivate() ? t('header.videoCall') : t('header.joinVideo')}
             aria-label={isPrivate() ? t('header.videoCall') : t('header.joinVideo')}
           >
@@ -315,7 +315,7 @@ export default function Header() {
         <Show when={connected()}>
           <button
             onClick={() => openModal('channelList')}
-            class="flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[12px] font-semibold text-gray-400 transition-all hover:bg-white/[0.04] hover:text-emerald-300 active:bg-white/[0.06] sm:h-7 sm:w-auto sm:px-2.5 sm:text-[11px]"
+            class="flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[12px] font-semibold text-gray-400 transition-all hover:bg-white/[0.04] hover:text-[var(--role-online,#34d399)] active:bg-white/[0.06] sm:h-7 sm:w-auto sm:px-2.5 sm:text-[11px]"
             title={t('header.browseChannels')}
             aria-label={t('header.browseChannels')}
           >
@@ -345,14 +345,14 @@ export default function Header() {
             </svg>
           </button>
           <Show when={ircxOpen()}>
-            <div class="absolute top-full right-0 mt-1 z-30 bg-gray-900 border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden min-w-[170px] animate-slide-down">
+            <div class="absolute top-full right-0 mt-1 z-30 chrome-pop overflow-hidden min-w-[170px] animate-slide-down">
               <Show when={onOnyxServer()}>
                 <button
                   onClick={() => {
                     openServicesPanel('nick');
                     setIrcxOpen(false);
                   }}
-                  class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+                  class="msg-menu-item"
                 >
                   <span class="w-4 h-4 flex items-center justify-center shrink-0">
                     <svg class="w-4 h-4 text-[var(--custom-accent,#818cf8)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
@@ -368,10 +368,10 @@ export default function Header() {
                   openModal('channelList');
                   setIrcxOpen(false);
                 }}
-                class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
+                class="msg-menu-item"
               >
                 <span class="w-4 h-4 flex items-center justify-center shrink-0">
-                  <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <svg class="w-4 h-4 text-[var(--role-online,#34d399)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                     <path d="M5 1l-2 14M13 1l-2 14M1 5h14M1 11h14" />
                   </svg>
                 </span>

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
-import { resetSettings, settings } from '@/state';
+import { resetSettings, setSessionKind, settings } from '@/state';
 import SettingsModal from './SettingsModal';
 
 beforeEach(() => {
@@ -31,6 +31,16 @@ describe('SettingsModal', () => {
 
     fireEvent.click(getAllByText('Connection')[0]!);
     expect(getByText('Relay')).toBeInTheDocument();
+  });
+
+  it('labels the Connection WeeChat block as optional on a first-party Onyx session', () => {
+    setSessionKind('onyx-direct-wss');
+    const { getAllByText, getByText, queryByText } = render(() => <SettingsModal open onClose={vi.fn()} />);
+
+    fireEvent.click(getAllByText('Connection')[0]!);
+    expect(getByText('WeeChat (optional)')).toBeInTheDocument();
+    expect(queryByText('Relay')).toBeNull();
+    expect(queryByText(/relay only/i)).toBeNull();
   });
 
   it('stores an explicit interface locale from Appearance', () => {

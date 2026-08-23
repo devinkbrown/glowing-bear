@@ -19,6 +19,8 @@ describe('HelpModal', () => {
     expect(getByText('Switch to buffer 1-9')).toBeInTheDocument();
     expect(getByText('/whisper #ch nick msg')).toBeInTheDocument();
     expect(getByText('/call nick')).toBeInTheDocument();
+    expect(getByText('Voice / Video (Onyx extras)')).toBeInTheDocument();
+    expect(getByRole('dialog').textContent).not.toMatch(/Bridge/);
   });
 
   it('closes through the Modal title-bar close button', () => {

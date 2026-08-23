@@ -295,24 +295,22 @@ function embedsFor(line: WeeChatLine): MediaEmbed[] {
 
 function DaySeparator(props: { date: Date }) {
   return (
-    <div class="flex items-center gap-2 py-2 my-0.5 px-3 sm:px-1">
-      <div class="flex-1 h-px bg-white/[0.035]" />
-      <span class="text-[10px] font-medium text-gray-600 select-none whitespace-nowrap">
+    <div class="msg-day-sep flex items-center justify-center px-3 sm:px-1" data-testid="day-separator">
+      <span class="msg-day-chip">
         {formatDate(props.date, { weekday: 'short', month: 'short', day: 'numeric' })}
       </span>
-      <div class="flex-1 h-px bg-white/[0.035]" />
     </div>
   );
 }
 
 function ReadMarkerRow() {
   return (
-    <div class="flex items-center gap-2 my-1.5 px-3 sm:px-1">
-      <div class="flex-1 h-px bg-[var(--role-mention,#f87171)]/25" />
-      <span class="text-[9px] font-semibold uppercase tracking-[0.12em] text-[var(--role-mention,#f87171)]/55 select-none">
+    <div class="msg-unread-sep flex items-center gap-2 px-3 sm:px-1" data-testid="unread-separator">
+      <div class="msg-unread-sep-rule flex-1" />
+      <span class="msg-unread-sep-label">
         {t('message.new')}
       </span>
-      <div class="flex-1 h-px bg-[var(--role-mention,#f87171)]/25" />
+      <div class="msg-unread-sep-rule flex-1" />
     </div>
   );
 }

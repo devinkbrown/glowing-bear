@@ -1,64 +1,62 @@
 // HelpModal — keyboard shortcuts, Onyx Server command reference, and the
 // Onyx extras voice/video commands.
-//
-// Usage: <HelpModal open={uiState.activeModal === 'help'} onClose={closeModal} />
-// `open` defaults to true for conditional-mount usage.
 
 import { For } from 'solid-js';
 import Modal from '@/ui/bits/Modal';
+import { t, type MessageKey } from '@/lib/i18n';
 
 interface Props {
   open?: boolean;
   onClose: () => void;
 }
 
-const SHORTCUTS = [
-  { keys: 'Alt + 1-9', desc: 'Switch to buffer 1-9' },
-  { keys: 'Alt + Up/Down', desc: 'Previous / next buffer' },
-  { keys: 'Alt + A', desc: 'Open activity inbox' },
-  { keys: 'Ctrl + K', desc: 'Quick buffer switcher' },
-  { keys: 'Ctrl + B', desc: 'Toggle sidebar' },
-  { keys: 'Ctrl + U', desc: 'Toggle user list' },
-  { keys: 'Ctrl + I', desc: 'Channel info' },
-  { keys: 'Ctrl + \\', desc: 'Toggle split view' },
-  { keys: 'Ctrl + Shift + O', desc: 'Oper console' },
-  { keys: 'Tab', desc: 'Complete nick / command' },
-  { keys: 'Up / Down', desc: 'Command history' },
-  { keys: 'Ctrl+B (input)', desc: 'Bold text' },
-  { keys: 'Ctrl+I (input)', desc: 'Italic text' },
-  { keys: 'Ctrl+U (input)', desc: 'Underline text' },
-  { keys: 'Escape', desc: 'Close modal / panel' },
-  { keys: 'M / D / V / S', desc: 'Call mute / deafen / camera / share' },
-  { keys: 'C / H', desc: 'Call transcript / hang up' },
+const SHORTCUTS: { keys: string; desc: MessageKey }[] = [
+  { keys: 'Alt + 1-9', desc: 'help.shortcut.buffers' },
+  { keys: 'Alt + Up/Down', desc: 'help.shortcut.nextBuffer' },
+  { keys: 'Alt + A', desc: 'help.shortcut.activity' },
+  { keys: 'Ctrl + K', desc: 'help.shortcut.switcher' },
+  { keys: 'Ctrl + B', desc: 'help.shortcut.sidebar' },
+  { keys: 'Ctrl + U', desc: 'help.shortcut.userList' },
+  { keys: 'Ctrl + I', desc: 'help.shortcut.channelInfo' },
+  { keys: 'Ctrl + \\', desc: 'help.shortcut.split' },
+  { keys: 'Ctrl + Shift + O', desc: 'help.shortcut.oper' },
+  { keys: 'Tab', desc: 'help.shortcut.complete' },
+  { keys: 'Up / Down', desc: 'help.shortcut.history' },
+  { keys: 'Ctrl+B (input)', desc: 'help.shortcut.bold' },
+  { keys: 'Ctrl+I (input)', desc: 'help.shortcut.italic' },
+  { keys: 'Ctrl+U (input)', desc: 'help.shortcut.underline' },
+  { keys: 'Escape', desc: 'help.shortcut.escape' },
+  { keys: 'M / D / V / S', desc: 'help.shortcut.callKeys' },
+  { keys: 'C / H', desc: 'help.shortcut.callEnd' },
 ];
 
-const ONYX_COMMANDS = [
-  { cmd: '/whisper #ch nick msg', desc: 'In-channel whisper' },
-  { cmd: '/prop #ch|nick [key] [val]', desc: 'View or set channel and nick properties' },
-  { cmd: '/access #channel', desc: 'View channel access list' },
-  { cmd: '/chaninfo [#channel]', desc: 'Open channel info panel' },
-  { cmd: '/profile nick', desc: 'Open user profile card' },
-  { cmd: '/services', desc: 'Open Onyx Server account, channel, and memo services' },
-  { cmd: '/monitor add|del nick', desc: 'MONITOR online tracking' },
-  { cmd: '/pushset key value', desc: 'Configure push notifications' },
+const ONYX_COMMANDS: { cmd: string; desc: MessageKey }[] = [
+  { cmd: '/whisper #ch nick msg', desc: 'help.cmd.whisper' },
+  { cmd: '/prop #ch|nick [key] [val]', desc: 'help.cmd.prop' },
+  { cmd: '/access #channel', desc: 'help.cmd.access' },
+  { cmd: '/chaninfo [#channel]', desc: 'help.cmd.chaninfo' },
+  { cmd: '/profile nick', desc: 'help.cmd.profile' },
+  { cmd: '/services', desc: 'help.cmd.services' },
+  { cmd: '/monitor add|del nick', desc: 'help.cmd.monitor' },
+  { cmd: '/pushset key value', desc: 'help.cmd.pushset' },
 ];
 
-const BRIDGE_COMMANDS = [
-  { cmd: '/call nick', desc: 'Start a video call (DM)' },
-  { cmd: '/vcall nick', desc: 'Start a voice call (DM)' },
-  { cmd: '/voice [#channel]', desc: 'Join the channel voice room' },
-  { cmd: '/video [#channel]', desc: 'Join the channel video room' },
-  { cmd: '/hangup', desc: 'Leave the current call / room' },
+const EXTRAS_COMMANDS: { cmd: string; desc: MessageKey }[] = [
+  { cmd: '/call nick', desc: 'help.cmd.call' },
+  { cmd: '/vcall nick', desc: 'help.cmd.vcall' },
+  { cmd: '/voice [#channel]', desc: 'help.cmd.voice' },
+  { cmd: '/video [#channel]', desc: 'help.cmd.video' },
+  { cmd: '/hangup', desc: 'help.cmd.hangup' },
 ];
 
-function CommandList(props: { items: { cmd: string; desc: string }[] }) {
+function CommandList(props: { items: { cmd: string; desc: MessageKey }[] }) {
   return (
     <div class="space-y-0.5">
       <For each={props.items}>
         {(item) => (
-          <div class="flex items-center justify-between py-2 group">
-            <span class="text-gray-400 text-[13px] group-hover:text-gray-200 transition-colors">{item.desc}</span>
-            <code class="text-[10px] font-mono text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/[0.06] rounded-md px-2 py-1 shrink-0 ml-3">
+          <div class="help-row">
+            <span class="text-gray-400 text-[13px]">{t(item.desc)}</span>
+            <code class="help-code text-[10px] font-mono text-[var(--custom-accent,#818cf8)] bg-[var(--custom-accent,#818cf8)]/[0.06] px-2 py-1 shrink-0 ms-3">
               {item.cmd}
             </code>
           </div>
@@ -70,16 +68,16 @@ function CommandList(props: { items: { cmd: string; desc: string }[] }) {
 
 export default function HelpModal(props: Props) {
   return (
-    <Modal open={props.open} onClose={props.onClose} title="Help" width="max-w-md">
+    <Modal open={props.open} onClose={props.onClose} title={t('help.title')} width="max-w-md">
       <div class="p-5 space-y-5 overflow-y-auto" style={{ 'max-height': 'calc(85dvh - 56px)' }}>
         <div>
-          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Keyboard Shortcuts</h3>
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">{t('help.shortcuts')}</h3>
           <div class="space-y-0.5">
             <For each={SHORTCUTS}>
               {(s) => (
-                <div class="flex items-center justify-between py-2 group">
-                  <span class="text-gray-400 text-[13px] group-hover:text-gray-200 transition-colors">{s.desc}</span>
-                  <kbd class="text-[11px] font-mono text-gray-400 bg-white/[0.04] border border-white/[0.06] rounded-md px-2 py-1 shrink-0 ml-4">
+                <div class="help-row">
+                  <span class="text-gray-400 text-[13px]">{t(s.desc)}</span>
+                  <kbd class="help-kbd text-[11px] font-mono text-gray-400 bg-white/[0.04] border border-white/[0.06] px-2 py-1 shrink-0 ms-4">
                     {s.keys}
                   </kbd>
                 </div>
@@ -89,16 +87,16 @@ export default function HelpModal(props: Props) {
         </div>
 
         <div class="border-t border-white/[0.06] pt-4">
-          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Onyx Server commands</h3>
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">{t('help.onyxCommands')}</h3>
           <CommandList items={ONYX_COMMANDS} />
         </div>
 
         <div class="border-t border-white/[0.06] pt-4">
-          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">Voice / Video (Onyx extras)</h3>
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1">{t('help.extrasCommands')}</h3>
           <p class="text-[10px] text-gray-600 leading-relaxed mb-2">
-            These commands need Onyx extras — enable them under Settings → Connection.
+            {t('help.extrasHint')}
           </p>
-          <CommandList items={BRIDGE_COMMANDS} />
+          <CommandList items={EXTRAS_COMMANDS} />
         </div>
       </div>
     </Modal>

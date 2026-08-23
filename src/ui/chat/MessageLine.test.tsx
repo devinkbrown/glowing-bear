@@ -130,7 +130,7 @@ describe('MessageLine', () => {
 
     expect(getByText('WHISPER')).toBeInTheDocument();
     expect(getByText('psst secret')).toBeInTheDocument();
-    expect(container.querySelector('.border-amber-500\\/40')).not.toBeNull();
+    expect(container.querySelector('.msg-whisper')).not.toBeNull();
   });
 
   it('applies the highlight class when line.highlight is set', () => {
@@ -371,7 +371,7 @@ describe('MessageLine', () => {
   it('falls back to a generic label when the parent preview is unknown', () => {
     const { container } = renderLine(makeLine({ msgid: 'child-2', replyTo: 'unseen' }));
     const quote = container.querySelector('.reply-quote') as HTMLButtonElement;
-    expect(quote.textContent).toContain('replying to a message');
+    expect(quote.textContent).toContain('Replying to message');
   });
 
   it('renders a reply preview as inert text, never as markup', () => {

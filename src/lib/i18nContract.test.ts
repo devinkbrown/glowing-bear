@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -27,6 +27,20 @@ describe('localization and international-input source contract', () => {
     const i18nSource = read('src/lib/i18n.ts');
     expect(i18nSource).toContain('document.documentElement.lang = locale');
     expect(i18nSource).toContain('document.documentElement.dir = localeDirection(locale)');
+  });
+
+  it('keeps leftover product names out of UI copy', () => {
+    const walk = (dir: string): string[] =>
+      readdirSync(resolve(root, dir), { withFileTypes: true }).flatMap((entry) => {
+        const rel = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) return walk(rel);
+        return /\.(tsx|ts|html)$/.test(entry.name) ? [rel] : [];
+      });
+    const files = ['index.html', 'src/lib/i18n.ts', ...walk('src/ui')];
+    const banned = /Orochi|Glowing Bear|IRCXNet|\bsidecar\b|\bcompanion\b/;
+    for (const path of files) {
+      expect(read(path), path).not.toMatch(banned);
+    }
   });
 
   it('keeps mixed-direction text isolated and mirrors structural rails in RTL', () => {

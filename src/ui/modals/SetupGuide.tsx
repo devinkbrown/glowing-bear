@@ -46,12 +46,12 @@ function CopyBlock(props: { label?: string; text: string }) {
       <Show when={props.label}>
         <span class="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-600 pl-1">{props.label}</span>
       </Show>
-      <div class="group flex items-center gap-0 rounded-lg bg-white/[0.03] border border-white/[0.05] overflow-hidden">
+      <div class="setup-block group flex items-center gap-0 overflow-hidden">
         <code class="flex-1 text-[12px] text-gray-300 font-mono px-3 py-2.5 leading-relaxed select-all overflow-x-auto guide-no-scrollbar whitespace-pre-wrap">{props.text}</code>
         <button
           type="button"
           onClick={() => copy(props.text)}
-          class="shrink-0 min-w-[44px] self-stretch flex items-center justify-center text-gray-600 hover:text-[var(--custom-accent,#818cf8)] active:scale-90 transition-all border-l border-white/[0.05]"
+          class="setup-copy"
           aria-label={t('setup.copy')}
         >
           {copied() ? t('setup.copied') : t('setup.copy')}
@@ -83,7 +83,7 @@ export default function SetupGuide(props: SetupGuideProps) {
   return (
     <Show when={props.open}>
       <div data-testid="setup-drawer" class="mt-4 flex flex-col gap-3 animate-fade-in">
-        <div class="grid grid-flow-col auto-cols-fr gap-1 p-1 rounded-xl bg-white/[0.035] border border-white/[0.06]" role="tablist" aria-label={t('connect.setup')}>
+        <div class="setup-tabs" role="tablist" aria-label={t('connect.setup')}>
           <For each={tabs()}>
             {(id) => (
               <button
@@ -92,7 +92,7 @@ export default function SetupGuide(props: SetupGuideProps) {
                 aria-selected={tab() === id}
                 data-testid={`setup-tab-${id}`}
                 onClick={() => setTab(id)}
-                class={`min-h-[36px] sm:min-h-[32px] px-2 rounded-lg text-[11px] font-semibold ${tab() === id ? 'bg-[var(--custom-accent,#818cf8)] text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                class="setup-tab"
               >
                 {t(`setup.${id}`)}
               </button>
