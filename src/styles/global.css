@@ -1599,17 +1599,63 @@ nav, aside, header, .video-controls {
    One radius / hairline / fill / accent language for ConnectShell and the
    chat chrome that used to inherit one-off Glowing Bear paddings. Colour
    still comes from existing --role-* and gray ramps — no new roles. */
-.login-card-inner {}
+.connect-stage {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+.connect-shell {
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+}
+.connect-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 24px 12px;
+  text-align: center;
+}
+.connect-card {
+  width: 100%;
+  padding-inline: 20px;
+}
+.login-card-inner {
+  background: linear-gradient(160deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.016) 100%);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.045);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-radius: var(--control-radius-lg);
+  padding: 20px;
+}
 @media (min-width: 640px) {
-  .login-card-inner {
-    background: linear-gradient(160deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.012) 100%);
-    border: 1px solid var(--hairline);
-    box-shadow: 0 30px 100px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
-    -webkit-backdrop-filter: blur(24px);
-    backdrop-filter: blur(24px);
-    border-radius: var(--control-radius-lg);
-    padding: 28px;
+  .login-card-inner { padding: 28px; }
+}
+@media (min-width: 960px) {
+  .connect-shell {
+    max-width: 880px;
+    flex-direction: row;
+    align-items: center;
+    gap: 72px;
+    padding: 48px 32px;
+    margin-block: auto;
   }
+  .connect-brand {
+    flex: 1;
+    align-items: flex-start;
+    padding: 0;
+    text-align: start;
+  }
+  .connect-hero-title { font-size: 44px; margin-top: 16px; }
+  .connect-product-line { font-size: 16px; letter-spacing: 0.02em; }
+  .connect-card { width: 440px; flex-shrink: 0; padding-inline: 0; }
+  html[dir="rtl"] .connect-brand { align-items: flex-end; text-align: end; }
 }
 .connect-hero-title {
   font-size: 26px;
@@ -1762,6 +1808,49 @@ nav, aside, header, .video-controls {
 .login-state-next {
   color: color-mix(in srgb, var(--color-gray-100, #e8eaf0) 72%, var(--role-mention, #f87171));
 }
+.login-state-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  opacity: 0.72;
+}
+.login-totp {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px;
+  border-radius: var(--control-radius);
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
+}
+.login-totp-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-gray-500);
+  text-align: center;
+}
+.login-totp-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.login-input-attention,
+.login-tls-attention,
+.login-totp-attention {
+  border-color: color-mix(in srgb, var(--role-info, #7dd3fc) 45%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--role-info, #7dd3fc) 18%, transparent);
+}
+.login-hint-attention {
+  border-radius: var(--control-radius);
+  border: 1px solid color-mix(in srgb, var(--role-info, #7dd3fc) 28%, transparent);
+  background: color-mix(in srgb, var(--role-info, #7dd3fc) 8%, transparent);
+  padding: 10px 12px;
+  color: var(--color-gray-300, #c4c9d8);
+}
 .login-empty {
   display: flex;
   flex-direction: column;
@@ -1891,6 +1980,38 @@ html[dir="rtl"] .login-toggle-on .login-toggle-dot { transform: translateX(-18px
 .help-kbd,
 .help-code {
   border-radius: var(--control-radius-sm);
+}
+.chrome-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-gray-500);
+}
+.chrome-chip-live {
+  border-color: color-mix(in srgb, var(--role-online, #34d399) 28%, transparent);
+  background: color-mix(in srgb, var(--role-online, #34d399) 12%, transparent);
+  color: var(--role-online, #34d399);
+}
+.msg-whisper {
+  background: color-mix(in srgb, var(--role-info, #7dd3fc) 6%, transparent);
+  border-inline-start: 2px solid color-mix(in srgb, var(--role-info, #7dd3fc) 40%, transparent);
+}
+.sidebar-filter-input {
+  border-radius: var(--control-radius);
+}
+.setup-block {
+  border-radius: var(--control-radius);
+  border: 1px solid var(--hairline);
+  background: var(--fill-quiet);
 }
 
 @media (min-width: 640px) {

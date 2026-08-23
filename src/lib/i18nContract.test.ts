@@ -37,7 +37,7 @@ describe('localization and international-input source contract', () => {
         return /\.(tsx|ts|html)$/.test(entry.name) ? [rel] : [];
       });
     const files = ['index.html', 'src/lib/i18n.ts', ...walk('src/ui')];
-    const banned = /Orochi|Glowing Bear|IRCXNet|\bsidecar\b/;
+    const banned = /Orochi|Glowing Bear|IRCXNet|\bsidecar\b|\bcompanion\b/;
     for (const path of files) {
       expect(read(path), path).not.toMatch(banned);
     }

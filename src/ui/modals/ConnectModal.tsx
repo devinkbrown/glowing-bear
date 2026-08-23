@@ -2,7 +2,7 @@
 // Theme picker lives in Settings. Setup essays live in the closed-by-default drawer.
 
 import { For, Index, Show, Suspense, createEffect, createSignal, lazy, onCleanup, onMount } from 'solid-js';
-import { diagnoseReveal } from '@/lib/connect/diagnose';
+import { diagnoseReveal, fieldAttention, type FieldAttention } from '@/lib/connect/diagnose';
 import {
   ConnectionState,
   connect,
@@ -288,22 +288,34 @@ function ConnectScreen(props: { onClose?: () => void }) {
   const mixedBlocked = () => mode() === 'weechat' && mixedContentBlocked(tls(), host());
   // One form alert: a single failure plus at most one next action. Phase logs
   // stay off the first-run card — connecting status lives on the CTA.
+  const alertTitle = () => {
+    const code = errorCode();
+    if (code === 'totp_required') return t('connect.alert.totp');
+    if (code === 'path_404') return t('connect.alert.path');
+    if (code === 'origin_denied') return t('connect.alert.origin');
+    if (code === 'mixed_content' || mixedBlocked()) return t('connect.alert.mixed');
+    if (code) return t('connect.alert.generic');
+    if (passwordFromUrl()) return t('connect.alert.secret');
+    return null;
+  };
   const formAlert = () => {
     if (errorText()) {
-      return { kind: 'error' as const, message: errorText()!, next: nextAction() };
+      return { kind: 'error' as const, title: alertTitle(), message: errorText()!, next: nextAction() };
     }
     if (mixedBlocked()) {
       return {
         kind: 'warn' as const,
+        title: t('connect.alert.mixed'),
         message: t('connect.error.mixed_content'),
         next: t('connect.next.mixed_content'),
       };
     }
     if (passwordFromUrl()) {
-      return { kind: 'warn' as const, message: t('connect.passwordInUrl'), next: null };
+      return { kind: 'warn' as const, title: t('connect.alert.secret'), message: t('connect.passwordInUrl'), next: null };
     }
     return null;
   };
+  const attention = () => fieldAttention(errorCode()) ?? (mixedBlocked() ? 'tls' : null);
   const selectedHint = () => {
     if (mode() === 'weechat') return t('connect.taglineWeechat');
     if (mode() === 'onyx-wss') return t('connect.taglineOnyx');
@@ -351,11 +363,12 @@ function ConnectScreen(props: { onClose?: () => void }) {
         </div>
       </Show>
 
-      <div class="min-h-dvh flex flex-col relative z-10 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div class="connect-stage">
         <div class="flex-1 min-h-[12px] sm:min-h-0 connect-flex-spacer" />
 
+        <div class="connect-shell">
         <div
-          class={`connect-hero flex flex-col items-center px-6 pb-2 sm:pb-3 select-none ${decorativeMotionEnabled() ? 'connect-motion' : ''}`}
+          class={`connect-brand connect-hero select-none ${decorativeMotionEnabled() ? 'connect-motion' : ''}`}
         >
           <Show
             when={!compactHero()}
@@ -377,10 +390,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
           <p data-testid="connect-product-line" class="connect-product-line">{t('connect.productLine')}</p>
         </div>
 
-        <div
-          class={`w-full sm:max-w-[440px] sm:mx-auto ${decorativeMotionEnabled() ? 'connect-motion-card' : ''}`}
-        >
-          <div class="px-5 pb-6 sm:px-0 sm:pb-0">
+        <div class={`connect-card ${decorativeMotionEnabled() ? 'connect-motion-card' : ''}`}>
             <div class="login-card-inner">
               <div class="mb-5" role="radiogroup" aria-label={t('connect.serverType')}>
                 <div class={`login-segment ${mode() === 'onyx-tls' ? 'login-segment-dim' : ''}`}>
@@ -440,6 +450,9 @@ function ConnectScreen(props: { onClose?: () => void }) {
                       alert().kind === 'error' ? 'login-state-error' : 'login-state-warn'
                     }`}
                   >
+                    <Show when={alert().title}>
+                      <p data-testid="connect-alert-title" class="login-state-kicker">{alert().title}</p>
+                    </Show>
                     <p>{alert().message}</p>
                     <Show when={alert().next}>
                       <p data-testid="connect-next-action" class="login-state-next mt-1">{alert().next}</p>
@@ -449,6 +462,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
               </Show>
               <Show when={connecting() && !formAlert()}>
                 <div role="status" data-testid="connect-progress" class="login-state login-state-progress mb-4 text-[13px] leading-snug">
+                  <p class="login-state-kicker">{t('connect.connecting')}</p>
                   {statusText() ?? t('connect.connecting')}
                 </div>
               </Show>
@@ -486,6 +500,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                   onPath={setPath}
                   onTotpDigit={handleTotpDigit}
                   onTotpKeyDown={handleTotpKeyDown}
+                  attention={attention()}
                 />
               </Show>
 
@@ -528,7 +543,9 @@ function ConnectScreen(props: { onClose?: () => void }) {
                     {t('connect.onyxTotp')}
                   </button>
                   <Show when={showOnyxTotp()}>
-                    <div class="flex gap-2 justify-center">
+                    <div class="login-totp" data-testid="connect-onyx-totp-panel">
+                      <p class="login-totp-label">{t('connect.onyxTotp')}</p>
+                      <div class="login-totp-row">
                       <Index each={new Array<number>(6).fill(0)}>
                         {(_, i) => (
                           <input
@@ -556,6 +573,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                           />
                         )}
                       </Index>
+                      </div>
                     </div>
                   </Show>
                   <button type="button" onClick={() => setRememberBridgePassword(!rememberBridgePassword())}
@@ -593,6 +611,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                       onPath={setPath}
                       onTotpDigit={handleTotpDigit}
                       onTotpKeyDown={handleTotpKeyDown}
+                      attention={attention()}
                     />
                   </Show>
                 </div>
@@ -658,7 +677,7 @@ function ConnectScreen(props: { onClose?: () => void }) {
                 </button>
               </Show>
             </div>
-          </div>
+        </div>
         </div>
 
         <div class="flex-1 min-h-[12px] sm:min-h-0 connect-flex-spacer" />
@@ -740,6 +759,7 @@ function WeeChatFields(props: {
   onPath: (v: string) => void;
   onTotpDigit: (i: number, v: string) => void;
   onTotpKeyDown: (i: number, e: KeyboardEvent) => void;
+  attention: FieldAttention;
 }) {
   return (
     <div class="flex flex-col gap-3">
@@ -757,9 +777,10 @@ function WeeChatFields(props: {
           </Field>
         </div>
         <button type="button" onClick={props.onTls} aria-pressed={props.tls}
+          data-testid={props.attention === 'tls' ? 'connect-tls-attention' : undefined}
           class={`flex items-center justify-center px-5 min-w-[88px] login-input-height text-[13px] font-semibold login-tls ${
             props.tls ? 'login-tls-on' : ''
-          }`}>
+          } ${props.attention === 'tls' ? 'login-tls-attention' : ''}`}>
           TLS
         </button>
       </div>
@@ -795,13 +816,26 @@ function WeeChatFields(props: {
               </button>
             </div>
             <Field label={t('connect.path')} id="c-path">
-              <input id="c-path" class="login-input" value={props.path}
+              <input
+                id="c-path"
+                class={`login-input ${props.attention === 'path' ? 'login-input-attention' : ''}`}
+                data-testid={props.attention === 'path' ? 'connect-path-attention' : undefined}
+                value={props.path}
                 onInput={(e) => props.onPath(e.currentTarget.value)} autocomplete="off" spellcheck={false} />
             </Field>
-            <p class="text-[11px] text-gray-600">{t('connect.originHint')}</p>
+            <p
+              class={`text-[11px] text-gray-600 ${props.attention === 'origin' ? 'login-hint-attention' : ''}`}
+              data-testid={props.attention === 'origin' ? 'connect-origin-attention' : undefined}
+            >
+              {t('connect.originHint')}
+            </p>
           </Show>
-          <span class="text-[13px] text-gray-400">{t('connect.weechatTotp')}</span>
-          <div class="flex gap-2 justify-center">
+          <div
+            class={`login-totp ${props.attention === 'totp' ? 'login-totp-attention' : ''}`}
+            data-testid="connect-totp-panel"
+          >
+            <p class="login-totp-label">{t('connect.weechatTotp')}</p>
+            <div class="login-totp-row">
             <Index each={new Array<number>(6).fill(0)}>
               {(_, i) => (
                 <input
@@ -818,6 +852,7 @@ function WeeChatFields(props: {
                 />
               )}
             </Index>
+            </div>
           </div>
         </div>
       </Show>

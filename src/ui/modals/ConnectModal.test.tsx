@@ -6,6 +6,8 @@ import { cleanup, fireEvent, render } from '@solidjs/testing-library';
 
 const state = vi.hoisted(() => ({
   connect: vi.fn(),
+  errorCode: null as string | null,
+  error: null as string | null,
 }));
 
 vi.mock('@/state', async (importOriginal) => {
@@ -13,6 +15,8 @@ vi.mock('@/state', async (importOriginal) => {
   return {
     ...actual,
     connect: state.connect,
+    connectionErrorCode: () => state.errorCode,
+    connectionError: () => state.error,
   };
 });
 
@@ -49,6 +53,8 @@ beforeEach(() => {
   resetSettings();
   updateRelay({ host: '', password: '', port: 9001, tls: true, compression: true });
   state.connect.mockClear();
+  state.errorCode = null;
+  state.error = null;
   stubMatchMedia();
 });
 
@@ -179,5 +185,34 @@ describe('ConnectModal', () => {
     expect(tls).toHaveAttribute('aria-pressed', 'true');
     expect(tls.className).toContain('login-tls-on');
     expect(tls.className).not.toMatch(/emerald/);
+  }, RENDER_TIMEOUT_MS);
+
+  it('designs totp, path, origin, and mixed-content as titled attention states', () => {
+    state.errorCode = 'totp_required';
+    state.error = 'This relay requires a TOTP code.';
+    const totp = render(() => <ConnectModal open />);
+    expect(totp.getByTestId('connect-alert-title')).toHaveTextContent('One-time password');
+    expect(totp.getByTestId('connect-totp-panel')).toHaveClass('login-totp-attention');
+    totp.unmount();
+
+    state.errorCode = 'path_404';
+    state.error = 'No WebSocket at this path.';
+    const path = render(() => <ConnectModal open />);
+    expect(path.getByTestId('connect-alert-title')).toHaveTextContent('Wrong path');
+    expect(path.getByTestId('connect-path-attention')).toHaveAttribute('id', 'c-path');
+    path.unmount();
+
+    state.errorCode = 'origin_denied';
+    state.error = 'The relay rejected this page origin.';
+    const origin = render(() => <ConnectModal open />);
+    expect(origin.getByTestId('connect-alert-title')).toHaveTextContent('Origin blocked');
+    expect(origin.getByTestId('connect-origin-attention')).toBeInTheDocument();
+    origin.unmount();
+
+    state.errorCode = 'mixed_content';
+    state.error = 'This HTTPS page cannot open an unencrypted remote WebSocket.';
+    const mixed = render(() => <ConnectModal open />);
+    expect(mixed.getByTestId('connect-alert-title')).toHaveTextContent('Needs TLS');
+    expect(mixed.getByTestId('connect-tls-attention')).toBeInTheDocument();
   }, RENDER_TIMEOUT_MS);
 });

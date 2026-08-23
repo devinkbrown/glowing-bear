@@ -287,7 +287,7 @@ export default function Sidebar(props: SidebarProps) {
                 e.currentTarget.blur();
               }
             }}
-            class="sidebar-filter-input w-full rounded-xl border border-white/[0.07] bg-white/[0.035] py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none transition-colors placeholder:text-gray-600 focus:border-[var(--role-primary,#818cf8)]/35 focus:bg-white/[0.055] sm:py-2 sm:text-[12px]"
+            class="sidebar-filter-input w-full border border-white/[0.07] bg-white/[0.035] py-2.5 pl-9 pr-3 text-[13px] text-gray-200 outline-none transition-colors placeholder:text-gray-600 focus:border-[var(--role-primary,#818cf8)]/35 focus:bg-white/[0.055] sm:py-2 sm:text-[12px]"
           />
         </label>
         <div class="grid grid-cols-4 gap-1 rounded-xl border border-white/[0.055] bg-black/20 p-1">

@@ -638,7 +638,7 @@ export default function MessageLine(props: MessageLineProps) {
 
         <Match when={props.line.isWhisper}>
           <div
-            class={`msg-row ${settings.compactMode ? '' : 'py-0.5'} bg-amber-500/[0.04] border-l-2 border-amber-500/40`}
+            class={`msg-row msg-whisper ${settings.compactMode ? '' : 'py-0.5'}`}
             {...rowHandlers}
           >
             <Show when={timestamp()}>
@@ -646,12 +646,12 @@ export default function MessageLine(props: MessageLineProps) {
             </Show>
             <Show when={!props.grouped} fallback={<span class="msg-nick" />}>
               <span class="msg-nick" style={nickStyle()}>
-                <span class="text-amber-500/60 text-[10px] font-medium mr-1">WHISPER</span>
+                <span class="text-[var(--role-info,#7dd3fc)]/70 text-[10px] font-medium mr-1">WHISPER</span>
                 {prefixChar()}{nick()}
               </span>
             </Show>
             <div class="msg-body">
-              <span class="irc-msg-text text-[13px] text-amber-200/80" innerHTML={html()} onClick={onBodyClick} />
+              <span class="irc-msg-text text-[13px] text-[var(--role-info,#7dd3fc)]/85" innerHTML={html()} onClick={onBodyClick} />
             </div>
           </div>
         </Match>

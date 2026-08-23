@@ -128,8 +128,8 @@ export default function Header() {
             </span>
           </Show>
           <Show when={isChannel() && nickCount() > 0}>
-            <span class="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-white/[0.035] text-gray-500 border border-white/[0.05] shrink-0">
-              <span class="h-1.5 w-1.5 rounded-full bg-emerald-400/70" />
+            <span class="chrome-chip hidden md:inline-flex shrink-0">
+              <span class="h-1.5 w-1.5 rounded-full bg-[var(--role-online,#34d399)]/70" />
               {t('header.users', { count: formatNumber(nickCount()) })}
             </span>
           </Show>
@@ -144,7 +144,7 @@ export default function Header() {
           <Show when={bridgeState.sessionRestored}>
             <span
               data-testid="session-restored"
-              class="hidden md:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-emerald-500/12 text-emerald-300 border border-emerald-500/20 shrink-0"
+              class="chrome-chip chrome-chip-live hidden md:inline-flex shrink-0"
             >
               {t('header.sessionRestored')}
             </span>
@@ -176,8 +176,8 @@ export default function Header() {
           </Show>
           {/* In-call badge */}
           <Show when={liveHere()}>
-            <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[9px] font-semibold uppercase tracking-wider shrink-0">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span class="chrome-chip chrome-chip-live shrink-0">
+              <span class="w-1.5 h-1.5 rounded-full bg-[var(--role-online,#34d399)] animate-pulse" />
               {t('header.live')}
             </span>
           </Show>
@@ -251,7 +251,7 @@ export default function Header() {
         <Show when={connected()}>
           <div class="flex items-center gap-1.5">
             <Show when={showTls()}>
-              <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-500/70" viewBox="0 0 16 16" fill="currentColor">
+              <svg class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[var(--role-online,#34d399)]/70" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V6H3.75A1.75 1.75 0 0 0 2 7.75v5.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0 0 14 13.25v-5.5A1.75 1.75 0 0 0 12.25 6H11V4.5A3.5 3.5 0 0 0 7.5 1h.5zM6 4.5A2 2 0 0 1 8 2.5a2 2 0 0 1 2 2V6H6V4.5z" />
               </svg>
             </Show>
@@ -285,7 +285,7 @@ export default function Header() {
           </button>
           <button
             onClick={() => (isPrivate() ? requestStartCall(bufName(), true) : requestRoomJoin(chanName(), true))}
-            class="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-emerald-400 hover:bg-white/[0.04] active:bg-white/[0.06] transition-all"
+            class="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-[var(--role-online,#34d399)] hover:bg-white/[0.04] active:bg-white/[0.06] transition-all"
             title={isPrivate() ? t('header.videoCall') : t('header.joinVideo')}
             aria-label={isPrivate() ? t('header.videoCall') : t('header.joinVideo')}
           >
@@ -315,7 +315,7 @@ export default function Header() {
         <Show when={connected()}>
           <button
             onClick={() => openModal('channelList')}
-            class="flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[12px] font-semibold text-gray-400 transition-all hover:bg-white/[0.04] hover:text-emerald-300 active:bg-white/[0.06] sm:h-7 sm:w-auto sm:px-2.5 sm:text-[11px]"
+            class="flex h-8 w-8 items-center justify-center gap-1.5 rounded-full px-0 text-[12px] font-semibold text-gray-400 transition-all hover:bg-white/[0.04] hover:text-[var(--role-online,#34d399)] active:bg-white/[0.06] sm:h-7 sm:w-auto sm:px-2.5 sm:text-[11px]"
             title={t('header.browseChannels')}
             aria-label={t('header.browseChannels')}
           >
@@ -371,7 +371,7 @@ export default function Header() {
                 class="w-full flex items-center gap-2.5 px-3 py-2.5 sm:py-2 text-[13px] sm:text-[12px] text-gray-300 hover:bg-white/[0.04] active:bg-white/[0.08] transition-colors"
               >
                 <span class="w-4 h-4 flex items-center justify-center shrink-0">
-                  <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                  <svg class="w-4 h-4 text-[var(--role-online,#34d399)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                     <path d="M5 1l-2 14M13 1l-2 14M1 5h14M1 11h14" />
                   </svg>
                 </span>

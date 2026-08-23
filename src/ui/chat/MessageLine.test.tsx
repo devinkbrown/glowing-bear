@@ -130,7 +130,7 @@ describe('MessageLine', () => {
 
     expect(getByText('WHISPER')).toBeInTheDocument();
     expect(getByText('psst secret')).toBeInTheDocument();
-    expect(container.querySelector('.border-amber-500\\/40')).not.toBeNull();
+    expect(container.querySelector('.msg-whisper')).not.toBeNull();
   });
 
   it('applies the highlight class when line.highlight is set', () => {

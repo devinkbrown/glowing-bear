@@ -46,7 +46,7 @@ function CopyBlock(props: { label?: string; text: string }) {
       <Show when={props.label}>
         <span class="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-600 pl-1">{props.label}</span>
       </Show>
-      <div class="group flex items-center gap-0 rounded-lg bg-white/[0.03] border border-white/[0.05] overflow-hidden">
+      <div class="setup-block group flex items-center gap-0 overflow-hidden">
         <code class="flex-1 text-[12px] text-gray-300 font-mono px-3 py-2.5 leading-relaxed select-all overflow-x-auto guide-no-scrollbar whitespace-pre-wrap">{props.text}</code>
         <button
           type="button"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diagnoseReveal } from './diagnose';
+import { diagnoseReveal, fieldAttention } from './diagnose';
 
 describe('diagnoseReveal', () => {
   it('opens TOTP for totp_required', () => {
@@ -18,5 +18,15 @@ describe('diagnoseReveal', () => {
   it('leaves the form closed for other codes', () => {
     expect(diagnoseReveal('auth_rejected')).toBeNull();
     expect(diagnoseReveal(null)).toBeNull();
+  });
+});
+
+describe('fieldAttention', () => {
+  it('maps typed failures onto one designed control', () => {
+    expect(fieldAttention('totp_required')).toBe('totp');
+    expect(fieldAttention('path_404')).toBe('path');
+    expect(fieldAttention('origin_denied')).toBe('origin');
+    expect(fieldAttention('mixed_content')).toBe('tls');
+    expect(fieldAttention('auth_rejected')).toBeNull();
   });
 });
